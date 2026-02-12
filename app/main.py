@@ -1,30 +1,22 @@
-# main.py
-# main.py
-from app.display.ht16k33_driver import init_ht16k33, clear_all
-from app.display.display_utils import show_text
+from app.ui.display import Display
 from app.chatbot.chatbot_groq import write_to_ai
-
 import time
 
 def main():
-    # HT16K33 initialisieren
-    #init_ht16k33()
+    display = Display(simulation=True)  # später False für echtes I2C
 
-    # Kurzer Testtext
-    #show_text("HELLO")
-    #time.sleep(2)
+    display.set_text("System startet...")
+    time.sleep(2)
 
-    # Frage an die AI
-    user_question = "Was ist der Sinn des Lebens?"
-    ai_answer = write_to_ai(user_question)  # Antwort von der Groq-KI
+    question = "Was ist der Sinn des Lebens?"
+    answer = write_to_ai(question)
 
-    print("\nAI-Antwort:", ai_answer)  # optional für Konsole
 
-    # Antwort auf den Displays anzeigen (scrollt automatisch, falls nötig)
-    show_text(ai_answer, delay=0.2)
+    print("\n")
+    print("AI:", answer)
+    print("\n")
 
-    # Nach der Anzeige alles löschen
-    clear_all()
+    display.set_text(answer)
 
 if __name__ == "__main__":
     main()
