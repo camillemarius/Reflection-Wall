@@ -41,10 +41,10 @@ def write_to_ai(user_message: str) -> str:
     for chunk in completion:
         # Inhalt extrahieren (falls vorhanden)
         delta_text = chunk.choices[0].delta.content or ""
-        print(delta_text, end="", flush=True)  # Echtzeit-Streaming Ausgabe
+        #print(delta_text, end="", flush=True)  # Echtzeit-Streaming Ausgabe
         full_answer += delta_text
 
-    print()  # Zeilenumbruch nach Streaming-Ausgabe
+    #print()  # Zeilenumbruch nach Streaming-Ausgabe
 
     # Antwort speichern (falls save_answer definiert ist)
     save_answer(full_answer)

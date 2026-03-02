@@ -1,6 +1,5 @@
 from ui.display import Display
 from chatbot.chatbot_groq import write_to_ai
-from speech.SpeechToText import record_and_transcribe
 from speechRecognition.fastWhisper import FastWhisper
 import time
 import sys
@@ -16,6 +15,8 @@ def main():
         sys.exit(1)
     
     # Aufnahme mit Enter steuern
+    print("\nAufnahme mit Enter starten")
+    input()
     recorder.start_recording()
     display.set_text("\n" + "Aufnahme läuft...")
     input()
@@ -23,11 +24,13 @@ def main():
     recorder.stop()
 
     # Frage auf Display anzeigen
+    print("\n" + transcript + "\n")
     display.set_text("\n" + transcript)
 
     # Transkription AI übergeben und Antwort erhalten
     answer = write_to_ai(transcript)
-
+    
+    print("\n" + answer + "\n")
     display.set_text("\n" + answer)
 
 if __name__ == "__main__":
