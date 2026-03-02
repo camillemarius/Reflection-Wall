@@ -1,6 +1,6 @@
 # chatbot/chatbot.py
-from app.chatbot.chatbot_db import setup_db, get_previous_answers, save_answer
-from app.chatbot.promt_template import PROMPT_TEMPLATE
+from chatbot.chatbot_db import setup_db, get_previous_answers, save_answer
+from chatbot.promt_template import PROMPT_TEMPLATE
 from groq import Groq
 import os
 from dotenv import load_dotenv
@@ -16,6 +16,45 @@ client = Groq(api_key=GROQ_API_KEY)
 setup_db()
 
 def write_to_ai(user_message: str) -> str:
+    """
+    Sendet die Benutzer-Nachricht an die Groq AI und gibt die Antwort als String zurück.
+    Streaming wird unterstützt, sodass die Antwort während der Generierung angezeigt wird.
+    """
+
+    # User-Prompt aus Template füllen
+    user_prompt = user_message +"Antworte kurz und bündig, in 1-2 Sätzen."
+
+    # Anfrage an Groq (Chat Completion)
+    completion = client.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=[{"role": "user", "content": user_prompt}],
+        temperature=1,
+        max_completion_tokens=8192,
+        top_p=1,
+        reasoning_effort="medium",
+        stream=True,  # Streaming aktivieren
+        stop=None
+    )
+
+    # Antwort sammeln
+    full_answer = ""
+    for chunk in completion:
+        # Inhalt extrahieren (falls vorhanden)
+        delta_text = chunk.choices[0].delta.content or ""
+        print(delta_text, end="", flush=True)  # Echtzeit-Streaming Ausgabe
+        full_answer += delta_text
+
+    print()  # Zeilenumbruch nach Streaming-Ausgabe
+
+    # Antwort speichern (falls save_answer definiert ist)
+    save_answer(full_answer)
+
+    return full_answer
+
+
+
+
+def start_reflection_ai(user_message: str) -> str:
     """
     Schreibt eine Nachricht an die Reflexions-KI und gibt die Antwort zurück.
     """

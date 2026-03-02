@@ -1,0 +1,27 @@
+
+Pfad wählen:
+cd Documents/01_Code/
+
+Virtuelle Environment aktivieren:
+source ~/venvs/groq-env/bin/activate
+
+Script starten:
+python llama3_database.py
+
+
+
+
+Datenbank starten: 
+sudo mariadb
+
+Datenbank auswählen: 
+USE reflection_ai;
+
+Inhalte anziegen: 
+SELECT * FROM reflections;
+
+Alles löschen:
+DELETE FROM reflections;
+
+Datenbank verlasen
+QUIT

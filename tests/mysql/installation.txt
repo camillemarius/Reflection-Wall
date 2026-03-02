@@ -1,0 +1,15 @@
+# Pfad wählen
+cd 01_Code/tests/mysql/
+
+#Virtuelle Umgebung erstellen
+python -m venv env
+source env/bin/activate
+
+#mysql installieren
+pip install mysql-connector-python
+
+# Credential Verwaltung
+pip install python-dotenv
+
+# Test faster-whisper
+python test.py

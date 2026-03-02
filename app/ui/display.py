@@ -1,6 +1,6 @@
-from app.ui.segment_chain import SegmentChain
-from app.ui.display_grid import DisplayGrid
-from app.driver.ht16k33_driver import TestModule, I2CModule, CHARS_PER_MODULE, init_ht16k33, clear_all
+from ui.segment_chain import SegmentChain
+from ui.display_grid import DisplayGrid
+from driver.ht16k33_driver import TestModule, I2CModule, CHARS_PER_MODULE, init_ht16k33, clear_all
 
 # ----- Display Platzhalter-Klasse -----
 class Display:

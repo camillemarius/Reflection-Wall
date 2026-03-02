@@ -1,0 +1,12 @@
+# Pfad wählen
+cd 01_Code/tests/chatbot_groq/
+
+#Virtuelle Umgebung erstellen
+python -m venv env
+source env/bin/activate
+
+# Python I2C Kommunikation auf Linuxc instalieren
+pip install smbus2
+
+#I2C auf dem Raspberry Pi aktivieren
+sudo raspi-config
