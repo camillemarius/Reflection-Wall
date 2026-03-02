@@ -39,7 +39,6 @@ class FastWhisper:
         if not self.listening:
             self.listening = True
             self.audio_buffer = []
-            print("Aufnahme gestartet...")
 
     def stop_recording(self):
         """Stoppt die Aufnahme und transkribiert den aufgenommenen Text."""
