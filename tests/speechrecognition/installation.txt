@@ -1,0 +1,16 @@
+# Pfad wählen
+cd 01_Code/tests/speechrecognition/
+
+#Virtuelle Umgebung erstellen
+python -m venv env
+source env/bin/activate
+
+#Install faster-Whisper
+pip install faster-whisper
+
+#Install Sounddevice (Mikrofon)
+pip install sounddevice
+
+# Test faster-whisper
+sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1 (Falls ipv6 probleme macht, deaktivieren)
+python test.py

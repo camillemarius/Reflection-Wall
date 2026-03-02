@@ -1,22 +1,34 @@
-from app.ui.display import Display
-from app.chatbot.chatbot_groq import write_to_ai
+from ui.display import Display
+from chatbot.chatbot_groq import write_to_ai
+from speech.SpeechToText import record_and_transcribe
+from speechRecognition.fastWhisper import FastWhisper
 import time
+import sys
 
 def main():
     display = Display(simulation=True)  # später False für echtes I2C
+    # time.sleep(2)
 
-    display.set_text("System startet...")
-    time.sleep(2)
+    recorder = FastWhisper()
+    # Prüfen, ob Mikrofon verfügbar ist
+    if not recorder.mic_available:
+        display.set_text("\n" + "Kein Mikrofon gefunden")
+        sys.exit(1)
+    
+    # Aufnahme mit Enter steuern
+    recorder.start_recording()
+    display.set_text("\n" + "Aufnahme läuft...")
+    input()
+    transcript = recorder.stop_recording()
+    recorder.stop()
 
-    question = "Was ist der Sinn des Lebens?"
-    answer = write_to_ai(question)
+    # Frage auf Display anzeigen
+    display.set_text("\n" + transcript)
 
+    # Transkription AI übergeben und Antwort erhalten
+    answer = write_to_ai(transcript)
 
-    print("\n")
-    print("AI:", answer)
-    print("\n")
-
-    display.set_text(answer)
+    display.set_text("\n" + answer)
 
 if __name__ == "__main__":
     main()

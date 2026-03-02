@@ -1,0 +1,15 @@
+# Pfad wählen
+cd 01_Code/tests/chatbot_groq/
+
+#Virtuelle Umgebung erstellen
+python -m venv env
+source env/bin/activate
+
+#groq installieren
+pip install groq
+
+# Credential Verwaltung
+pip install python-dotenv
+
+# Test faster-whisper
+python test.py
