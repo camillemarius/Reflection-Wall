@@ -3,7 +3,7 @@ import numpy as np
 from faster_whisper import WhisperModel
 import time
 
-class FastWhisper:
+class fasterWhsiper:
     def __init__(self, model_name="small", device="cpu", sample_rate=16000, channels=1, beam_size=7):
         self.sample_rate = sample_rate
         self.channels = channels
@@ -70,7 +70,7 @@ class FastWhisper:
 
 # Beispiel-Nutzung
 if __name__ == "__main__":
-    recorder = FastWhisper()
+    recorder = fasterWhsiper()
 
     # Aufnahme manuell steuern
     recorder.start_recording()
