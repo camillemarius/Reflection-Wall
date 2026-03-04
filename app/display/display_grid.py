@@ -1,5 +1,5 @@
 # core/display_grid.py
-from ui.segment_chain import SegmentChain
+from display.segment_chain import SegmentChain
 
 class DisplayGrid:
     def __init__(self, rows):

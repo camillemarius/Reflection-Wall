@@ -1,5 +1,5 @@
 # core/segment_chain.py
-from .segment_module import SegmentModule
+from segment_module import SegmentModule
 
 class SegmentChain:
     def __init__(self, modules):

@@ -51,7 +51,6 @@ class fasterWhsiper:
 
     def _transcribe_buffer(self):
         audio_array = np.concatenate(self.audio_buffer)
-        print("Starte Transkription...")
         segments, _ = self.model.transcribe(audio_array, language=None, beam_size=self.beam_size)
         transcript = " ".join(segment.text.strip() for segment in segments)
         self.transcripts.append(transcript)

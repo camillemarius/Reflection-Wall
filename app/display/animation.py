@@ -1,4 +1,4 @@
-# ui/animations.py
+# display/animations.py
 import time
 
 def typewriter(grid, lines, delay=0.05):

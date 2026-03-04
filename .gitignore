@@ -1,6 +1,5 @@
 *.env
 /.venv
-/Anleitung
 /__pycache__
 app/__pycache__/__init__.cpython-313.pyc
 app/__pycache__/main.cpython-313.pyc
@@ -12,8 +11,8 @@ app/chatbot/__pycache__/promt_template.cpython-313.pyc
 app/driver/__pycache__/__init__.cpython-313.pyc
 app/driver/__pycache__/ascii_map.cpython-313.pyc
 app/driver/__pycache__/ht16k33_driver.cpython-313.pyc
-app/ui/__pycache__/__init__.cpython-313.pyc
-app/ui/__pycache__/display_grid.cpython-313.pyc
-app/ui/__pycache__/display.cpython-313.pyc
-app/ui/__pycache__/segment_chain.cpython-313.pyc
-app/ui/__pycache__/segment_module.cpython-313.pyc
+app/display/__pycache__/__init__.cpython-313.pyc
+app/display/__pycache__/display_grid.cpython-313.pyc
+app/display/__pycache__/display.cpython-313.pyc
+app/display/__pycache__/segment_chain.cpython-313.pyc
+app/display/__pycache__/segment_module.cpython-313.pyc
