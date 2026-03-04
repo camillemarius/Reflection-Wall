@@ -1,4 +1,4 @@
-# ui/text_layout.py
+# display/text_layout.py
 def word_wrap(text, cols, rows):
     words = text.split()
     lines = []

@@ -1,16 +1,3 @@
-
-Pfad wählen:
-cd Documents/01_Code/
-
-Virtuelle Environment aktivieren:
-source ~/venvs/groq-env/bin/activate
-
-Script starten:
-python llama3_database.py
-
-
-
-
 Datenbank starten: 
 sudo mariadb
 

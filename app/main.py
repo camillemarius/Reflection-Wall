@@ -1,4 +1,4 @@
-from ui.display import Display
+from display.display import Display
 from chatbot.chatbot_groq import write_to_ai
 from app.speechRecognition.fasterWhisper import fasterWhsiper
 import time
