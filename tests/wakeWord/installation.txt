@@ -1,0 +1,15 @@
+# Pfad wählen
+cd 01_Code/tests/wakeWord/
+
+#Virtuelle Umgebung erstellen
+python -m venv env
+source env/bin/activate
+
+#Install pvporcupine (Test1)
+pip install pvporcupine
+
+#Install pocketsphinx (Test2)
+sudo apt install python3-pocketsphinx
+
+# Test 
+python test.py

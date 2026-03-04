@@ -1,6 +1,6 @@
 from ui.display import Display
 from chatbot.chatbot_groq import write_to_ai
-from speechRecognition.fastWhisper import FastWhisper
+from app.speechRecognition.fasterWhisper import fasterWhsiper
 import time
 import sys
 
@@ -8,7 +8,7 @@ def main():
     display = Display(simulation=True)  # später False für echtes I2C
     # time.sleep(2)
 
-    recorder = FastWhisper()
+    recorder = fasterWhsiper()
     # Prüfen, ob Mikrofon verfügbar ist
     if not recorder.mic_available:
         display.set_text("\n" + "Kein Mikrofon gefunden")
