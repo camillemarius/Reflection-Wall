@@ -5,8 +5,12 @@ cd 01_Code/tests/wakeWord/
 python -m venv env
 source env/bin/activate
 
+#install openwakeword
+pip install openwakeword
+
 #Install pvporcupine (Test1)
 pip install pvporcupine
+pip install pyaudio
 
 #Install pocketsphinx (Test2)
 sudo apt install python3-pocketsphinx

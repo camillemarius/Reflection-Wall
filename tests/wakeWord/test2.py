@@ -1,9 +1,12 @@
 from pocketsphinx import LiveSpeech
 
 speech = LiveSpeech(
-    keyphrase='Apache',
-    kws_threshold=1e-20
+    kws='wake.txt',
+    verbose=False,
+    # Deutsches Modell
 )
+
+print("Listening...")
 
 for phrase in speech:
     print("Wake word detected!")

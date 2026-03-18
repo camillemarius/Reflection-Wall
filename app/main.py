@@ -1,11 +1,15 @@
 from display.display import Display
 from chatbot.chatbot_groq import write_to_ai
-from app.speechRecognition.fasterWhisper import fasterWhsiper
+from speechRecognition.fasterWhisper import fasterWhsiper
 import time
 import sys
 
 def main():
-    display = Display(simulation=True)  # später False für echtes I2C
+    display = Display(simulation=False)  # später False für echtes I2C
+    if display.simulation:
+        display.set_text("Display Simulation gestartet\n")
+    else:
+        display.set_text("Display gestartet\n")
     # time.sleep(2)
 
     recorder = fasterWhsiper()
