@@ -1,5 +1,5 @@
 # core/segment_module.py
-from driver.ht16k33_driver import create_empty_buffer, set_digit, write_buffer, CHARS_PER_MODULE
+from driver.display.ht16k33_driver import create_empty_buffer, set_digit, write_buffer, CHARS_PER_MODULE
 
 class SegmentModule:
     def __init__(self, module_index):

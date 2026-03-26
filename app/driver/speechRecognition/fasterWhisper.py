@@ -13,7 +13,9 @@ class fasterWhsiper:
         self.transcripts = []
 
         # Modell laden
+        print("DEBUG: Lade Whisper Modell...")
         self.model = WhisperModel(model_name, device=device)
+        print("DEBUG: Modell geladen")
 
 
         # Audio-Stream initialisieren
