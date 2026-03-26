@@ -1,5 +1,5 @@
 # core/segment_chain.py
-from display.segment_module import SegmentModule
+from driver.display.segment_module import SegmentModule
 
 class SegmentChain:
     def __init__(self, modules):

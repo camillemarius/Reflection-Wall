@@ -31,8 +31,34 @@ def create_empty_buffer():
 
 def set_digit(buffer, digit_idx, char):
     """Setzt ein Zeichen auf ein Modul-Buffer"""
+
     if digit_idx >= CHARS_PER_MODULE:
         return
+
+    # -----------------------------
+    # ✅ Punkt gehört zum vorherigen Zeichen
+    # -----------------------------
+    if char == ".":
+        if digit_idx == 0:
+            return  # kein vorheriges Zeichen vorhanden
+
+        # vorheriges Zeichen holen
+        low = buffer[(digit_idx - 1) * 2]
+        high = buffer[(digit_idx - 1) * 2 + 1]
+        segments = low | (high << 8)
+
+        # Punkt hinzufügen (OR)
+        segments |= ASCII_16SEG['.'] 
+
+        # zurückschreiben
+        buffer[(digit_idx - 1) * 2] = segments & 0xFF
+        buffer[(digit_idx - 1) * 2 + 1] = (segments >> 8) & 0xFF
+
+        return 
+
+    # -----------------------------
+    # Standard-Zeichen
+    # -----------------------------
     segments = ASCII_16SEG.get(char.upper(), 0x0000)
     buffer[digit_idx * 2] = segments & 0xFF
     buffer[digit_idx * 2 + 1] = (segments >> 8) & 0xFF

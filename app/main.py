@@ -1,41 +1,34 @@
-from display.display import Display
-from chatbot.chatbot_groq import write_to_ai
-from speechRecognition.fasterWhisper import fasterWhsiper
-import time
-import sys
+from applications.VoiseAssistant.VoiceAssistant import VoiceAssistant
+from applications.Quiz.QuizGame import QuizGame
+from applications.ReflectionAI.Reflection import ReflectionAI
+from driver.display.display import Display
 
 def main():
-    display = Display(simulation=False)  # später False für echtes I2C
-    if display.simulation:
-        display.set_text("Display Simulation gestartet\n")
-    else:
-        display.set_text("Display gestartet\n")
-    # time.sleep(2)
+    display = Display(simulation=False)
 
-    recorder = fasterWhsiper()
-    # Prüfen, ob Mikrofon verfügbar ist
-    if not recorder.mic_available:
-        display.set_text("\n" + "Kein Mikrofon gefunden")
-        sys.exit(1)
-    
-    # Aufnahme mit Enter steuern
-    print("\nAufnahme mit Enter starten")
-    input()
-    recorder.start_recording()
-    display.set_text("\n" + "Aufnahme läuft...")
-    input()
-    transcript = recorder.stop_recording()
-    recorder.stop()
+    while True:
+        display.set_text("1=Chat \n2=Quiz \n3=Reflection AI")
+        choice = input("Modus wählen: ")
 
-    # Frage auf Display anzeigen
-    print("\n" + transcript + "\n")
-    display.set_text("\n" + transcript)
+        if choice == "1":
+            assistant = VoiceAssistant(simulation=False)
+            assistant.run_once()
 
-    # Transkription AI übergeben und Antwort erhalten
-    answer = write_to_ai(transcript)
-    
-    print("\n" + answer + "\n")
-    display.set_text("\n" + answer)
+        elif choice == "2":
+            game = QuizGame(display=display, db_key="quiz")
+            game.play()
+
+        elif choice == "3":  # Reflection AI starten
+            reflection = ReflectionAI(display=display, db_key="reflection")
+            antwort = reflection.start(save_to_db=True)
+
+            # 🔹 Ausgabe zusätzlich im Assistant (optional)
+            print("\n📌 Reflexions-Antwort:", antwort)
+            display.set_text(f"Reflection AI:\n{antwort}")
+
+        else:
+            display.set_text("Ungültig")
+
 
 if __name__ == "__main__":
     main()
