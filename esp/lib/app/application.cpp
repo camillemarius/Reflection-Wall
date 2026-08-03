@@ -1,4 +1,4 @@
-implemented #include "Application.h"
+#include "Application.h"
 #include "I2CMasterControl.h"
 
 Application::Application()
@@ -37,17 +37,16 @@ void Application::handleWakeup(WakeupReason::Reason reason)
 {
     switch (reason)
     {
-        case WakeupReason::Reason::TIMER:
+        case WakeupReason::Reason::TIMER: {
             _display.show("WakeupReason Reason-TIMER");
             break;
-
-        case WakeupReason::Reason::INT_HLK:
+        }
+        case WakeupReason::Reason::INT_HLK: {
             //_pi.requestText();
             _display.show("WakeupReason Reason-INT_HLK");
             break;
-        
-        case WakeupReason::Reason::INT_GPIO_EXP:
-        {
+        }
+        case WakeupReason::Reason::INT_GPIO_EXP:{
             InputEvent event = _inputs.getEvent();
 
             switch(event)
@@ -71,12 +70,15 @@ void Application::handleWakeup(WakeupReason::Reason reason)
             break;
         }
 
-        case WakeupReason::Reason::SHUTDOWN_BUTTON:
+        case WakeupReason::Reason::SHUTDOWN_BUTTON: {
             _display.show("WakeupReason Reason-SHUTDOWN_BUTTON");
             break;
+        }
 
-        case WakeupReason::Reason::UNKNOWN:
+        case WakeupReason::Reason::UNKNOWN: {
             _display.show("WakeupReason Reason-UNKNOWN");
+        }
+
         default:
             break;
     }
