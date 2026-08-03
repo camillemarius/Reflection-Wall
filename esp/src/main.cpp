@@ -1,53 +1,15 @@
 #include <Arduino.h>
 
-#include "UartHandler.h"
-#include "TextStorage.h"
-#include "EspController.h"
+#include "application.h"
 
-
-
-UartHandler uart(
-    Serial
-);
-
-
-TextStorage storage;
-
-
-EspController esp(
-    uart,
-    storage
-);
-
-
+Application application;
 
 void setup()
 {
-
-    Serial.begin(
-        115200
-    );
-
-
-    uart.begin(
-        115200
-    );
-
-
-    esp.begin();
-
-
-    delay(500);
-
-
-    // Raspberry Pi nach Text fragen
-    esp.requestText();
-
+    application.begin();
 }
-
-
 
 void loop()
 {
-    esp.loop();
+    application.loop();
 }
