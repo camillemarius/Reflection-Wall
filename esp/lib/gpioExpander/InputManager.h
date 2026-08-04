@@ -10,6 +10,7 @@ public:
     InputManager(PCF8575& expander);
 
     void begin();
+    void setLed(InputEvent button, bool on);
 
     InputEvent getEvent();
 
