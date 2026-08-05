@@ -13,6 +13,7 @@ public:
     void setLed(InputEvent button, bool on);
 
     InputEvent getEvent();
+    bool getButtonState(InputEvent button);
 
 
 private:
