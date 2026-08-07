@@ -21,5 +21,4 @@ class Commands:
 
 
     # Raspberry Pi -> ESP
-
     OK = "OK"
