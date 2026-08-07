@@ -30,12 +30,9 @@ import time
 
 
 class BH1750:
-
-
     # -------------------------------------------------
     # Kommandos
     # -------------------------------------------------
-
     POWER_DOWN = 0x00
     POWER_ON   = 0x01
     RESET      = 0x07
@@ -44,7 +41,6 @@ class BH1750:
     CONTINUOUS_HIGH_RES   = 0x10
     CONTINUOUS_HIGH_RES_2 = 0x11
     CONTINUOUS_LOW_RES    = 0x13
-
 
     # One Shot Measurement
     ONE_TIME_HIGH_RES   = 0x20

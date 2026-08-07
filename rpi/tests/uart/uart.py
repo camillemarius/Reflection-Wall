@@ -1,79 +1,52 @@
 """
 uart.py
 
-Basis UART Klasse
+Basis UART Klasse.
 """
 
-import serial
-import time
+from __future__ import annotations
 
+import serial
 
 
 class UART:
 
-
-    def __init__(
-        self,
-        port="/dev/serial0",
-        baudrate=115200,
-        timeout=1
-    ):
-
-
+    def __init__(self, port="/dev/serial0", baudrate=115200, timeout=1):
         self.serial = serial.Serial(
-            port,
-            baudrate,
+            port=port,
+            baudrate=baudrate,
             timeout=timeout
         )
 
+    @property
+    def available(self) -> int:
+        return self.serial.in_waiting
 
-        time.sleep(0.2)
+    def clear(self):
+        self.serial.reset_input_buffer()
+        self.serial.reset_output_buffer()
 
+    def write(self, data):
+        if isinstance(data, str):
+            data = data.encode()
 
-
-    def write(
-        self,
-        data
-    ):
-
-        if isinstance(
-            data,
-            str
-        ):
-
-            data = data.encode(
-                "utf-8"
-            )
-
-
-        self.serial.write(
-            data
-        )
-
+        self.serial.write(data)
         self.serial.flush()
 
-
+    def read(self, size=1):
+        return self.serial.read(size)
 
     def readline(self):
+        return self.serial.readline()
 
-        data = self.serial.readline()
-
-
-        return data.decode(
-            "utf-8",
-            errors="ignore"
-        ).strip()
-
-
-
-    def available(self):
-
-        return (
-            self.serial.in_waiting > 0
-        )
-
-
+    def read_all(self):
+        return self.serial.read_all()
 
     def close(self):
-
         self.serial.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
