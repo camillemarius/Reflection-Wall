@@ -12,12 +12,36 @@ CHARS_PER_MODULE = 8
 BYTES_PER_MODULE = CHARS_PER_MODULE * 2
 
 # -------------------
+# I2C Address Map
+# -------------------
+I2C_ADDRESS_MAP = {
+    0: 0x70,
+    1: 0x71,
+    2: 0x72,
+    3: 0x73,
+    4: 0x74,
+    5: 0x75,
+    6: 0x76,
+    7: 0x77,
+    8: 0x61,
+    9: 0x69,
+    10: 0x6a,
+    11: 0x6b
+}
+
+def get_addr(module_index):
+    if module_index not in I2C_ADDRESS_MAP:
+        raise ValueError(f"Keine I2C-Adresse für Modul {module_index} definiert")
+    return I2C_ADDRESS_MAP[module_index]
+
+
+# -------------------
 # Basisfunktionen
 # -------------------
 
 def init_module(module_index):
     """Initialisiert ein einzelnes Modul"""
-    addr = HT16K33_BASE_ADDR + module_index
+    addr = get_addr(module_index)
     try:
         bus.write_byte(addr, CMD_SYSTEM_SETUP | 0x01)
         bus.write_byte(addr, CMD_DISPLAY_SETUP | 0x01)
@@ -64,7 +88,7 @@ def set_digit(buffer, digit_idx, char):
     buffer[digit_idx * 2 + 1] = (segments >> 8) & 0xFF
 
 def write_buffer(module_index, buffer):
-    addr = HT16K33_BASE_ADDR + module_index
+    addr = get_addr(module_index)   # ✅ RICHTIG
     try:
         bus.write_i2c_block_data(addr, 0x00, buffer)
     except OSError as e:

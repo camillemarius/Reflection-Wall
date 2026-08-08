@@ -1,5 +1,5 @@
 import logging
-from applications.ReflectionAI.promt_template import PROMPT_TEMPLATE
+from applications.ReflectionAI.prompt import PROMPT_TEMPLATE
 from driver.database.mysql import get_previous_answers, save_answer, setup_db
 from driver.chatbot.groqAPI import write_to_ai
 from driver.display.display import Display  # deine Display-Klasse
@@ -14,6 +14,19 @@ class ReflectionAI:
         # 🔹 Display setzen, sonst Default (Simulation)
         self.display = display if display else Display(simulation=True)
 
+        self.system_role = {
+            "role": "system",
+            "content": (
+            "Du bist eine tägliche Motivations-AI. "
+            "Deine Aufgabe ist es, kurze, kraftvolle Motivationssprüche zu erzeugen. "
+            "Vermeide Wiederholungen und generische Floskeln. "
+            "Jeder Spruch muss einzigartig, konkret und inspirierend sein. "
+            "Maximal 96 Zeichen. Mindestens ein vollständiger Satz. "
+            "Keine Hashtags, keine Emojis, keine Erklärungen. "
+            "Nur der reine Motivationssatz."
+            )
+        }
+
     def start(self, save_to_db: bool = True) -> str:
         # 🔹 Vorherige Antworten holen
         previous_answers = get_previous_answers(self.db_key)
@@ -22,9 +35,17 @@ class ReflectionAI:
         # 🔹 Prompt vorbereiten
         user_prompt = PROMPT_TEMPLATE.format(previous_answers=previous_answers_text)
 
+        messages = [
+            self.system_role,
+            {
+                "role": "user",
+                "content": user_prompt
+            }
+        ]
+
         # 🔹 Antwort von AI holen
         try:
-            today_answer = write_to_ai(user_prompt, retries=self.retries)
+            today_answer = write_to_ai(messages, retries=self.retries)
 
             if not today_answer.strip():
                 raise ValueError("Leere Antwort Reflection AI")
@@ -35,8 +56,8 @@ class ReflectionAI:
             input("\nDrücke ENTER um fortzufahren...")
 
             # 🔹 Optional in DB speichern
-            if save_to_db:
-                save_answer(today_answer, self.db_key)
+            #if save_to_db:
+            save_answer(today_answer, self.db_key)
 
             return today_answer
 

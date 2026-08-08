@@ -1,11 +1,13 @@
 from driver.chatbot.groqAPI import write_to_ai
 from driver.database.mysql import get_previous_answers, save_answer
+from applications.Quiz.prompt import PROMPT_TEMPLATE
 
 import re
 
+
 class AIQuizGenerator:
     def __init__(self, db_key="quiz"):
-        self.db_key = db_key 
+        self.db_key = db_key
 
     def generate_quiz(self):
         # 1. Alte Fragen holen
@@ -17,31 +19,10 @@ class AIQuizGenerator:
         else:
             previous_text = "Keine bisherigen Fragen."
 
-        # 3. Prompt erweitern
-        prompt = f"""
-        Erstelle ein Quiz. Nicht schwere Fragen. Schweizer sollte die Antwort wissen.
-        Alle Antworten und Hinweise müssen zu 100% korrekt sein.
-
-        WICHTIG:
-        Wiederhole KEINE dieser Fragen:
-        {previous_text}
-
-        Gib mir:
-        1. Eine Schätzfrage
-        2. Die richtige Antwort
-        3. Zwei Hinweise von schwer bis mittelleicht
-
-        Der letzte Hinweis darf die Antwort NICHT direkt verraten.
-
-        Format:
-        FRAGE: ...
-        LÖSUNG: ...
-        HINWEIS1: ...
-        HINWEIS2: ...
-        """
+        # 3. Prompt verwenden
+        prompt = PROMPT_TEMPLATE.format(previous_text=previous_text)
 
         response = write_to_ai(prompt)
-        
         print(f"response: {response}\n")
 
         parsed = self.parse_response(response)
@@ -49,9 +30,8 @@ class AIQuizGenerator:
         # 4. Neue Frage speichern
         if parsed["frage"] != "Keine Frage erhalten":
             save_answer(parsed["frage"], self.db_key)
-        return parsed
 
-    import re
+        return parsed
 
     def parse_response(self, text):
         data = {
@@ -62,10 +42,10 @@ class AIQuizGenerator:
             "hinweis3": "Kein Hinweis 3",
         }
 
-        # 🔹 Markdown (** **) entfernen
+        # Markdown entfernen
         text = text.replace("**", "")
 
-        # 🔹 Patterns (flexibel!)
+        # Flexible Patterns
         patterns = {
             "frage": r"FRAGE:\s*(.+)",
             "lösung": r"L[ÖO]SUNG:\s*(.+)",

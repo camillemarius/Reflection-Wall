@@ -45,7 +45,7 @@ def split_word_syllables(word, max_len):
 
 # ----- Display Platzhalter-Klasse -----
 class Display:
-    def __init__(self, modules_per_row=3, rows=2, chars_per_module=CHARS_PER_MODULE, simulation=False):
+    def __init__(self, modules_per_row=3, rows=4, chars_per_module=CHARS_PER_MODULE, simulation=False):
         """
         Erzeugt ein Display-Objekt.
         simulation=True  -> TestModule (Terminal)

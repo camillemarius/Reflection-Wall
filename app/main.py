@@ -2,16 +2,18 @@ from applications.VoiseAssistant.VoiceAssistant import VoiceAssistant
 from applications.Quiz.QuizGame import QuizGame
 from applications.ReflectionAI.Reflection import ReflectionAI
 from driver.display.display import Display
+from driver.speech.speaker import SpeechAssistant
 
 def main():
     display = Display(simulation=False)
+    speech_assistant  = SpeechAssistant()
 
     while True:
         display.set_text("1=Chat \n2=Quiz \n3=Reflection AI")
         choice = input("Modus wählen: ")
 
         if choice == "1":
-            assistant = VoiceAssistant(simulation=False)
+            assistant = VoiceAssistant(simulation=False, display=display, speaker=speech_assistant )
             assistant.run_once()
 
         elif choice == "2":

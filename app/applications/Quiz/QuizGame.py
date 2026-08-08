@@ -24,28 +24,26 @@ class QuizGame:
             quiz["hinweis2"]
         ]
 
-        print("\n=== QUIZ STARTET ===\n")
+        print("=== QUIZ STARTET ===")
         self.display.set_text("Quiz startet")
         time.sleep(2)
 
         # Frage anzeigen
-        print(f"FRAGE: {frage}\n")
+        print(f"FRAGE: {frage}")
         self.display.set_text(frage)
 
         for runde in range(2):
-            input(f"\nDrücke ENTER für Hinweis {runde+1}...")
+            input(f"Drücke ENTER für Hinweis {runde+1}...")
+            print(f"Hinweis: {hinweise[runde]}")
 
-            print(f"\n--- Runde {runde+1} ---")
-            print(f"Hinweis: {hinweise[runde]}\n")
-
-            self.display.set_text(f"Runde {runde+1}")
+            self.display.set_text(f"Hinweis {runde+1}")
             time.sleep(1)
 
             self.display.set_text(hinweise[runde])
         
-        input(f"\nDrücke ENTER für die Lösung {runde+1}...")
-        print(f"\nLÖSUNG: {antwort}\n")
-        self.display.set_text(f"Lösung: {antwort}")
-        input(f"\nDrücke ENTER für die Lösung {runde+1}...")
+        input(f"Drücke ENTER für die Lösung")
+        print(f"Lösung: {antwort}")
+        self.display.set_text(f"{antwort}")
+        input(f"Drücke ENTER zum beenden")
 
         return False
