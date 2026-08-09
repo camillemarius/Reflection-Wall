@@ -1,7 +1,7 @@
 import time
-from rpi.app.driver.database.mysql import setup_db
-from rpi.app.applications.Quiz.AIQuizGenerator import AIQuizGenerator
-from rpi.app.driver.display.display import Display
+from driver.database.mysql import setup_db
+from applications.Quiz.AIQuizGenerator import AIQuizGenerator
+from driver.display.display import Display
 
 setup_db("quiz")
 
