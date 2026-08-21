@@ -2,20 +2,23 @@
 
 #include "ASCII16Seg.h"
 #include "I2CMasterControl.h"
+#include "pinMapping.h"
 
 
 HT16K33::HT16K33(uint8_t address)
 {
     _address = address;
-    clear();
+    clearBuffer();
 }
 
 
 void HT16K33::begin()
 {
-    Wire.begin();
+    Wire.begin(Pins::I2C_SDA, Pins::I2C_SCL);
+    Wire.setClock(50000);
 
     init();
+
 }
 
 
@@ -49,7 +52,35 @@ void HT16K33::setBrightness(uint8_t level)
 }
 
 
+bool HT16K33::testConnection()
+{
+    return testConnectionCode() == 0;
+}
+
+
+uint8_t HT16K33::testConnectionCode()
+{
+    Wire.beginTransmission(_address);
+    Wire.write(0x20 | 0x01);
+
+    return Wire.endTransmission();
+}
+
+
+uint8_t HT16K33::getAddress() const
+{
+    return _address;
+}
+
+
 void HT16K33::clear()
+{
+    clearBuffer();
+    write();
+}
+
+
+void HT16K33::clearBuffer()
 {
     memset(_buffer, 0, sizeof(_buffer));
 }
@@ -93,7 +124,7 @@ void HT16K33::setChar(uint8_t position, char c)
 
 void HT16K33::setText(const String& text)
 {
-    clear();
+    clearBuffer();
 
 
     for(uint8_t i = 0; i < CHARS_PER_MODULE; i++)
@@ -111,9 +142,6 @@ void HT16K33::setText(const String& text)
 
 void HT16K33::write()
 {
-    I2CMasterControl::enable();
-
-
     Wire.beginTransmission(_address);
 
     Wire.write(0x00);
@@ -128,5 +156,4 @@ void HT16K33::write()
     Wire.endTransmission();
 
 
-    I2CMasterControl::disable();
 }

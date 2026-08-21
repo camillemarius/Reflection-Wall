@@ -17,8 +17,10 @@ public:
 
     void clear();
 
+    bool testConnection(Print& output);
+
 private:
-    static constexpr uint8_t MODULE_COUNT = 16;
+    static constexpr uint8_t MODULE_COUNT = 12;
     static constexpr uint8_t ROWS = 4;
 
     HT16K33 _modules[MODULE_COUNT];

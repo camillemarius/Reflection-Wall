@@ -17,4 +17,7 @@ namespace Pins
 
     // I2C Master Selection
     constexpr uint8_t I2C_MASTER_SEL = 15; // GPIO15
+    
+    // Status Led
+    constexpr uint8_t ESP_DTR = 0; // GPIO0
 }

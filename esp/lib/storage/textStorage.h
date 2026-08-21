@@ -8,7 +8,7 @@
 #include "FramTextStorage.h"
 
 
-#define USE_FRAM_STORAGE 0
+#define USE_FRAM_STORAGE 1
 
 
 class TextStorage

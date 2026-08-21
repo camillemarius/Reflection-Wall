@@ -19,6 +19,12 @@ public:
 
     void setBrightness(uint8_t level);
 
+    bool testConnection();
+
+    uint8_t testConnectionCode();
+
+    uint8_t getAddress() const;
+
 private:
 
     uint8_t _address;
@@ -27,6 +33,8 @@ private:
 
     void init();
     void write();
+
+    void clearBuffer();
 
     void setChar(uint8_t position, char c);
 };

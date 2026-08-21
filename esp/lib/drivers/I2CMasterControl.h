@@ -8,6 +8,8 @@ public:
 
     static void begin();
 
+    static void scan(Print& output);
+
     /**
      * Schaltet den ESP8266 als I2C Master ein
      */
