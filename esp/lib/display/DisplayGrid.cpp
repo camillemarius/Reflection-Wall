@@ -32,7 +32,11 @@ void DisplayGrid::setText(const String& text)
 
 void DisplayGrid::splitText(const String& text, String* lines)
 {
+<<<<<<< HEAD
     constexpr uint8_t CHARS_PER_ROW = 24;
+=======
+    constexpr uint8_t CHARS_PER_ROW = 32;
+>>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 
     uint16_t index = 0;
 

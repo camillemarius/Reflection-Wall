@@ -1,5 +1,6 @@
 *.env
 /.venv
+*.envS
 /__pycache__
 app/__pycache__/__init__.cpython-313.pyc
 app/__pycache__/main.cpython-313.pyc

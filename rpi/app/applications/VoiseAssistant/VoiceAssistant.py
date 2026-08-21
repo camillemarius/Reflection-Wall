@@ -1,12 +1,13 @@
 import sys
-from rpi.app.driver.display.display import Display
-from rpi.app.driver.speechRecognition.fasterWhisper import fasterWhsiper
-from rpi.app.driver.chatbot.groqAPI import write_to_ai
+from driver.display.display import Display
+from driver.speechRecognition.fasterWhisper import fasterWhsiper
+from driver.chatbot.groqAPI import write_to_ai
 
 class VoiceAssistant:
-    def __init__(self, simulation=False):
+    def __init__(self, simulation=False, display=None, speaker=None):
         self.display = Display(simulation=simulation)
         self.recorder = fasterWhsiper()
+        self.speaker = speaker
 
         # 🔹 Mikrofon prüfen
         if not self.recorder.mic_available:
@@ -52,6 +53,9 @@ class VoiceAssistant:
         answer = self.ask_ai(transcript)
         self.display_text(answer)
         print("\n", answer)
+
+        # Antwort sprechen
+        self.speaker.speak(answer)
 
         input("\nDrücke ENTER, um fortzufahren...")
         return transcript, answer

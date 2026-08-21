@@ -1,4 +1,5 @@
 #include "Display.h"
+<<<<<<< HEAD
 #include "I2CMasterControl.h"
 
 
@@ -29,6 +30,39 @@ _rows{
     SegmentChain(&_modules[3], 3),
     SegmentChain(&_modules[6], 3),
     SegmentChain(&_modules[9], 3)
+=======
+
+
+Display::Display()
+:
+_modules{
+    HT16K33(0x70),
+    HT16K33(0x71),
+    HT16K33(0x72),
+    HT16K33(0x73),
+
+    HT16K33(0x74),
+    HT16K33(0x75),
+    HT16K33(0x76),
+    HT16K33(0x77),
+
+    HT16K33(0x70),
+    HT16K33(0x71),
+    HT16K33(0x72),
+    HT16K33(0x73),
+
+    HT16K33(0x74),
+    HT16K33(0x75),
+    HT16K33(0x76),
+    HT16K33(0x77)
+},
+
+_rows{
+    SegmentChain(&_modules[0], 4),
+    SegmentChain(&_modules[4], 4),
+    SegmentChain(&_modules[8], 4),
+    SegmentChain(&_modules[12], 4)
+>>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 },
 
 _grid(_rows, ROWS)
@@ -38,21 +72,29 @@ _grid(_rows, ROWS)
 
 void Display::begin()
 {
+<<<<<<< HEAD
     I2CMasterControl::enable();
 
+=======
+>>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
     for (uint8_t i = 0; i < MODULE_COUNT; i++)
     {
         _modules[i].begin();
     }
 
+<<<<<<< HEAD
     _grid.clear();
 
     I2CMasterControl::disable();
+=======
+    clear();
+>>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 }
 
 
 void Display::show(const String& text)
 {
+<<<<<<< HEAD
     I2CMasterControl::enable();
 
     _grid.clear();
@@ -60,11 +102,17 @@ void Display::show(const String& text)
     _grid.setText(text);
 
     I2CMasterControl::disable();
+=======
+    _grid.clear();
+
+    _grid.setText(text);
+>>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 }
 
 
 void Display::clear()
 {
+<<<<<<< HEAD
     I2CMasterControl::enable();
 
     _grid.clear();
@@ -100,4 +148,7 @@ bool Display::testConnection(Print& output)
     I2CMasterControl::disable();
 
     return allConnected;
+=======
+    _grid.clear();
+>>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 }

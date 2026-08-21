@@ -1,11 +1,15 @@
 #include "I2CMasterControl.h"
 
 #include <Arduino.h>
+<<<<<<< HEAD
 #include <Wire.h>
+=======
+>>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 
 #include "pinMapping.h"
 
 
+<<<<<<< HEAD
 void I2CMasterControl::scan(Print& output)
 {
     Wire.begin(Pins::I2C_SDA, Pins::I2C_SCL);
@@ -32,6 +36,8 @@ void I2CMasterControl::scan(Print& output)
 }
 
 
+=======
+>>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 
 void I2CMasterControl::begin()
 {
@@ -61,17 +67,24 @@ void I2CMasterControl::enable()
 
 
     // Analog Switch Einschwingzeit
+<<<<<<< HEAD
     //delayMicroseconds(100);
     delay(1000);
+=======
+    delayMicroseconds(10);
+>>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 }
 
 
 
 void I2CMasterControl::disable()
 {
+<<<<<<< HEAD
     // Analog Switch Einschwingzeit
     //delayMicroseconds(100);
     delay(1000);
+=======
+>>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
     // Bus wieder freigeben
     digitalWrite(
         Pins::I2C_MASTER_SEL,
