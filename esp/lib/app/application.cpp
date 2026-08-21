@@ -1,12 +1,9 @@
 #include "Application.h"
 #include "I2CMasterControl.h"
-<<<<<<< HEAD
 #include "pinMapping.h"
 
 #include "OtaManager.h"
 #include "DebugLogger.h"
-=======
->>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 
 Application::Application()
     : _uart(Serial),
@@ -15,7 +12,6 @@ Application::Application()
       _pi(_uart, _storage, _display),
       _gpioExpander(0x20),
       _inputs(_gpioExpander),
-<<<<<<< HEAD
       _wakeupReason(WakeupReason::Reason::UNKNOWN),
       _wifi()
 {
@@ -40,7 +36,6 @@ void Application::begin()
 
     I2CMasterControl::begin();
 
-<<<<<<< HEAD
     I2CMasterControl::enable();
     I2CMasterControl::scan(Serial);
     I2CMasterControl::disable();
@@ -73,16 +68,13 @@ void Application::begin()
 
     _gpioExpander.begin();
 
-=======
     _display.begin();
 
     _gpioExpander.begin();
->>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
     _inputs.begin();
 
     _pi.begin();
 
-<<<<<<< HEAD
     if (_wifi.begin()) {
         DebugSerial.beginNetwork();
         OtaManager::begin("reflectionwall");
@@ -92,17 +84,12 @@ void Application::begin()
     }
 
     handleWakeup(_wakeupReason);
-
-=======
-    handleWakeup(_wakeupReason);
->>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 }
 
 void Application::handleWakeup(WakeupReason::Reason reason)
 {
     switch (reason)
     {
-<<<<<<< HEAD
         case WakeupReason::Reason::TIMER:
             _display.show("WakeupReason Reason-TIMER");
             break;
@@ -120,21 +107,6 @@ void Application::handleWakeup(WakeupReason::Reason reason)
             Serial.println(static_cast<int>(event));
 
             switch (event)
-=======
-        case WakeupReason::Reason::TIMER: {
-            _display.show("WakeupReason Reason-TIMER");
-            break;
-        }
-        case WakeupReason::Reason::INT_HLK: {
-            //_pi.requestText();
-            _display.show("WakeupReason Reason-INT_HLK");
-            break;
-        }
-        case WakeupReason::Reason::INT_GPIO_EXP:{
-            InputEvent event = _inputs.getEvent();
-
-            switch(event)
->>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
             {
                 case InputEvent::BT1:
                     _display.show("BTN1");
@@ -147,7 +119,6 @@ void Application::handleWakeup(WakeupReason::Reason reason)
                 case InputEvent::BT3:
                     _display.show("BTN3");
                     break;
-<<<<<<< HEAD
 
                 case InputEvent::BT4:
                 {
@@ -249,63 +220,3 @@ void Application::loop()
 // DIN3: RST
 // DIN4: GPIO15
 // DIN5: DTR
-=======
-                
-                case InputEvent::BT4: {
-                    bool state = _inputs.getButtonState(InputEvent::BT4);
-                    if (state) {
-                        _display.show("BTN4 not pressed");
-                        // Noch undefiniert
-                    } else {
-                        _display.show("BTN4");
-                        // Noch undefiniert
-                    }
-                    break;
-                }
-                
-                case InputEvent::BT5: {
-                    bool state = _inputs.getButtonState(InputEvent::BT5);
-                    if (state) {
-                        _display.show("BTN5 High");
-                        // Speak Mode einschalten
-                    } else {
-                        _display.show("BTN5 Low");
-                        // Speak Mode ausschalten
-                    }
-                    break;
-                }
-
-                case InputEvent::BT6: {
-                    bool state = _inputs.getButtonState(InputEvent::BT6);
-                    if (state) {
-                        _display.show("BTN6 High");
-                        // Raspberry Pi einschalten
-                    } else {
-                        _display.show("BTN6 Low");
-                        // Raspberry Pi ausschalten
-                    }
-                    break;
-                }
-            }
-            break;
-        }
-
-        case WakeupReason::Reason::SHUTDOWN_BUTTON: {
-            _display.show("WakeupReason Reason-SHUTDOWN_BUTTON");
-            break;
-        }
-
-        case WakeupReason::Reason::UNKNOWN: {
-            _display.show("WakeupReason Reason-UNKNOWN");
-        }
-
-        default:
-            break;
-    }
-}
-
-void Application::loop()
-{
-    _pi.loop();
-}
->>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61

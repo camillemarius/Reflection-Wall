@@ -8,10 +8,7 @@
 
 #include "PCF8575.h"
 #include "InputManager.h"
-<<<<<<< HEAD
 #include "WifiController.h"
-=======
->>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 
 class Application
 {
@@ -33,9 +30,6 @@ private:
     InputManager _inputs;
     
     WakeupReason::Reason _wakeupReason;
-<<<<<<< HEAD
 
     WifiController _wifi;
-=======
->>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 };

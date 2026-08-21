@@ -2,36 +2,23 @@
 
 #include "ASCII16Seg.h"
 #include "I2CMasterControl.h"
-<<<<<<< HEAD
 #include "pinMapping.h"
-=======
->>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 
 
 HT16K33::HT16K33(uint8_t address)
 {
     _address = address;
-<<<<<<< HEAD
     clearBuffer();
-=======
-    clear();
->>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 }
 
 
 void HT16K33::begin()
 {
-<<<<<<< HEAD
     Wire.begin(Pins::I2C_SDA, Pins::I2C_SCL);
     Wire.setClock(50000);
 
     init();
 
-=======
-    Wire.begin();
-
-    init();
->>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 }
 
 
@@ -65,7 +52,6 @@ void HT16K33::setBrightness(uint8_t level)
 }
 
 
-<<<<<<< HEAD
 bool HT16K33::testConnection()
 {
     return testConnectionCode() == 0;
@@ -96,10 +82,6 @@ void HT16K33::clear()
 
 void HT16K33::clearBuffer()
 {
-=======
-void HT16K33::clear()
-{
->>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
     memset(_buffer, 0, sizeof(_buffer));
 }
 
@@ -142,11 +124,7 @@ void HT16K33::setChar(uint8_t position, char c)
 
 void HT16K33::setText(const String& text)
 {
-<<<<<<< HEAD
     clearBuffer();
-=======
-    clear();
->>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 
 
     for(uint8_t i = 0; i < CHARS_PER_MODULE; i++)
@@ -164,12 +142,7 @@ void HT16K33::setText(const String& text)
 
 void HT16K33::write()
 {
-<<<<<<< HEAD
-=======
     I2CMasterControl::enable();
-
-
->>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
     Wire.beginTransmission(_address);
 
     Wire.write(0x00);
@@ -184,8 +157,5 @@ void HT16K33::write()
     Wire.endTransmission();
 
 
-<<<<<<< HEAD
-=======
     I2CMasterControl::disable();
->>>>>>> a162efaed06d915565e2865b0a8f8b0f4a333a61
 }
