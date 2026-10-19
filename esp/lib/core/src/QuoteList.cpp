@@ -8,6 +8,21 @@ bool isBlank(const std::string& s)
 {
     return s.find_first_not_of(" \t") == std::string::npos;
 }
+
+// Entfernt Leerzeichen und Tabs an beiden Enden
+std::string trim(const std::string& s)
+{
+    const std::size_t first = s.find_first_not_of(" \t");
+    if (first == std::string::npos)
+    {
+        return std::string();
+    }
+    const std::size_t last = s.find_last_not_of(" \t");
+    return s.substr(first, last - first + 1);
+}
+
+// Laenge von "JJJJ-MM-TT"; so viel fasst PersistentState::shownDate
+constexpr std::size_t MAX_DATE_LENGTH = 10;
 }
 
 QuoteList QuoteList::parse(const std::string& content)
@@ -33,12 +48,19 @@ QuoteList QuoteList::parse(const std::string& content)
         {
             continue;
         }
-        const std::string text = line.substr(sep + 1);
+        const std::string text = trim(line.substr(sep + 1));
         if (isBlank(text))
         {
             continue;
         }
-        list.quotes_.push_back(Quote{line.substr(0, sep), text});
+        // Ein zu langes Datum liesse sich nicht im RTC-Speicher merken;
+        // der Eintrag bleibt, aber ohne Datum
+        std::string date = trim(line.substr(0, sep));
+        if (date.size() > MAX_DATE_LENGTH)
+        {
+            date.clear();
+        }
+        list.quotes_.push_back(Quote{date, text});
     }
     return list;
 }

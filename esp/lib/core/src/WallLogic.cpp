@@ -21,3 +21,21 @@ bool wallShouldTurnOff(bool radarHigh, bool button1Active, unsigned long msSince
 {
     return !radarHigh && (!button1Active || msSinceBoot >= BUTTON1_ON_MS);
 }
+
+std::size_t selectIndex(const QuoteList& list, WallAction action,
+                        std::size_t shownIndex, const std::string& shownDate)
+{
+    if (list.empty())
+    {
+        return 0;
+    }
+    switch (action)
+    {
+        case WallAction::ShowNewest:
+            return 0;
+        case WallAction::ShowNext:
+            return list.nextIndex(list.resolveIndex(shownIndex, shownDate));
+        default:
+            return list.resolveIndex(shownIndex, shownDate);
+    }
+}
