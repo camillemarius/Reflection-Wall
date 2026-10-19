@@ -59,7 +59,7 @@ Takt: 10 kHz (`I2CMasterControl::I2C_CLOCK_HZ`), gemessen ~9 kHz.
 
 ```
 src/main.cpp              ruft nur Application::run() auf
-lib/app/                  Ablauf, Taster, Testmodi (application.cpp), BufferTest
+lib/app/                  Ablauf, Taster (application.cpp), Buffer-Test (BufferTest.cpp)
 lib/display/              Display (12 Module), DisplayGrid (Zeilenumbruch), 16-Segment-Font
 lib/drivers/              HT16K33, PCF8575, I2CMasterControl (Master-Umschaltung, Bus-Befreiung)
 lib/Wire/                 eigene Software-I²C (ersetzt die Core-Bibliothek, siehe unten)
@@ -77,22 +77,13 @@ Ersetzt die Software-I²C des ESP8266-Cores und hat Vorrang vor ihr. Unterschied
 
 - **SDA-Hold:** wartet nach jedem „SCL low“ 10 µs, bevor SDA wechselt
 - **Clock-Stretch-Limit:** 20 ms
-- Diagnose: `setIgnoreDataNack()`, `setAckTrace()`, `lastAckFallAfterStartUs()`
+- Diagnose: `setIgnoreDataNack()`, `setAckTrace()`, `lastAckFallAfterStartUs()` – die Firmware ruft sie derzeit nicht auf
 
-## Testmodi
+## Buffer-Test
 
-Alle Testmodi sind Schalter (`constexpr bool`) in `lib/app/application.cpp` und laufen endlos statt in den Deep Sleep zu gehen. Ist mehrere aktiv, gewinnt der oberste:
+Abnahmetest für den I²C-Buffer PCA9517A. Eingeschaltet wird er mit `BUFFER_TEST = true` in `lib/app/application.cpp`; er läuft dann endlos statt in den Deep Sleep zu gehen. Der ganze Bildschirm zeigt „ADR xx n“, der Test prüft pro angeschlossenem Modul den Befehl 0x81 und liest den Text zurück. Nicht angeschlossene Module werden übersprungen. Code in `lib/app/BufferTest.cpp`.
 
-| Schalter | Zweck |
-|---|---|
-| `BUFFER_TEST` | **Test für den PCA9517A:** ganzer Bildschirm zeigt „ADR xx n“, prüft pro angeschlossenem Modul Befehl 0x81 und liest den Text zurück. Nicht angeschlossene Module werden übersprungen. Code in `lib/app/BufferTest.cpp` |
-| `SCOPE_TEST` | Oszi-Modus: wiederholt 0x7B + 0x81 alle 20 ms |
-| `ID_TEST` | jedes Modul zeigt „ADR xx n“ (ohne Prüfung) |
-| `ACK_TRACE_TEST` | tastet SDA im ACK-Takt ab |
-| `PATTERN_TEST`, `CMD_MATRIX_TEST`, `I2C_HOLD_TEST`, `SEGMENT_SWEEP_TEST`, `I2C_PROBE_TEST`, `I2C_LOAD_TEST` | frühere Diagnosen zur Fehlersuche |
-| `I2C_DIAG`, `DISPLAY_CYCLE_TEST` | Diagnose-Ausgaben bzw. alle 6 s ein neuer Text statt Deep Sleep |
-
-**Für den Normalbetrieb alle Testschalter auf `false` setzen.**
+**Für den Normalbetrieb `BUFFER_TEST = false`.**
 
 ### Ausgabe des Buffer-Tests
 

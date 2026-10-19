@@ -28,7 +28,7 @@ Raspi  ──┘  (Master-     3,3 → 5 V              ├─ Zeile 3: 0x76 0x7
 
 Hinter den Translatoren verloren einzelne Module (0x7B, 0x7F) ihr ACK nach Bytes mit Bit 0 = 1. Die Ursache ist gemessen: SCL fällt auf dem 5-V-Bus zu langsam (> 1 µs statt ≤ 300 ns), weil sich die ganze Buskapazität über Analogschalter und BSS138-Pegelwandler entlädt. Der LTC4316 deutet das ACK dann als START und trennt.
 
-**Lösung in Arbeit:** I²C-Buffer **PCA9517A** zwischen Pegelwandler und Bus (VCCA = VCCB = 5 V). Die Firmware hat dafür einen eigenen Test, siehe [`esp/README.md`](esp/README.md#testmodi).
+**Lösung in Arbeit:** I²C-Buffer **PCA9517A** zwischen Pegelwandler und Bus (VCCA = VCCB = 5 V). Die Firmware hat dafür einen eigenen Test, siehe [`esp/README.md`](esp/README.md#buffer-test).
 
 ## Repository-Struktur
 
