@@ -5,7 +5,7 @@
 // ---------------------------------------------------------
 // Zustand, der einen Reset ueberlebt
 // ---------------------------------------------------------
-// Der ESP schlaeft zwischen zwei Tastendruecken im Deep Sleep
+// Der ESP schlaeft zwischen zwei Weckvorgaengen im Deep Sleep
 // und wird vom INT-Ausgang des GPIO Expanders ueber RST
 // geweckt. Jeder Weckvorgang ist ein vollstaendiger Neustart:
 // RAM, Objektzustand und millis() fangen bei null an.
