@@ -10,11 +10,13 @@ public:
     static constexpr uint8_t CHARS_PER_MODULE = 8;
     static constexpr uint8_t BUFFER_SIZE = CHARS_PER_MODULE * 2;
 
-    // Helligkeit 0..15. Die Anzeigen laufen bewusst nie voll
-    // hell: der LED-Strom der ganzen Kette stoert sonst den
-    // I2C-Bus. setBrightness() begrenzt auf MAX_BRIGHTNESS.
-    static constexpr uint8_t DEFAULT_BRIGHTNESS = 4;
-    static constexpr uint8_t MAX_BRIGHTNESS = 7;
+    // Helligkeit 0..15 (Tastverhaeltnis (n+1)/16). Volle
+    // Helligkeit setzt den PCA9517A voraus: ohne ihn stoerte der
+    // LED-Strom der ganzen Kette den I2C-Bus, die Anzeigen liefen
+    // deshalb auf hoechstens 7. Der Buffer-Test laeuft mit
+    // DEFAULT_BRIGHTNESS und prueft den Bus damit unter voller Last.
+    static constexpr uint8_t DEFAULT_BRIGHTNESS = 15;
+    static constexpr uint8_t MAX_BRIGHTNESS = 15;
 
     HT16K33(uint8_t address);
 
