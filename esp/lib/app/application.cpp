@@ -129,15 +129,21 @@ void Application::run()
     // faengt bei jedem Durchlauf neu an.
     _inputs.setDebounceMs(0);
 
-    // Die Taster sind aktiv LOW: FALLING_EDGE ist das
-    // Druecken, RISING_EDGE das Loslassen, LEVEL_LOW gilt
-    // solange gehalten wird.
-    _inputs.setTrigger(InputEvent::BT1, InputTrigger::NONE);
-    _inputs.setTrigger(InputEvent::BT2, InputTrigger::NONE);
+    // BT1-BT3 laufen ueber Toggle-Flipflops (Blatt "Button
+    // Debouncing"): jeder Druck kippt den Pegel, und der neue
+    // Pegel bleibt stehen, bis der ESP ihn liest. Ein Wechsel
+    // ist deshalb genau ein Druck, egal wie kurz er war.
+    //
+    // BT4-BT6 haengen direkt am Expander. Der ESP sieht sie nur,
+    // solange sie beim Lesen noch gedrueckt sind - ein kurzer
+    // Druck ist vorbei, bevor der ESP nach dem Reset liest.
+    // Deshalb loesen sie nichts aus.
+    _inputs.setTrigger(InputEvent::BT1, InputTrigger::ANY_EDGE);
+    _inputs.setTrigger(InputEvent::BT2, InputTrigger::ANY_EDGE);
     _inputs.setTrigger(InputEvent::BT3, InputTrigger::NONE);
     _inputs.setTrigger(InputEvent::BT4, InputTrigger::NONE);
-    _inputs.setTrigger(InputEvent::BT5, InputTrigger::FALLING_EDGE);
-    _inputs.setTrigger(InputEvent::BT6, InputTrigger::FALLING_EDGE);
+    _inputs.setTrigger(InputEvent::BT5, InputTrigger::NONE);
+    _inputs.setTrigger(InputEvent::BT6, InputTrigger::NONE);
 
     // Beim Kaltstart ist der vorherige Pegel unbekannt. Statt
     // 0xFFFF anzunehmen und damit jeden zufaellig gehaltenen
@@ -336,11 +342,12 @@ void Application::handleInput(InputEvent button)
     switch (button)
     {
         case InputEvent::BT1:
-            DebugSerial.println("(keine Aktion)");
+            showText();
             break;
 
         case InputEvent::BT2:
-            DebugSerial.println("(keine Aktion)");
+            DebugSerial.println("Power Switch umschalten");
+            togglePowerSwitch();
             break;
 
         case InputEvent::BT3:
@@ -352,12 +359,11 @@ void Application::handleInput(InputEvent button)
             break;
 
         case InputEvent::BT5:
-            DebugSerial.println("Power Switch umschalten");
-            togglePowerSwitch();
+            DebugSerial.println("(keine Aktion)");
             break;
 
         case InputEvent::BT6:
-            showText();
+            DebugSerial.println("(keine Aktion)");
             break;
 
         default:

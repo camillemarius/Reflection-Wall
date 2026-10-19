@@ -24,5 +24,7 @@ enum class InputTrigger
     RISING_EDGE,    // LOW -> HIGH  (Taster losgelassen)
     FALLING_EDGE,   // HIGH -> LOW  (Taster gedrueckt)
     LEVEL_HIGH,     // solange HIGH (Taster offen)
-    LEVEL_LOW       // solange LOW  (Taster gehalten)
+    LEVEL_LOW,      // solange LOW  (Taster gehalten)
+    ANY_EDGE        // jeder Wechsel: fuer Taster hinter einem
+                    // Toggle-Flipflop, das bei jedem Druck kippt
 };

@@ -26,9 +26,11 @@ Es gibt keine Hauptschleife. Der ESP liegt im Deep Sleep; ein Tastendruck am PCF
 
 | Taster | Aktion |
 |---|---|
-| BT5 | Raspberry Pi ein-/ausschalten (Puls auf das Flipflop am Relais, GPIO12) |
-| BT6 | Text aus dem Flash neu anzeigen |
-| BT1–BT4 | noch nicht belegt |
+| BT1 | Text aus dem Flash neu anzeigen |
+| BT2 | Raspberry Pi ein-/ausschalten (Puls auf das Flipflop am Relais, GPIO12) |
+| BT3–BT6 | noch nicht belegt |
+
+BT1–BT3 laufen über Toggle-Flipflops (Blatt „Button Debouncing“, Jumper J10/J12/J14): jeder Druck kippt den Pegel am Expander, und der neue Pegel bleibt stehen, bis der ESP ihn liest. Die Firmware wertet deshalb jeden Wechsel als einen Druck (`InputTrigger::ANY_EDGE`), auch einen ganz kurzen. BT4–BT6 hängen direkt am Expander; ein kurzer Druck ist dort vorbei, bevor der ESP nach dem Reset liest, deshalb lösen sie nichts aus.
 
 ## Text im Flash
 
