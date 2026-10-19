@@ -95,16 +95,16 @@ namespace
     // Temporaere I2C-Diagnose: meldet Ruhepegel und Scan-
     // Ergebnis und markiert jeden Schritt, damit bei einem
     // Haenger die letzte Zeile zeigt, wo es stehen blieb.
-    constexpr bool I2C_DIAG = true;
+    constexpr bool I2C_DIAG = false;
 
     // Abnahmetest fuer den neuen I2C-Buffer (PCA9517A), siehe
     // BufferTest.h. Hat Vorrang vor allen anderen Testmodi.
     // Fuer den Normalbetrieb auf false.
-    constexpr bool BUFFER_TEST = true;
+    constexpr bool BUFFER_TEST = false;
 
     // Temporaerer Test: statt zu schlafen alle 2 s einen neuen
     // Text schreiben, um den Bus unter Dauerlast zu beobachten.
-    constexpr bool DISPLAY_CYCLE_TEST = true;
+    constexpr bool DISPLAY_CYCLE_TEST = false;
 
     // Temporaerer Oszi-Test: spricht endlos immer dieselbe
     // Adresse an (nur Adressbyte + ACK/NACK + STOP), damit jede
@@ -113,7 +113,7 @@ namespace
     //
     // Trigger am Oszi: IN1 (SDA), fallende Flanke, ~2.5 V,
     // SINGLE oder NORMAL. Pro Periode gibt es genau ein START.
-    constexpr bool I2C_PROBE_TEST = true;
+    constexpr bool I2C_PROBE_TEST = false;
 
     // Zieladresse. 0x70 (Master-Seite) antwortet mit beiden
     // LTC4316 zuverlaessig. Jetzt die uebersetzte Seite:
@@ -299,7 +299,7 @@ namespace
     // am Oszi gemessen werden kann (z.B. GND letztes Board
     // gegen GND Hauptboard).
     // Hat Vorrang vor Diagnose und DISPLAY_CYCLE_TEST.
-    constexpr bool I2C_LOAD_TEST = true;
+    constexpr bool I2C_LOAD_TEST = false;
 
     constexpr uint8_t LOAD_SCANS_PER_PHASE = 5;
     constexpr unsigned long LOAD_SCAN_INTERVAL_MS = 1000;
@@ -539,7 +539,7 @@ namespace
     // einen Blick zu sehen, welches Modul erreichbar ist und ob
     // die Reihenfolge im Raster stimmt. Hat Vorrang vor allen
     // anderen Testmodi.
-    constexpr bool SEGMENT_SWEEP_TEST = true;
+    constexpr bool SEGMENT_SWEEP_TEST = false;
 
     // Reihenfolge wie in display.cpp: Zeile fuer Zeile, links
     // nach rechts
@@ -920,7 +920,7 @@ namespace
     // und zaehlt die ACKs. Das Muster zeigt, ob es an einem
     // bestimmten Bit liegt.
     // Hat Vorrang vor allen anderen Testmodi.
-    constexpr bool CMD_MATRIX_TEST = true;
+    constexpr bool CMD_MATRIX_TEST = false;
 
     // 0x77 (Master-Seite) und 0x79/0x7B (hinter Translator,
     // funktionieren) als Vergleich; frueher fielen 0x78/0x7A aus (nativ A0 = 0)
@@ -1186,7 +1186,7 @@ namespace
     // quittiert oder ob sein ACK kurz sichtbar ist und dann
     // abgeschnitten wird.
     // Hat Vorrang vor allen anderen Testmodi.
-    constexpr bool ACK_TRACE_TEST = true;
+    constexpr bool ACK_TRACE_TEST = false;
 
     constexpr uint8_t TRACE_TARGETS[] = { 0x77, 0x79, 0x7B, 0x7D, 0x7F };
     constexpr uint8_t TRACE_COMMANDS[] = { 0xE4, 0x81 };   // Bit 0 = 0 / Bit 0 = 1
@@ -1249,7 +1249,7 @@ namespace
     // Gleicher Weg wie im Normalbetrieb (HT16K33::begin/setText),
     // also ohne Sonderbehandlung von NACKs.
     // Hat Vorrang vor allen anderen Testmodi.
-    constexpr bool ID_TEST = true;
+    constexpr bool ID_TEST = false;
 
     constexpr unsigned long ID_PERIOD_MS = 2000;
 
@@ -1326,7 +1326,7 @@ namespace
     // sie kommt - diesen Wert am Red Pitaya als Zeitverschiebung
     // einstellen (Trigger: SDA fallend = START).
     // Hat Vorrang vor allen anderen Testmodi.
-    constexpr bool SCOPE_TEST = true;
+    constexpr bool SCOPE_TEST = false;
 
     // 0x7B faellt aus, 0x79 am selben Translator funktioniert -
     // zum Vergleich einfach umstellen
