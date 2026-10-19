@@ -129,6 +129,16 @@ void Display::clear()
     I2CMasterControl::disable();
 }
 
+void Display::setPower(bool on)
+{
+    I2CMasterControl::enable();
+
+    for (uint8_t i = 0; i < MODULE_COUNT; i++)
+        _modules[i].setDisplayOn(on);
+
+    I2CMasterControl::disable();
+}
+
 bool Display::testConnection(Print& output)
 {
     bool allConnected = true;

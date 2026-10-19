@@ -10,9 +10,11 @@ void PersistentState::setDefaults(Data& data)
     // Kaltstart ohnehin durch den tatsaechlich gelesenen
     // Registerwert ersetzt, bevor Flanken ausgewertet werden.
     data.lastExpanderState = 0xFFFF;
-    data.textIndex = 0;
-    data.reserved = 0;
+    data.displayState = 0;
+    data.button1Active = 0;
     data.wakeCount = 0;
+    data.shownIndex = 0;
+    memset(data.shownDate, 0, sizeof(data.shownDate));
 }
 
 

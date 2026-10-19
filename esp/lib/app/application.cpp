@@ -12,6 +12,8 @@ Application::Application()
       _storage(),
       _display(),
       _pi(_uart, _storage, _display),
+      _fs(),
+      _quotes(_fs),
       _gpioExpander(0x20),
       _inputs(_gpioExpander),
       _wakeupReason(WakeupReason::Reason::UNKNOWN),
@@ -25,9 +27,9 @@ Application::Application()
 
 namespace
 {
-    // Der angezeigte Text steht als eine Zeile in /text.txt im
-    // LittleFS (TextStorage). Fehlt die Datei oder ist sie leer,
-    // zeigt die Wand diesen Hinweis statt dunkel zu bleiben.
+    // Die Zitate stehen in /quotes.txt im LittleFS (QuoteStore).
+    // Fehlt die Datei oder ist sie leer, zeigt die Wand diesen
+    // Hinweis statt dunkel zu bleiben.
     constexpr char NO_TEXT[] = "KEIN TEXT";
 
     // 12 Module x 8 Zeichen
@@ -44,6 +46,21 @@ namespace
             case InputEvent::BT5: return "BT5";
             case InputEvent::BT6: return "BT6";
             default: return "?";
+        }
+    }
+
+    // So oft liest die Wand den Radar, solange sie an ist. Das
+    // Delay fuettert zugleich den Watchdog.
+    constexpr unsigned long WALL_POLL_MS = 200;
+
+    const char* actionName(WallAction action)
+    {
+        switch (action)
+        {
+            case WallAction::ShowNewest: return "neuestes";
+            case WallAction::ShowNext: return "naechstes";
+            case WallAction::ShowCurrent: return "aktuelles";
+            default: return "keine";
         }
     }
 
@@ -177,19 +194,39 @@ void Application::run()
                        state,
                        count);
 
-    // Nach dem Einschalten ist die Anzeige leer und die
-    // HT16K33 sind unkonfiguriert - hier muss ein Text stehen.
-    // Nach einem Reset behalten sie ihren Inhalt, die Anzeige
-    // bleibt dann unberuehrt.
-    if (_coldBoot)
-        showText();
+    // Nach dem Einschalten bleibt die Wand dunkel, bis der
+    // Radar oder BT1 sie einschaltet.
+    bool button1 = false;
 
     for (uint8_t i = 0; i < count; i++)
     {
         DebugSerial.printf("[INPUT] %s -> ", buttonName(events[i]));
 
+        if (events[i] == InputEvent::BT1)
+            button1 = true;
+
         handleInput(events[i]);
     }
+
+    // Was die Wand zeigt, entscheiden die Wand-Regeln
+    const bool radarHigh = digitalRead(Pins::INT_HLK) == HIGH;
+
+    WallBoot boot;
+    boot.displayOn = _state.displayState != 0;
+    boot.displayWriting = _state.displayState == 2;
+    boot.radarHigh = radarHigh;
+    boot.button1 = button1;
+
+    const WallAction action = decideOnBoot(boot);
+
+    if (button1)
+        _state.button1Active = 1;
+
+    if (action != WallAction::None)
+        showQuote(action);
+
+    if (_state.displayState == 1)
+        runWallLoop();
 
     // -----------------------------------------------------
     // 6. Zustand sichern und schlafen
@@ -292,42 +329,115 @@ void Application::ensureDisplayReady()
     _displayReady = true;
 }
 
-// Der Text bleibt stehen, bis etwas anderes geschrieben wird -
+// Das Zitat bleibt stehen, bis etwas anderes geschrieben wird -
 // die HT16K33 halten ihren Inhalt selbst, auch ueber einen
 // Reset des ESP hinweg.
 //
 // Das Dateisystem wird erst hier eingebunden, also nur in
 // Durchlaeufen, die tatsaechlich etwas anzeigen.
+//
+// displayState = 2 steht im RTC-Speicher, bevor die Module
+// beschrieben werden: bricht der Durchlauf dabei ab, schreibt
+// der naechste das Zitat neu.
 
-void Application::showText()
+void Application::showQuote(WallAction action)
 {
-    String text;
+    if (!_fs.begin())
+        DebugSerial.println("[WALL] FEHLER: Dateisystem laesst sich nicht einbinden");
 
-    if (_storage.begin())
+    const QuoteList list = _quotes.load();
+
+    std::string text;
+    std::string date;
+    std::size_t index = 0;
+
+    if (list.empty())
     {
-        text = _storage.readText();
-        text.trim();
+        DebugSerial.println("[WALL] FEHLER: kein Zitat im Flash");
+        text = NO_TEXT;
     }
     else
     {
-        DebugSerial.println("[TEXT] FEHLER: Dateisystem laesst sich nicht einbinden");
+        const std::string shownDate(_state.shownDate);
+
+        switch (action)
+        {
+            case WallAction::ShowNewest:
+                index = 0;
+                break;
+
+            case WallAction::ShowNext:
+                index = list.nextIndex(list.resolveIndex(_state.shownIndex, shownDate));
+                break;
+
+            default:
+                index = list.resolveIndex(_state.shownIndex, shownDate);
+                break;
+        }
+
+        text = list.at(index).text;
+        date = list.at(index).date;
     }
 
-    if (text.length() == 0)
-    {
-        DebugSerial.println("[TEXT] FEHLER: kein Text im Flash");
-        text = NO_TEXT;
-    }
-    else if (text.length() > DISPLAY_CHARS)
-    {
+    if (text.length() > DISPLAY_CHARS)
         DebugSerial.printf("[TEXT] Warnung: %u Zeichen, die Anzeige fasst %u\n",
-                           text.length(), DISPLAY_CHARS);
-    }
+                           (unsigned)text.length(), DISPLAY_CHARS);
 
-    DebugSerial.printf("[TEXT] \"%s\"\n", text.c_str());
+    DebugSerial.printf("[WALL] %s -> #%u %s \"%s\"\n",
+                       actionName(action),
+                       (unsigned)index,
+                       date.c_str(),
+                       text.c_str());
+
+    _state.displayState = 2;
+    PersistentState::save(_state);
 
     ensureDisplayReady();
-    _display.show(text);
+    _display.show(String(text.c_str()));
+
+    // Index und Datum merken: das Datum findet den Eintrag
+    // wieder, falls die Liste sich verschiebt
+    _state.displayState = 1;
+    _state.shownIndex = static_cast<uint8_t>(index);
+    memset(_state.shownDate, 0, sizeof(_state.shownDate));
+    strncpy(_state.shownDate, date.c_str(), sizeof(_state.shownDate) - 1);
+
+    PersistentState::save(_state);
+}
+
+// ---------------------------------------------------------
+// Wand an
+// ---------------------------------------------------------
+// Der ESP bleibt wach und prueft den Radar, bis die Regeln
+// das Abschalten verlangen. millis() zaehlt ab dem Start
+// dieses Durchlaufs.
+
+void Application::runWallLoop()
+{
+    while (true)
+    {
+        delay(WALL_POLL_MS);
+
+        const bool radarHigh = digitalRead(Pins::INT_HLK) == HIGH;
+
+        if (wallShouldTurnOff(radarHigh, _state.button1Active != 0, millis()))
+        {
+            turnWallOff();
+            return;
+        }
+    }
+}
+
+void Application::turnWallOff()
+{
+    _display.setPower(false);
+
+    _state.displayState = 0;
+    _state.button1Active = 0;
+
+    PersistentState::save(_state);
+
+    DebugSerial.println("[WALL] aus");
 }
 
 // ---------------------------------------------------------
@@ -342,7 +452,7 @@ void Application::handleInput(InputEvent button)
     switch (button)
     {
         case InputEvent::BT1:
-            showText();
+            DebugSerial.println("ueber die Wand-Regeln");
             break;
 
         case InputEvent::BT2:
