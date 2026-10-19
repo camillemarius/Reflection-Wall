@@ -161,6 +161,7 @@ bool InputManager::matches(InputTrigger trigger, bool wasHigh, bool isHigh)
         case InputTrigger::FALLING_EDGE: return wasHigh && !isHigh;
         case InputTrigger::LEVEL_HIGH:   return isHigh;
         case InputTrigger::LEVEL_LOW:    return !isHigh;
+        case InputTrigger::ANY_EDGE:     return wasHigh != isHigh;
 
         default:
             return false;
@@ -205,7 +206,8 @@ uint8_t InputManager::collectEvents(uint16_t previous,
         // Nur Flanken entprellen. Pegel sollen wiederholt
         // ausloesen, solange der Zustand anliegt.
         const bool isEdge = trigger == InputTrigger::RISING_EDGE
-                         || trigger == InputTrigger::FALLING_EDGE;
+                         || trigger == InputTrigger::FALLING_EDGE
+                         || trigger == InputTrigger::ANY_EDGE;
 
         if (isEdge && _debounceMs > 0 && (now - _lastFire[i]) < _debounceMs)
             continue;
