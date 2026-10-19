@@ -211,6 +211,16 @@ void Application::run()
     // Was die Wand zeigt, entscheiden die Wand-Regeln
     const bool radarHigh = digitalRead(Pins::INT_HLK) == HIGH;
 
+    // Nach dem Einschalten ist der Inhalt der Module unbekannt (nach
+    // einem Firmware-Update steht noch der alte Text): die Wand
+    // wird dunkel geschaltet, bevor die Regeln entscheiden.
+    if (_coldBoot)
+    {
+        _display.setPower(false);
+        _state.displayState = 0;
+        _state.button1Active = 0;
+    }
+
     WallBoot boot;
     boot.displayOn = _state.displayState != 0;
     boot.displayWriting = _state.displayState == 2;
@@ -336,9 +346,9 @@ void Application::ensureDisplayReady()
 // Das Dateisystem wird erst hier eingebunden, also nur in
 // Durchlaeufen, die tatsaechlich etwas anzeigen.
 //
-// displayState = 2 steht im RTC-Speicher, bevor die Module
-// beschrieben werden: bricht der Durchlauf dabei ab, schreibt
-// der naechste das Zitat neu.
+// displayState = 2 steht samt dem gewaehlten Zitat (Index, Datum)
+// im RTC-Speicher, bevor die Module beschrieben werden: bricht
+// der Durchlauf dabei ab, schreibt der naechste dieses Zitat neu.
 
 void Application::showQuote(WallAction action)
 {
@@ -358,22 +368,8 @@ void Application::showQuote(WallAction action)
     }
     else
     {
-        const std::string shownDate(_state.shownDate);
-
-        switch (action)
-        {
-            case WallAction::ShowNewest:
-                index = 0;
-                break;
-
-            case WallAction::ShowNext:
-                index = list.nextIndex(list.resolveIndex(_state.shownIndex, shownDate));
-                break;
-
-            default:
-                index = list.resolveIndex(_state.shownIndex, shownDate);
-                break;
-        }
+        index = selectIndex(list, action, _state.shownIndex,
+                            std::string(_state.shownDate));
 
         text = list.at(index).text;
         date = list.at(index).date;
@@ -389,19 +385,25 @@ void Application::showQuote(WallAction action)
                        date.c_str(),
                        text.c_str());
 
+    // Das Ziel wird zusammen mit displayState = 2 gesichert, bevor
+    // die Module beschrieben werden: bricht der Durchlauf ab,
+    // schreibt der naechste genau dieses Zitat neu. Index und
+    // Datum finden den Eintrag auch nach einer verschobenen Liste.
     _state.displayState = 2;
+    _state.shownIndex = static_cast<uint8_t>(index);
+    memset(_state.shownDate, 0, sizeof(_state.shownDate));
+    strncpy(_state.shownDate, date.c_str(), sizeof(_state.shownDate) - 1);
+
     PersistentState::save(_state);
 
     ensureDisplayReady();
     _display.show(String(text.c_str()));
 
-    // Index und Datum merken: das Datum findet den Eintrag
-    // wieder, falls die Liste sich verschiebt
-    _state.displayState = 1;
-    _state.shownIndex = static_cast<uint8_t>(index);
-    memset(_state.shownDate, 0, sizeof(_state.shownDate));
-    strncpy(_state.shownDate, date.c_str(), sizeof(_state.shownDate) - 1);
+    // Erst jetzt einschalten: HT16K33::init() laesst die Anzeige
+    // aus, damit kein alter Inhalt aufblitzt
+    _display.setPower(true);
 
+    _state.displayState = 1;
     PersistentState::save(_state);
 }
 
@@ -430,12 +432,14 @@ void Application::runWallLoop()
 
 void Application::turnWallOff()
 {
-    _display.setPower(false);
-
+    // Zustand zuerst sichern: bricht das Abschalten ab, wird die
+    // Wand beim naechsten Aufwachen nicht als an behandelt.
     _state.displayState = 0;
     _state.button1Active = 0;
 
     PersistentState::save(_state);
+
+    _display.setPower(false);
 
     DebugSerial.println("[WALL] aus");
 }

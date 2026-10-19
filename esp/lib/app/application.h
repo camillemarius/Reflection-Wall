@@ -21,9 +21,12 @@
 // ESP ueber den INT-Ausgang des GPIO Expanders, der auf RST
 // geht: jede Aenderung an einem Taster ist damit ein Reset.
 //
-// run() laeuft genau einmal durch - Zustand lesen, Taster
+// run() laeuft einmal durch - Zustand lesen, Taster und Radar
 // auswerten, reagieren, Zustand sichern - und geht am Ende in
-// den Deep Sleep. Die Funktion kehrt nicht zurueck.
+// den Deep Sleep. Solange die Wand an ist, bleibt run() wach und
+// liest den Radar (runWallLoop), bevor es schlafen geht. Die
+// Funktion kehrt nicht zurueck. Auch der Radar (INT_HLK) weckt
+// den ESP, nicht nur die Taster.
 //
 // Alles, was ueber einen Tastendruck hinaus bestehen bleiben
 // muss, liegt in PersistentState im RTC-Speicher. Objekt-

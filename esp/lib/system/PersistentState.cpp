@@ -63,7 +63,7 @@ void PersistentState::save(const Data& data)
 
 
 // Standard-CRC32 (Polynom 0xEDB88320), bitweise gerechnet.
-// Bei 8 Byte Nutzdaten lohnt keine Tabelle.
+// Bei 20 Byte Nutzdaten lohnt keine Tabelle.
 
 uint32_t PersistentState::crc32(const uint8_t* data, size_t length)
 {

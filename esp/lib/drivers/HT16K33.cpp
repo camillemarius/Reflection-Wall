@@ -26,9 +26,10 @@ void HT16K33::init()
     Wire.endTransmission();
 
 
-    // Display ON + no blink
+    // Display OFF + no blink: eingeschaltet wird erst nach dem
+    // Schreiben (setDisplayOn), damit kein alter Inhalt aufblitzt
     Wire.beginTransmission(_address);
-    Wire.write(0x80 | 0x01);
+    Wire.write(0x80);
     Wire.endTransmission();
 
 
