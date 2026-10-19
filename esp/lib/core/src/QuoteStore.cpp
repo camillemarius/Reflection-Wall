@@ -23,6 +23,7 @@ QuoteStore::QuoteStore(IFileSystem& fs) : fs_(fs)
 
 QuoteList QuoteStore::load()
 {
+    loadFailed_ = false;
     if (fs_.exists(QuotePaths::TEMP))
     {
         fs_.remove(QuotePaths::TEMP);
@@ -35,6 +36,7 @@ QuoteList QuoteStore::load()
         {
             return QuoteList::parse(content);
         }
+        loadFailed_ = true;
         return QuoteList();
     }
 
@@ -56,6 +58,10 @@ QuoteList QuoteStore::load()
 
 bool QuoteStore::save(const QuoteList& list)
 {
+    if (loadFailed_)
+    {
+        return false;
+    }
     if (!fs_.write(QuotePaths::TEMP, list.serialize()))
     {
         fs_.remove(QuotePaths::TEMP);

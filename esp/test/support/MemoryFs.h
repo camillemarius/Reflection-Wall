@@ -10,6 +10,7 @@ class MemoryFs : public IFileSystem
 public:
     std::map<std::string, std::string> files;
     bool failRename = false;
+    bool failRead = false;
 
     bool exists(const char* path) override
     {
@@ -18,6 +19,10 @@ public:
 
     bool read(const char* path, std::string& out) override
     {
+        if (failRead)
+        {
+            return false;
+        }
         std::map<std::string, std::string>::const_iterator it = files.find(path);
         if (it == files.end())
         {

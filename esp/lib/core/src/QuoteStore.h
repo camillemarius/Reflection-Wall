@@ -35,4 +35,6 @@ public:
 
 private:
     IFileSystem& fs_;
+    // true, wenn /quotes.txt vorhanden, aber nicht lesbar war: save() verweigert dann
+    bool loadFailed_ = false;
 };

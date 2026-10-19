@@ -75,6 +75,35 @@ void test_save_keeps_old_file_when_rename_fails()
     TEST_ASSERT_EQUAL_STRING("2026-10-18|Alt\n", fs.files["/quotes.txt"].c_str());
 }
 
+void test_save_refused_after_unreadable_quotes()
+{
+    MemoryFs fs;
+    fs.files["/quotes.txt"] = "2026-10-18|Alt\n";
+    fs.failRead = true;
+    QuoteStore store(fs);
+    TEST_ASSERT_TRUE(store.load().empty());
+    QuoteList l;
+    l.addNewest("2026-10-19", "Neu");
+    TEST_ASSERT_FALSE(store.save(l));
+    TEST_ASSERT_EQUAL_STRING("2026-10-18|Alt\n", fs.files["/quotes.txt"].c_str());
+    TEST_ASSERT_FALSE(fs.exists("/quotes.new"));
+}
+
+void test_successful_load_clears_refusal()
+{
+    MemoryFs fs;
+    fs.files["/quotes.txt"] = "2026-10-18|Alt\n";
+    QuoteStore store(fs);
+    fs.failRead = true;
+    store.load();
+    fs.failRead = false;
+    QuoteList l = store.load();
+    TEST_ASSERT_EQUAL(1, l.size());
+    l.addNewest("2026-10-19", "Neu");
+    TEST_ASSERT_TRUE(store.save(l));
+    TEST_ASSERT_EQUAL_STRING("2026-10-19|Neu\n2026-10-18|Alt\n", fs.files["/quotes.txt"].c_str());
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -85,5 +114,7 @@ int main(int, char**)
     RUN_TEST(test_load_prefers_quotes_over_legacy);
     RUN_TEST(test_save_writes_quotes_and_no_temp_left);
     RUN_TEST(test_save_keeps_old_file_when_rename_fails);
+    RUN_TEST(test_save_refused_after_unreadable_quotes);
+    RUN_TEST(test_successful_load_clears_refusal);
     return UNITY_END();
 }
