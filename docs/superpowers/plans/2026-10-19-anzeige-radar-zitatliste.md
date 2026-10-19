@@ -340,6 +340,8 @@ Run: `cd esp && pio test -e native` → alle PASSED. `pio run` → SUCCESS ohne 
 
 Braucht den USB-Flasher an X1 und jemanden an der Wand. Ergebnis jedes Schritts ist eine Zeile aus dem seriellen Log (74 880 Baud) oder die Beobachtung des Owners.
 
+Ohne angeschlossenes Radar `RADAR_INSTALLED = false` (Schritte 1-3, 5); für Schritt 4 Radar anschliessen und auf `true` setzen.
+
 - [ ] **Step 1: Umstieg** – nur Firmware flashen (`pio run -t upload`), **kein** `uploadfs`. Auf dem Gerät liegt noch `/text.txt`. Erwartet direkt nach dem Flashen: Wand ist **dunkel** (der Kaltstart schaltet sie ab; steht der alte Text noch, ist I1 nicht erfüllt). Danach BT1 drücken. Erwartet: Wand zeigt den bisherigen Text; Log `[WALL] neuestes -> #0  "..."`. (Die Aktionen heissen im Log `neuestes`, `naechstes`, `aktuelles`.)
 - [ ] **Step 2: Liste** – `esp/data/quotes.txt` vorübergehend auf drei Zeilen erweitern, `pio run -t uploadfs`. BT1 bei dunkler Wand → Zitat 1; BT1 → 2; BT1 → 3; BT1 → 1. Danach `data/quotes.txt` zurücksetzen und erneut `uploadfs`.
 - [ ] **Step 3: BT1-Minute** – vom Radar weg stehen (oder Radar abdecken), BT1 drücken. Erwartet: Wand geht nach etwa 60 s aus; Log `[WALL] aus`.

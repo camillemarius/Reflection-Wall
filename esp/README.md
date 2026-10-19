@@ -38,6 +38,7 @@ Nach dem Einschalten (Kaltstart, auch nach dem ersten Flashen) schaltet der ESP 
 
 - **Radar:** zeigt das neueste Zitat. Bleibt der Radar HIGH, bleibt die Wand an; der ESP bleibt dann wach und liest den Radar alle 200 ms. Fällt der Radar auf LOW, geht die Wand aus (die Regeln stehen in `lib/core/src/WallLogic.cpp`).
 - **BT1:** schaltet die Wand ein und zeigt das neueste Zitat; jeder weitere Druck zeigt das nächste in der Liste. Die Wand bleibt dann mindestens 60 s an (`BUTTON1_ON_MS`), unabhängig vom Radar.
+- **Radar-Schalter:** `RADAR_INSTALLED` in `lib/app/application.cpp` steht auf `false`, solange kein Radar angeschlossen ist. Ohne Radar liest GPIO13 durch den Pull-up dauerhaft HIGH; die Firmware ignoriert INT_HLK dann, und die Wand geht nur mit BT1 an und nach 60 s wieder aus. Nach dem Anschliessen des Radars muss der Schalter auf `true` gesetzt werden.
 - **Ausschalten:** die Anzeige wird dunkel geschaltet (HT16K33 Display-off), der Inhalt bleibt in den Modulen erhalten. Der Zustand (aus / an / wird geschrieben) liegt im RTC-Speicher; bricht ein Durchlauf beim Schreiben ab, schreibt der nächste genau dasjenige Zitat neu, das beim abgebrochenen Durchlauf gewählt war (Index und Datum werden vor dem Schreiben im RTC-Speicher abgelegt).
 
 ## Zitatliste im Flash
