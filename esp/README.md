@@ -15,7 +15,7 @@ pio device monitor      # serielle Konsole, 74880 Baud
 
 ## Ablauf im Normalbetrieb
 
-Es gibt keine Hauptschleife. Der ESP liegt im Deep Sleep; ein Tastendruck am PCF8575 löst über dessen INT-Ausgang einen Reset aus. `Application::run()` läuft dann genau einmal durch:
+Es gibt keine Hauptschleife. Der ESP liegt im Deep Sleep; ein Tastendruck am PCF8575 löst über dessen INT-Ausgang einen Reset aus, ebenso der Radar (INT_HLK). `Application::run()` läuft dann einmal durch und legt den ESP wieder schlafen. Nur solange die Wand an ist, bleibt der ESP in `run()` wach und liest den Radar (siehe unten):
 
 1. WLAN aus (spart Strom und Bootzeit)
 2. Weckgrund lesen
@@ -34,15 +34,15 @@ BT1–BT3 laufen über Toggle-Flipflops (Blatt „Button Debouncing“, Jumper J
 
 ## Wand dunkel, Radar und BT1
 
-Nach dem Einschalten bleibt die Wand dunkel. Sie geht an, wenn der Radar (INT_HLK) HIGH meldet oder BT1 gedrückt wird, und zeigt dann ein Zitat aus der Liste im Flash:
+Nach dem Einschalten (Kaltstart, auch nach dem ersten Flashen) schaltet der ESP die Wand dunkel und lässt sie dunkel. Sie geht an, wenn der Radar (INT_HLK) HIGH meldet oder BT1 gedrückt wird, und zeigt dann ein Zitat aus der Liste im Flash:
 
 - **Radar:** zeigt das neueste Zitat. Bleibt der Radar HIGH, bleibt die Wand an; der ESP bleibt dann wach und liest den Radar alle 200 ms. Fällt der Radar auf LOW, geht die Wand aus (die Regeln stehen in `lib/core/src/WallLogic.cpp`).
 - **BT1:** schaltet die Wand ein und zeigt das neueste Zitat; jeder weitere Druck zeigt das nächste in der Liste. Die Wand bleibt dann mindestens 60 s an (`BUTTON1_ON_MS`), unabhängig vom Radar.
-- **Ausschalten:** die Anzeige wird dunkel geschaltet (HT16K33 Display-off), der Inhalt bleibt in den Modulen erhalten. Der Zustand (aus / an / wird geschrieben) liegt im RTC-Speicher; bricht ein Durchlauf beim Schreiben ab, schreibt der nächste das Zitat neu.
+- **Ausschalten:** die Anzeige wird dunkel geschaltet (HT16K33 Display-off), der Inhalt bleibt in den Modulen erhalten. Der Zustand (aus / an / wird geschrieben) liegt im RTC-Speicher; bricht ein Durchlauf beim Schreiben ab, schreibt der nächste genau dasjenige Zitat neu, das beim abgebrochenen Durchlauf gewählt war (Index und Datum werden vor dem Schreiben im RTC-Speicher abgelegt).
 
 ## Zitatliste im Flash
 
-Die Zitate stehen in `/quotes.txt` im LittleFS des ESP (`lib/storage`, `lib/core`), höchstens 30, das neueste zuerst. Pro Zeile ein Zitat im Format `JJJJ-MM-TT|Text`; eine Zeile ohne Datum ist ebenfalls erlaubt. Die erste Liste legt man in `data/quotes.txt` ab und lädt sie einmal hoch:
+Die Zitate stehen in `/quotes.txt` im LittleFS des ESP (`lib/storage`, `lib/core`), höchstens 30, das neueste zuerst. Pro Zeile ein Zitat im Format `JJJJ-MM-TT|Text`; ein Eintrag ohne Datum wird `|Text` geschrieben. Eine Zeile ohne `|` wird übersprungen. Leerzeichen und Tabs am Rand von Datum und Text werden entfernt; ein Datum mit mehr als 10 Zeichen wird verworfen (der Eintrag bleibt, ohne Datum). Die erste Liste legt man in `data/quotes.txt` ab und lädt sie einmal hoch:
 
 ```bash
 pio run -t uploadfs     # überschreibt das ganze Dateisystem
