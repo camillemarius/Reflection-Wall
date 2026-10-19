@@ -13,3 +13,16 @@ enum class InputEvent
 
     UNKNOWN
 };
+
+// Wann ein Taster eine Aktion ausloest.
+// Die Angaben beziehen sich auf den elektrischen Pegel am
+// Expander-Pin, nicht auf "gedrueckt": die Taster sind aktiv
+// LOW, ein Druck ist also eine negative Flanke.
+enum class InputTrigger
+{
+    NONE,           // Taster ausgewertet, loest nichts aus
+    RISING_EDGE,    // LOW -> HIGH  (Taster losgelassen)
+    FALLING_EDGE,   // HIGH -> LOW  (Taster gedrueckt)
+    LEVEL_HIGH,     // solange HIGH (Taster offen)
+    LEVEL_LOW       // solange LOW  (Taster gehalten)
+};

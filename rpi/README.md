@@ -1,0 +1,67 @@
+# Reflection Wall – Raspberry Pi
+
+Python-Anwendung für die interaktiven Funktionen der Reflection Wall. Der Raspberry Pi steuert die Anzeigen direkt über I²C (smbus2), sobald er über die Master-Umschaltung den Bus bekommt.
+
+## Funktionen
+
+Start mit `python main.py` im Ordner `app/`, dann Modus wählen:
+
+| Taste | Modus | Ordner |
+|---|---|---|
+| 1 | Sprachassistent (Spracherkennung → Groq-LLM → Anzeige und Sprachausgabe) | `applications/VoiseAssistant` |
+| 2 | Quiz mit KI-generierten Fragen | `applications/Quiz` |
+| 3 | Reflection AI: Reflexionsfrage, Antwort wird in MariaDB gespeichert | `applications/ReflectionAI` |
+| 4 | Radar-Animation mit dem HLK LD2410S | `applications/Animations/Radar.py` |
+| 5 | Strichmännchen-Animation | `applications/Animations/Stickman.py` |
+
+## Treiber (`app/driver`)
+
+| Ordner | Inhalt |
+|---|---|
+| `display/` | HT16K33-Treiber, DisplayGrid, Textlayout, Graphen |
+| `uart/` | UART zum ESP8266 (`COMMAND\|DATA`) und zum Radar LD2410S; Umschaltung per GPIO23 (HIGH = Radar, LOW = ESP) |
+| `chatbot/` | Groq-API |
+| `speechRecognition/` | faster-whisper (lokal) bzw. Groq-Spracherkennung |
+| `speech/` | Sprachausgabe |
+| `database/` | MariaDB/MySQL für Reflexionen und Quiz |
+
+## Installation
+
+```bash
+sudo raspi-config              # I2C und Serial aktivieren
+sudo apt install mariadb-server
+cd rpi
+python -m venv .venv
+source .venv/bin/activate
+pip install smbus2 lgpio groq python-dotenv mysql-connector-python \
+            faster-whisper sounddevice numpy pyphen
+```
+
+Die einzelnen Komponenten lassen sich in `tests/<Komponente>/` getrennt testen; dort steht jeweils eine `installation.txt`.
+
+## Zugangsdaten
+
+In `rpi/app/.env` (nicht im Repository):
+
+```
+GROQ_API_KEY=...
+DB_HOST=localhost
+DB_USER=...
+DB_PASSWORD=...
+```
+
+## Datenbank
+
+```
+sudo mariadb
+USE reflection_ai;
+SELECT * FROM reflections;
+```
+
+Weitere Befehle in `doc/commands.txt`.
+
+## Bekannte Baustellen
+
+- Die Importe sind gemischt (`driver.…` und `rpi.app.driver.…`). `main.py` erwartet, aus `app/` gestartet zu werden; einzelne Module importieren mit dem vollen Paketpfad.
+- Der Python-Treiber adressiert die Module als `0x70 + Index` und nutzt standardmässig nur 2 Zeilen (6 Module). Die Adressen hinter den LTC4316 (0x7F, 0x79, 0x7B, 0x7D) fehlen noch.
+- Der Python-Treiber setzt volle Helligkeit (0x0F). Die ESP-Firmware begrenzt bewusst auf 7, weil der LED-Strom sonst den I²C-Bus stört.

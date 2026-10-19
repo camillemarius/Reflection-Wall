@@ -1,0 +1,64 @@
+#pragma once
+
+#include <Arduino.h>
+
+// ---------------------------------------------------------
+// Zustand, der einen Reset ueberlebt
+// ---------------------------------------------------------
+// Der ESP schlaeft zwischen zwei Tastendruecken im Deep Sleep
+// und wird vom INT-Ausgang des GPIO Expanders ueber RST
+// geweckt. Jeder Weckvorgang ist ein vollstaendiger Neustart:
+// RAM, Objektzustand und millis() fangen bei null an.
+//
+// Was den Neustart ueberdauern muss, liegt deshalb im
+// RTC-Speicher. Der behaelt seinen Inhalt sowohl ueber den
+// Deep Sleep als auch ueber einen externen Reset - nur ein
+// echter Spannungsausfall loescht ihn. Magic und CRC
+// unterscheiden gueltige Daten von dem Muell, der nach dem
+// Einschalten dort steht.
+
+class PersistentState
+{
+public:
+    struct Data
+    {
+        // Registerwert des Expanders beim letzten Aufwachen.
+        // Referenz fuer die Flankenauswertung.
+        uint16_t lastExpanderState;
+
+        // Text, der beim naechsten Mal angezeigt wird
+        uint8_t  textIndex;
+
+        uint8_t  reserved;
+
+        // Nur fuer die Diagnose: Anzahl Weckvorgaenge seit
+        // dem letzten Einschalten
+        uint32_t wakeCount;
+    };
+
+    // Liest den Zustand. Rueckgabe false bedeutet Kaltstart
+    // (Spannung war weg oder Daten defekt); data enthaelt dann
+    // die Startwerte.
+    static bool load(Data& data);
+
+    static void save(const Data& data);
+
+private:
+    struct Block
+    {
+        uint32_t magic;
+        uint32_t crc;
+        Data     data;
+    };
+
+    // "RWL1" - aendert sich, sobald sich das Layout von Data
+    // aendert, damit alte Daten nach einem Update verworfen
+    // statt fehlinterpretiert werden.
+    static constexpr uint32_t MAGIC = 0x52574C31;
+
+    // Offset im RTC-Speicher, gezaehlt in 4-Byte-Bloecken
+    static constexpr uint32_t RTC_OFFSET = 0;
+
+    static void setDefaults(Data& data);
+    static uint32_t crc32(const uint8_t* data, size_t length);
+};

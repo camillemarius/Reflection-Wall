@@ -10,9 +10,19 @@ PCF8575::PCF8575(uint8_t address)
 
 bool PCF8575::begin()
 {
-    Wire.begin();
-
+    // Kein Wire.begin() hier: den Bus initialisiert
+    // I2CMasterControl::begin() mit den richtigen Pins und der
+    // eingestellten Taktrate. Ein zweites Wire.begin() wuerde
+    // das Clock-Stretch-Limit auf den Default zuruecksetzen.
     return true;
+}
+
+
+bool PCF8575::isConnected()
+{
+    Wire.beginTransmission(_address);
+
+    return Wire.endTransmission() == 0;
 }
 
 

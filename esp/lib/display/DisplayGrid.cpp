@@ -34,22 +34,43 @@ void DisplayGrid::splitText(const String& text, String* lines)
 {
     constexpr uint8_t CHARS_PER_ROW = 24;
 
+    const uint16_t length = text.length();
+
     uint16_t index = 0;
 
     for(uint8_t row = 0; row < _count; row++)
     {
-        lines[row] = "";
+        // Leerzeichen am Zeilenanfang wuerden den Text einruecken
+        while(index < length && text[index] == ' ')
+            index++;
 
-        for(uint8_t col = 0; col < CHARS_PER_ROW; col++)
+        const uint16_t remaining = length - index;
+
+        uint16_t take = remaining < CHARS_PER_ROW ? remaining : CHARS_PER_ROW;
+
+        // Wuerde der Schnitt mitten in ein Wort fallen, bis zum
+        // letzten Leerzeichen zurueckgehen. Passt ein einzelnes
+        // Wort nicht in eine Zeile, wird es hart getrennt.
+        if(take == CHARS_PER_ROW
+           && index + take < length
+           && text[index + take] != ' ')
         {
-            if(index < text.length())
-            {
-                lines[row] += text[index++];
-            }
-            else
-            {
-                lines[row] += " ";
-            }
+            uint16_t breakAt = take;
+
+            while(breakAt > 0 && text[index + breakAt - 1] != ' ')
+                breakAt--;
+
+            if(breakAt > 0)
+                take = breakAt;
         }
+
+        String line = text.substring(index, index + take);
+
+        index += take;
+
+        while(line.length() < CHARS_PER_ROW)
+            line += ' ';
+
+        lines[row] = line;
     }
 }

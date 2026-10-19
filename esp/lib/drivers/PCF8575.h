@@ -10,6 +10,11 @@ public:
 
     bool begin();
 
+    // Meldet sich der Baustein auf seiner Adresse?
+    bool isConnected();
+
+    uint8_t getAddress() const { return _address; }
+
     bool write16(uint16_t value);
 
     uint16_t read16();

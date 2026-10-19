@@ -1,7 +1,6 @@
 #include "HT16K33.h"
 
 #include "ASCII16Seg.h"
-#include "I2CMasterControl.h"
 #include "pinMapping.h"
 
 
@@ -14,9 +13,6 @@ HT16K33::HT16K33(uint8_t address)
 
 void HT16K33::begin()
 {
-    Wire.begin(Pins::I2C_SDA, Pins::I2C_SCL);
-    Wire.setClock(50000);
-
     init();
 
 }
@@ -36,14 +32,14 @@ void HT16K33::init()
     Wire.endTransmission();
 
 
-    setBrightness(15);
+    setBrightness(DEFAULT_BRIGHTNESS);
 }
 
 
 void HT16K33::setBrightness(uint8_t level)
 {
-    if(level > 15)
-        level = 15;
+    if(level > MAX_BRIGHTNESS)
+        level = MAX_BRIGHTNESS;
 
 
     Wire.beginTransmission(_address);
@@ -142,20 +138,49 @@ void HT16K33::setText(const String& text)
 
 void HT16K33::write()
 {
-    I2CMasterControl::enable();
-    Wire.beginTransmission(_address);
-
-    Wire.write(0x00);
-
-
-    for(uint8_t i = 0; i < BUFFER_SIZE; i++)
+    for(uint8_t attempt = 0; attempt < WRITE_ATTEMPTS; attempt++)
     {
-        Wire.write(_buffer[i]);
+        if(attempt > 0)
+            _retries++;
+
+        Wire.beginTransmission(_address);
+        Wire.write(0x00);
+
+        for(uint8_t i = 0; i < BUFFER_SIZE; i++)
+        {
+            Wire.write(_buffer[i]);
+        }
+
+        _lastError = Wire.endTransmission();
+
+        if(_lastError == 0)
+            return;
     }
+}
 
 
-    Wire.endTransmission();
+uint8_t HT16K33::lastWriteError() const
+{
+    return _lastError;
+}
 
 
-    I2CMasterControl::disable();
+uint8_t HT16K33::writeRetries() const
+{
+    return _retries;
+}
+
+
+void HT16K33::resetWriteStats()
+{
+    _lastError = 0;
+    _retries = 0;
+}
+
+void HT16K33::testAllSegments()
+{
+    for (uint8_t i = 0; i < BUFFER_SIZE; i++)
+        _buffer[i] = 0xFF;
+
+    write();
 }
