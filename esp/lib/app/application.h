@@ -6,6 +6,9 @@
 #include "PiCommunication.h"
 #include "WakeupReason.h"
 #include "PersistentState.h"
+#include "LittleFsAdapter.h"
+#include "QuoteStore.h"
+#include "WallLogic.h"
 
 #include "PCF8575.h"
 #include "InputManager.h"
@@ -51,8 +54,16 @@ private:
     // Zentrale Zuweisung Taster -> Aktion
     void handleInput(InputEvent button);
 
-    // Zeigt den Text aus dem Flash (TextStorage)
-    void showText();
+    // Zeigt ein Zitat aus der Liste im Flash; welches, bestimmt
+    // die Aktion (neuestes, aktuelles, naechstes)
+    void showQuote(WallAction action);
+
+    // Bleibt wach, solange die Wand an ist, und schaltet sie
+    // ab, sobald die Regeln es verlangen
+    void runWallLoop();
+
+    // Anzeige dunkel schalten und den Zustand nachfuehren
+    void turnWallOff();
 
     void enterDeepSleep();
 
@@ -60,6 +71,10 @@ private:
     TextStorage _storage;
     Display _display;
     piCommunication _pi;
+
+    // Reihenfolge: _quotes haelt eine Referenz auf _fs
+    LittleFsAdapter _fs;
+    QuoteStore _quotes;
 
     PCF8575 _gpioExpander;
     InputManager _inputs;

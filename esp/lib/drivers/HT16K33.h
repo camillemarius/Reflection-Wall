@@ -27,6 +27,10 @@ public:
 
     void setBrightness(uint8_t level);
 
+    // Schaltet die Anzeige ab bzw. an. Der Inhalt bleibt im Chip
+    // erhalten, die LEDs sind nur dunkel.
+    void setDisplayOn(bool on);
+
     bool testConnection();
 
     uint8_t testConnectionCode();

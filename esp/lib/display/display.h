@@ -17,6 +17,9 @@ public:
 
     void clear();
 
+    // Schaltet alle Module dunkel bzw. wieder an; der Inhalt bleibt erhalten
+    void setPower(bool on);
+
     bool testConnection(Print& output);
 
 private:

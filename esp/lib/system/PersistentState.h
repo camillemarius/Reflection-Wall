@@ -26,15 +26,23 @@ public:
         // Referenz fuer die Flankenauswertung.
         uint16_t lastExpanderState;
 
-        // Nicht mehr verwendet (der Text kommt aus dem Flash).
-        // Bleibt stehen, damit Layout und MAGIC gleich bleiben.
-        uint8_t  textIndex;
+        // Zustand der Anzeige: 0 = aus, 1 = an, 2 = wird
+        // geschrieben (der Durchlauf brach dabei ab)
+        uint8_t  displayState;
 
-        uint8_t  reserved;
+        // 1 = die BT1-Minute laeuft
+        uint8_t  button1Active;
 
         // Nur fuer die Diagnose: Anzahl Weckvorgaenge seit
         // dem letzten Einschalten
         uint32_t wakeCount;
+
+        // Welches Zitat gerade steht: Position in der Liste und
+        // Datum "JJJJ-MM-TT" ("" fuer einen Eintrag ohne Datum).
+        // Das Datum findet den Eintrag wieder, wenn die Liste
+        // sich verschoben hat.
+        uint8_t  shownIndex;
+        char     shownDate[11];
     };
 
     // Liest den Zustand. Rueckgabe false bedeutet Kaltstart
@@ -52,10 +60,10 @@ private:
         Data     data;
     };
 
-    // "RWL1" - aendert sich, sobald sich das Layout von Data
+    // "RWL2" - aendert sich, sobald sich das Layout von Data
     // aendert, damit alte Daten nach einem Update verworfen
     // statt fehlinterpretiert werden.
-    static constexpr uint32_t MAGIC = 0x52574C31;
+    static constexpr uint32_t MAGIC = 0x52574C32;
 
     // Offset im RTC-Speicher, gezaehlt in 4-Byte-Bloecken
     static constexpr uint32_t RTC_OFFSET = 0;

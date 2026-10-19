@@ -21,26 +21,45 @@ Es gibt keine Hauptschleife. Der ESP liegt im Deep Sleep; ein Tastendruck am PCF
 2. Weckgrund lesen
 3. Zustand aus dem RTC-Speicher laden (`PersistentState`)
 4. Expander lesen, Taster auswerten
-5. Bei Kaltstart den Text aus dem Flash anzeigen, sonst auf Taster reagieren
+5. Wand-Regeln anwenden: Radar (INT_HLK) und BT1 entscheiden, ob ein Zitat angezeigt wird (siehe unten)
 6. Zustand sichern, Deep Sleep
 
 | Taster | Aktion |
 |---|---|
-| BT1 | Text aus dem Flash neu anzeigen |
+| BT1 | Wand an: zeigt das neueste Zitat, bei jedem weiteren Druck das nächste in der Liste; die Wand bleibt danach 60 s an |
 | BT2 | Raspberry Pi ein-/ausschalten (Puls auf das Flipflop am Relais, GPIO12) |
 | BT3–BT6 | noch nicht belegt |
 
 BT1–BT3 laufen über Toggle-Flipflops (Blatt „Button Debouncing“, Jumper J10/J12/J14): jeder Druck kippt den Pegel am Expander, und der neue Pegel bleibt stehen, bis der ESP ihn liest. Die Firmware wertet deshalb jeden Wechsel als einen Druck (`InputTrigger::ANY_EDGE`), auch einen ganz kurzen. BT4–BT6 hängen direkt am Expander; ein kurzer Druck ist dort vorbei, bevor der ESP nach dem Reset liest, deshalb lösen sie nichts aus.
 
-## Text im Flash
+## Wand dunkel, Radar und BT1
 
-Die Wand zeigt eine Zeile aus `/text.txt` im LittleFS des ESP (`lib/storage`). Den ersten Text legt man in `data/text.txt` ab und lädt ihn einmal hoch:
+Nach dem Einschalten bleibt die Wand dunkel. Sie geht an, wenn der Radar (INT_HLK) HIGH meldet oder BT1 gedrückt wird, und zeigt dann ein Zitat aus der Liste im Flash:
+
+- **Radar:** zeigt das neueste Zitat. Bleibt der Radar HIGH, bleibt die Wand an; der ESP bleibt dann wach und liest den Radar alle 200 ms. Fällt der Radar auf LOW, geht die Wand aus (die Regeln stehen in `lib/core/src/WallLogic.cpp`).
+- **BT1:** schaltet die Wand ein und zeigt das neueste Zitat; jeder weitere Druck zeigt das nächste in der Liste. Die Wand bleibt dann mindestens 60 s an (`BUTTON1_ON_MS`), unabhängig vom Radar.
+- **Ausschalten:** die Anzeige wird dunkel geschaltet (HT16K33 Display-off), der Inhalt bleibt in den Modulen erhalten. Der Zustand (aus / an / wird geschrieben) liegt im RTC-Speicher; bricht ein Durchlauf beim Schreiben ab, schreibt der nächste das Zitat neu.
+
+## Zitatliste im Flash
+
+Die Zitate stehen in `/quotes.txt` im LittleFS des ESP (`lib/storage`, `lib/core`), höchstens 30, das neueste zuerst. Pro Zeile ein Zitat im Format `JJJJ-MM-TT|Text`; eine Zeile ohne Datum ist ebenfalls erlaubt. Die erste Liste legt man in `data/quotes.txt` ab und lädt sie einmal hoch:
 
 ```bash
 pio run -t uploadfs     # überschreibt das ganze Dateisystem
 ```
 
-Die Anzeige fasst 96 Zeichen (12 Module × 8); Umlaute müssen umschrieben sein, die Segmentschrift kennt nur `A–Z`, `0–9` und `- . / : + *`. Ist ein Text länger, meldet das Log die Länge. Fehlt die Datei oder ist sie leer, zeigt die Wand „KEIN TEXT“.
+**Umstieg:** Gibt es noch keine `/quotes.txt`, aber die alte `/text.txt`, übernimmt die Firmware deren Text beim ersten Lesen als einziges Zitat.
+
+Die Anzeige fasst 96 Zeichen (12 Module × 8); Umlaute müssen umschrieben sein, die Segmentschrift kennt nur `A–Z`, `0–9` und `- . / : + *`. Ist ein Text länger, meldet das Log die Länge. Ist die Liste leer oder fehlt die Datei, zeigt die Wand „KEIN TEXT“.
+
+## Tests auf dem PC
+
+Die Logik ohne Arduino-Abhängigkeit (`lib/core`: Zitatliste, Zitatspeicher, Wand-Regeln) wird auf dem PC getestet:
+
+```bash
+cd esp
+pio test -e native
+```
 
 ## Pins
 
@@ -75,8 +94,9 @@ lib/drivers/              HT16K33, PCF8575, I2CMasterControl (Master-Umschaltung
 lib/Wire/                 eigene Software-I²C (ersetzt die Core-Bibliothek, siehe unten)
 lib/gpioExpander/         Taster-Auswertung (Flanken, Pegel)
 lib/system/               Weckgrund, Zustand im RTC-Speicher
-lib/storage/              Textspeicher im ESP (LittleFS, /text.txt) bzw. FRAM
-data/text.txt             Text für pio run -t uploadfs
+lib/core/                 Zitatliste, Zitatspeicher, Wand-Regeln (ohne Arduino, Tests auf dem PC)
+lib/storage/              LittleFS-Anbindung der Zitatliste (LittleFsAdapter), Textspeicher ESP bzw. FRAM
+data/quotes.txt           Zitatliste für pio run -t uploadfs
 lib/communication/        UART-Protokoll zum Raspberry Pi (COMMAND|DATA)
 lib/ota/                  WLAN, OTA, Debug-Logger (Telnet)
 lib/config/pinMapping.h   Pinbelegung

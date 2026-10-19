@@ -48,6 +48,14 @@ void HT16K33::setBrightness(uint8_t level)
 }
 
 
+void HT16K33::setDisplayOn(bool on)
+{
+    Wire.beginTransmission(_address);
+    Wire.write(0x80 | (on ? 0x01 : 0x00));
+    Wire.endTransmission();
+}
+
+
 bool HT16K33::testConnection()
 {
     return testConnectionCode() == 0;
