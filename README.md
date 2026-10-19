@@ -6,7 +6,7 @@ Zwei Steuerungen teilen sich denselben I²C-Bus:
 
 | Teil | Ordner | Aufgabe |
 |---|---|---|
-| **ESP8266** | [`esp/`](esp/README.md) | Stromsparender Normalbetrieb: wacht per Taster auf, zeigt den nächsten Text, schläft wieder (Deep Sleep) |
+| **ESP8266** | [`esp/`](esp/README.md) | Stromsparender Normalbetrieb: wacht per Taster auf, zeigt den Text aus dem Flash, schläft wieder (Deep Sleep) |
 | **Raspberry Pi** | [`rpi/`](rpi/README.md) | Interaktive Funktionen: Sprachassistent, Quiz, Reflection AI, Radar- und Strichmännchen-Animationen |
 
 ## Hardware im Überblick

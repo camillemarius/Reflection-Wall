@@ -21,16 +21,24 @@ Es gibt keine Hauptschleife. Der ESP liegt im Deep Sleep; ein Tastendruck am PCF
 2. Weckgrund lesen
 3. Zustand aus dem RTC-Speicher laden (`PersistentState`)
 4. Expander lesen, Taster auswerten
-5. Bei Kaltstart den ersten Text anzeigen, sonst auf Taster reagieren
+5. Bei Kaltstart den Text aus dem Flash anzeigen, sonst auf Taster reagieren
 6. Zustand sichern, Deep Sleep
 
 | Taster | Aktion |
 |---|---|
 | BT5 | Raspberry Pi ein-/ausschalten (Puls auf das Flipflop am Relais, GPIO12) |
-| BT6 | nächsten Reflexionstext anzeigen |
+| BT6 | Text aus dem Flash neu anzeigen |
 | BT1–BT4 | noch nicht belegt |
 
-Die 12 Texte stehen in `lib/app/application.cpp` (max. 96 Zeichen, wird beim Kompilieren geprüft).
+## Text im Flash
+
+Die Wand zeigt eine Zeile aus `/text.txt` im LittleFS des ESP (`lib/storage`). Den ersten Text legt man in `data/text.txt` ab und lädt ihn einmal hoch:
+
+```bash
+pio run -t uploadfs     # überschreibt das ganze Dateisystem
+```
+
+Die Anzeige fasst 96 Zeichen (12 Module × 8); Umlaute müssen umschrieben sein, die Segmentschrift kennt nur `A–Z`, `0–9` und `- . / : + *`. Ist ein Text länger, meldet das Log die Länge. Fehlt die Datei oder ist sie leer, zeigt die Wand „KEIN TEXT“.
 
 ## Pins
 
@@ -65,7 +73,8 @@ lib/drivers/              HT16K33, PCF8575, I2CMasterControl (Master-Umschaltung
 lib/Wire/                 eigene Software-I²C (ersetzt die Core-Bibliothek, siehe unten)
 lib/gpioExpander/         Taster-Auswertung (Flanken, Pegel)
 lib/system/               Weckgrund, Zustand im RTC-Speicher
-lib/storage/              Textspeicher im ESP bzw. FRAM
+lib/storage/              Textspeicher im ESP (LittleFS, /text.txt) bzw. FRAM
+data/text.txt             Text für pio run -t uploadfs
 lib/communication/        UART-Protokoll zum Raspberry Pi (COMMAND|DATA)
 lib/ota/                  WLAN, OTA, Debug-Logger (Telnet)
 lib/config/pinMapping.h   Pinbelegung

@@ -26,7 +26,8 @@ public:
         // Referenz fuer die Flankenauswertung.
         uint16_t lastExpanderState;
 
-        // Text, der beim naechsten Mal angezeigt wird
+        // Nicht mehr verwendet (der Text kommt aus dem Flash).
+        // Bleibt stehen, damit Layout und MAGIC gleich bleiben.
         uint8_t  textIndex;
 
         uint8_t  reserved;

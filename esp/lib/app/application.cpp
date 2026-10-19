@@ -25,47 +25,13 @@ Application::Application()
 
 namespace
 {
-    // Texte fuer das Display, je max. 96 Zeichen.
-    // Das Grid bricht an Wortgrenzen um, die Saetze stehen
-    // deshalb normal da. Umlaute sind umschrieben - die
-    // Segmentanzeige kann sie nicht darstellen.
+    // Der angezeigte Text steht als eine Zeile in /text.txt im
+    // LittleFS (TextStorage). Fehlt die Datei oder ist sie leer,
+    // zeigt die Wand diesen Hinweis statt dunkel zu bleiben.
+    constexpr char NO_TEXT[] = "KEIN TEXT";
 
-    constexpr char TEXT_01[] = "Das Leben wird vorwaerts gelebt, aber rueckwaerts verstanden.";
-    constexpr char TEXT_02[] = "Wer nach innen schaut, erwacht. Wer nach aussen schaut, traeumt.";
-    constexpr char TEXT_03[] = "Nicht weil es schwer ist, wagen wir es nicht. Weil wir nicht wagen, ist es schwer.";
-    constexpr char TEXT_04[] = "Zwischen Reiz und Reaktion liegt ein Raum. In diesem Raum liegt deine Freiheit.";
-    constexpr char TEXT_05[] = "Man sieht nur mit dem Herzen gut. Das Wesentliche ist fuer die Augen unsichtbar.";
-    constexpr char TEXT_06[] = "Glueck ist kein Ort, an dem man ankommt, sondern eine Art zu reisen.";
-    constexpr char TEXT_07[] = "Wir haben nicht zu wenig Zeit. Wir haben nur zu viel davon nicht gelebt.";
-    constexpr char TEXT_08[] = "Der Fluss, in den du heute steigst, ist morgen ein anderer. Und du auch.";
-    constexpr char TEXT_09[] = "Wer ein Warum zum Leben hat, ertraegt fast jedes Wie.";
-    constexpr char TEXT_10[] = "Die Stille zwischen den Toenen macht die Musik.";
-    constexpr char TEXT_11[] = "Du bist nicht der Sturm. Du bist der Himmel, durch den er zieht.";
-    constexpr char TEXT_12[] = "Vielleicht ist der Sinn nicht zu finden, sondern zu geben.";
-
-    constexpr const char* REFLECTION_TEXTS[] =
-    {
-        TEXT_01, TEXT_02, TEXT_03, TEXT_04,
-        TEXT_05, TEXT_06, TEXT_07, TEXT_08,
-        TEXT_09, TEXT_10, TEXT_11, TEXT_12
-    };
-
-    constexpr uint8_t TEXT_COUNT = sizeof(REFLECTION_TEXTS) / sizeof(REFLECTION_TEXTS[0]);
-
-    // Laengen beim Kompilieren pruefen, damit ein zu langer
-    // Satz den Build bricht statt still abgeschnitten zu werden
-    constexpr size_t textLength(const char* text)
-    {
-        return *text ? 1 + textLength(text + 1) : 0;
-    }
-
-    constexpr bool allTextsFit(uint8_t index)
-    {
-        return index == 0
-            || (textLength(REFLECTION_TEXTS[index - 1]) <= 96 && allTextsFit(index - 1));
-    }
-
-    static_assert(allTextsFit(TEXT_COUNT), "Ein Text ist laenger als 96 Zeichen");
+    // 12 Module x 8 Zeichen
+    constexpr unsigned int DISPLAY_CHARS = 96;
 
     const char* buttonName(InputEvent button)
     {
@@ -210,10 +176,7 @@ void Application::run()
     // Nach einem Reset behalten sie ihren Inhalt, die Anzeige
     // bleibt dann unberuehrt.
     if (_coldBoot)
-    {
-        DebugSerial.print("[DISPLAY] ");
-        showNextText();
-    }
+        showText();
 
     for (uint8_t i = 0; i < count; i++)
     {
@@ -326,21 +289,39 @@ void Application::ensureDisplayReady()
 // Der Text bleibt stehen, bis etwas anderes geschrieben wird -
 // die HT16K33 halten ihren Inhalt selbst, auch ueber einen
 // Reset des ESP hinweg.
+//
+// Das Dateisystem wird erst hier eingebunden, also nur in
+// Durchlaeufen, die tatsaechlich etwas anzeigen.
 
-void Application::showNextText()
+void Application::showText()
 {
+    String text;
+
+    if (_storage.begin())
+    {
+        text = _storage.readText();
+        text.trim();
+    }
+    else
+    {
+        DebugSerial.println("[TEXT] FEHLER: Dateisystem laesst sich nicht einbinden");
+    }
+
+    if (text.length() == 0)
+    {
+        DebugSerial.println("[TEXT] FEHLER: kein Text im Flash");
+        text = NO_TEXT;
+    }
+    else if (text.length() > DISPLAY_CHARS)
+    {
+        DebugSerial.printf("[TEXT] Warnung: %u Zeichen, die Anzeige fasst %u\n",
+                           text.length(), DISPLAY_CHARS);
+    }
+
+    DebugSerial.printf("[TEXT] \"%s\"\n", text.c_str());
+
     ensureDisplayReady();
-
-    // Schutz gegen einen RTC-Wert aus einer aelteren Version
-    // mit mehr Texten
-    if (_state.textIndex >= TEXT_COUNT)
-        _state.textIndex = 0;
-
-    DebugSerial.printf("Text %u/%u\n", _state.textIndex + 1, TEXT_COUNT);
-
-    _display.show(REFLECTION_TEXTS[_state.textIndex]);
-
-    _state.textIndex = (_state.textIndex + 1) % TEXT_COUNT;
+    _display.show(text);
 }
 
 // ---------------------------------------------------------
@@ -376,7 +357,7 @@ void Application::handleInput(InputEvent button)
             break;
 
         case InputEvent::BT6:
-            showNextText();
+            showText();
             break;
 
         default:
