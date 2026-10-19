@@ -411,8 +411,8 @@ Stromausfall). Das Layout ändert sich, deshalb neue `MAGIC`.
 | `sessionSeconds` | verstrichene Sitzungszeit (für 3 h), alle 10 s gesichert |
 | `pendingShutdown` | BT2 während RADAR-DEBUG gedrückt |
 | `display` | aus / an / wird geschrieben |
-| `shownQuoteDate` | Datum des Zitats, das gerade zu sehen ist (T2-a) |
-| `bt1Since` | Zeitpunkt des letzten BT1-Drucks, für die BT1-Minute |
+| `shownIndex`, `shownDate` | Platz und Datum des Zitats, das gerade zu sehen ist (T2-a); massgeblich ist das Datum, der Platz hilft bei gleichen Daten |
+| `button1Active` | die BT1-Minute läuft. Sie zählt ab dem Start des Durchlaufs, denn jeder BT1-Druck setzt den ESP zurück |
 | `clockEpoch`, `clockValid` | geschätzte Uhrzeit beim Einschlafen, ob sie aus einem NTP-Abgleich stammt |
 | `sleepSeconds` | geplante Schlafdauer, zum Weiterzählen |
 | `nightAttempts`, `nightResult` | Versuche und Ergebnis der letzten Nacht |
