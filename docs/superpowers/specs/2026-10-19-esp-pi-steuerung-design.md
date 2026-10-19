@@ -1,8 +1,9 @@
 # ESP als Master über den Raspberry Pi – Entwurf
 
-Stand: 2026-10-19 · Status: **vom Owner angenommen** (2026-10-19)
+Stand: 2026-10-19 · Status: **vom Owner angenommen** (2026-10-19), ergänzt um
+Runde 6 (Zitate im FRAM, 2026-10-19)
 
-Dieses Dokument sammelt, was in fünf Entscheidungsrunden festgelegt wurde, und
+Dieses Dokument sammelt, was in sechs Entscheidungsrunden festgelegt wurde, und
 ergänzt, was für die Umsetzung noch fehlt. Abschnitt 2 listet die Entscheide.
 Abschnitt 3 nennt, was dieser Entwurf zusätzlich festlegt; der Owner hat diese
 Punkte nach Durchsicht angenommen (Z3, Z5 und Z8 ersetzt durch T1-a und T2-a).
@@ -18,7 +19,8 @@ Speisung trennt. Der Pi wird für zwei Dinge gebraucht:
 - **Von Hand:** Du schaltest ihn mit einer Taste ein und löst etwas aus,
   zum Beispiel ein Gespräch mit der KI.
 - **Um Mitternacht:** Der ESP schaltet ihn selbst ein, lässt die KI einen neuen
-  Text schreiben, speichert ihn im Flash und schaltet den Pi wieder ab.
+  Text schreiben, speichert ihn im FRAM und schaltet den Pi wieder ab. Bis das
+  FRAM bestückt ist, liegt die Liste im Flash (F1-a).
 
 Die Wand zeigt diesen Text, wenn jemand davorsteht oder BT1 gedrückt wird.
 Sonst ist sie dunkel.
@@ -57,6 +59,12 @@ Pi nimmt keinen Schaden, und keine Nachricht geht unbemerkt verloren.
 | T1-a | Während einer Sitzung gehen alle Tasten ausser BT2 an den Pi (BT1, BT3–BT6); BT1 schaltet dann kein Zitat weiter; BT4–BT6 verlieren kurze Drücke, bis Flipflops nachgerüstet sind | 5 |
 | T2-a | Der Flash hält bis zu 30 Zitate (neuestes zuerst). Wand dunkel + Radar oder BT1 → neuestes Zitat. Wand leuchtet + BT1 → nächstälteres, nach dem ältesten wieder das neueste. Wand aus, wenn INT_HLK LOW und der letzte BT1-Druck 1 min zurückliegt. Beim nächsten Einschalten wieder das neueste | 5 |
 | Z1–Z15 | Die Zusatzpunkte aus Abschnitt 3 sind angenommen, ausser Z3 (ersetzt durch T1-a) und Z5, Z8 (ersetzt durch T2-a) | 5 |
+| — | Die Zitate liegen im FRAM (MB85RC256V, 32 KB, I²C 0x50) statt im Flash des ESP | nach Runde 5 |
+| P1-a | Der ESP schreibt das Zitat der Nacht ins FRAM. Der Pi schickt es über die UART (`QUOTE`); der ESP prüft es, hält es im RTC-Speicher und schreibt es, nachdem er den Pi ausgeschaltet hat | 6 |
+| P2-a | Die Liste liegt im FRAM auf zwei Plätzen, jeder mit Kopf (Kennung, laufende Nummer, Länge, CRC-32). Geschrieben wird in den älteren Platz, gelesen der gültige mit der höheren Nummer | 6 |
+| P3-b | Der Flash dient als Briefkasten: Liegt dort `/quotes.txt`, übernimmt der ESP die Liste ins FRAM und löscht die Datei. `esp/data/` im Repo bleibt leer, sobald `FRAM_INSTALLED = true` ist | 6 |
+| P4-a | Der FRAM-Speicher kommt als eigener Teil 3a-2 nach Teil 3a, vor Teil 0 und 1, nur auf dem ESP | 6 |
+| F1-a | Das FRAM ist noch nicht bestückt. Der FRAM-Speicher wird trotzdem jetzt gebaut, mit dem Schalter `FRAM_INSTALLED = false`; bis zur Bestückung läuft alles aus dem Flash | 6 |
 
 A1–A6 waren in Runde 1 als Annahmen formuliert; du hast sie bestätigt. Die
 Begründungen und Gegenprüfungen standen in den Rundendateien der
@@ -124,7 +132,7 @@ Frage, die die Zeichnung beantwortet: *Welche Teile gibt es, und worüber reden 
  │  ├─ WakePlan   (wann wecken)   │                          │  ├─ Zitat (KI, Thema, Kette) │
  │  ├─ Clock      (NTP, Schätzung)│                          │  ├─ Tasten → Anwendungen     │
  │  ├─ DisplayCtl (an/aus/Text)   │                          │  └─ Herunterfahren           │
- │  ├─ QuoteStore (/quotes.txt)   │                          │      (systemctl poweroff)    │
+ │  ├─ QuoteStore (FRAM / Flash)  │                          │      (systemctl poweroff)    │
  │  └─ Tasten (Expander lesen)    │                          └──────────────────────────────┘
  └────┬───────────────────────────┘
       ├ GPIO12 Puls ──► Flipflop ──► Relais ──► Speisung Pi
@@ -145,7 +153,7 @@ Was jeder Teil tut:
 | WakePlan | ESP | Rechnet aus, wann der ESP das nächste Mal aufwacht. |
 | Clock | ESP | Uhrzeit per NTP holen und zwischen den Abgleichen weiterzählen. |
 | DisplayCtl | ESP | Anzeige ein- und ausschalten, Text schreiben. |
-| QuoteStore | ESP | Liste `/quotes.txt` (bis 30 Zitate) lesen, prüfen, atomar schreiben; Umstieg von `/text.txt`. |
+| QuoteStore | ESP | Liste (bis 30 Zitate) lesen, prüfen und sicher schreiben: im FRAM auf zwei Plätzen, bis zur Bestückung in `/quotes.txt`; Briefkasten im Flash und Umstieg von `/text.txt` (Abschnitt 11). |
 | Zitat | Pi | Thema lesen, KI fragen, Text bereinigen und prüfen. |
 | Dienst | Pi | Startet beim Booten, besitzt die UART, meldet `READY`, fährt auf Anfrage herunter. |
 
@@ -330,14 +338,15 @@ ihn verlieren, und die Wand geht aus.
  Funk aus       letzte Strecke      1  WLAN + NTP (höchstens 15 s, nie das Portal)
                 bis 00:00 gekürzt,     noch vor 00:00? → Rest schlafen
                 nächster Start      2  Pi EIN, warten auf READY
-                mit Funk            3  GET|QUOTE → prüfen → in /quotes.txt aufnehmen
+                mit Funk            3  GET|QUOTE → prüfen → im RTC-Speicher halten
                                     4  SHUTDOWN → OK → T_halt → Pi AUS
-                                    5  Deep Sleep, Funk aus (Anzeige bleibt dunkel)
+                                    5  Zitat vorne in die Liste schreiben (FRAM, P1-a)
+                                    6  Deep Sleep, Funk aus (Anzeige bleibt dunkel)
 
  * Beispiel. Der Zeitpunkt ergibt sich aus der eigenen Uhr des ESP.
 ```
 
-*Gezeichnet 2026-10-19 aus M3-a und M4-a.*
+*Gezeichnet 2026-10-19 aus M3-a und M4-a, Schritte 3–5 nachgeführt nach P1-a.*
 
 **Weckplan.** Der ESP schläft nie länger als 3 h am Stück. Er weckt sich zum
 nächsten Termin: 00:00, und nach einem Fehlversuch 01:00 und 02:00. Die Termine
@@ -351,11 +360,11 @@ bei jedem Timer-Weckvorgang (höchstens alle 3 h, dafür schläft er vorher mit
 Funk ein) und lässt bis dahin den Mitternachts-Auftrag aus (M3-a).
 
 **Kaltstart in der Nacht.** Kommt der Strom zwischen 00:00 und 03:00 zurück und
-ist die Uhrzeit bekannt, vergleicht der ESP das Datum des neuesten Eintrags in `/quotes.txt` mit dem
+ist die Uhrzeit bekannt, vergleicht der ESP das Datum des neuesten Eintrags der Liste mit dem
 heutigen. Fehlt das Zitat dieser Nacht, startet er den Auftrag sofort; die
 Termine 01:00 und 02:00 gelten danach wie sonst.
 
-**Zitat.** Der ESP schickt das neueste Zitat aus `/quotes.txt` als Text vom Vortag mit.
+**Zitat.** Der ESP schickt das neueste Zitat der Liste als Text vom Vortag mit.
 Der Pi:
 
 1. liest das Thema aus `rpi/app/config/thema.txt` – eine Zeile, Anfangsinhalt „Was ist der Sinn des Lebens“; fehlt die Datei, gilt dieser Satz,
@@ -365,8 +374,10 @@ Der Pi:
 5. prüft mit derselben Umbruchregel wie die Anzeige (24 Zeichen pro Zeile, Umbruch an Wortgrenzen, höchstens 4 Zeilen), dass der Text passt; sonst fragt er die KI noch einmal – höchstens drei KI-Anfragen pro `GET|QUOTE`, danach antwortet er `ERROR|ZU_LANG`,
 6. antwortet `QUOTE|<Text>`.
 
-Der ESP prüft dasselbe noch einmal (Zeichen, Umbruch). Passt es, schreibt er
-das Zitat mit Datum vorne in die Liste (Abschnitt 11; das älteste fällt bei mehr als 30 weg). Passt es
+Der ESP prüft dasselbe noch einmal (Zeichen, Umbruch). Passt es, hält er das
+Zitat im RTC-Speicher und schreibt es mit Datum vorne in die Liste, sobald der Pi
+aus ist (P1-a; Abschnitt 11; das älteste fällt bei mehr als 30 weg). Fällt der
+Strom vorher aus, holt die Regel „Kaltstart in der Nacht“ das Zitat neu. Passt es
 nicht, fragt er noch einmal, höchstens dreimal (Z6). Gescrollt wird nie.
 
 **Fehler in der Nacht** (kein `READY`, keine Antwort, `ERROR`, drei abgelehnte
@@ -416,21 +427,47 @@ Stromausfall). Das Layout ändert sich, deshalb neue `MAGIC`.
 | `clockEpoch`, `clockValid` | geschätzte Uhrzeit beim Einschlafen, ob sie aus einem NTP-Abgleich stammt |
 | `sleepSeconds` | geplante Schlafdauer, zum Weiterzählen |
 | `nightAttempts`, `nightResult` | Versuche und Ergebnis der letzten Nacht |
+| `nightQuote` | das geprüfte Zitat der Nacht, bis es nach dem Ausschalten des Pi in der Liste steht (P1-a) |
 | `txSeq`, `rxSeq` | laufende Nummern der Verbindung (Z1) |
 
 Das Feld `textIndex` entfällt.
 
-**Flash** (LittleFS, T2-a):
+**Liste der Zitate** (T2-a): eine Zeile pro Zitat, `JJJJ-MM-TT|Text`, das
+neueste zuerst, höchstens 30 Zeilen. Ein Text hat höchstens 96 Zeichen, eine
+Zeile also höchstens 107 Bytes, die ganze Liste höchstens etwa 3,2 KB. Wo die
+Liste liegt, entscheidet der Schalter `FRAM_INSTALLED` in der Firmware (F1-a).
 
-- `/quotes.txt` – eine Zeile pro Zitat, `JJJJ-MM-TT|Text`, das neueste zuerst,
-  höchstens 30 Zeilen. Ein Text hat höchstens 96 Zeichen, eine Zeile also
-  höchstens 107 Bytes.
+**FRAM** (`FRAM_INSTALLED = true`; P2-a, P3-b):
+
+- MB85RC256V, 32 KB, I²C-Adresse 0x50, am selben Bus wie Expander und Anzeigen.
+  Der ESP holt sich den Bus dafür mit GPIO15 (F7).
+- **Zwei Plätze** A und B zu je 4 KB. Jeder Platz beginnt mit einem Kopf:
+  Kennung, laufende Nummer, Länge der Liste, CRC-32 über Nummer, Länge und
+  Liste. Danach folgt die Liste im Textformat oben.
+- **Lesen:** Gültig ist ein Platz mit richtiger Kennung, erlaubter Länge und
+  passender Prüfsumme. Massgeblich ist der gültige Platz mit der höheren Nummer.
+  Ist keiner gültig, ist die Liste leer.
+- **Schreiben:** immer in den anderen Platz, mit der nächsten Nummer, die Liste
+  zuerst und den Kopf zuletzt. Bricht ein Reset das Schreiben ab, bleibt der
+  alte Platz gültig. Das ersetzt das Umbenennen von `/quotes.new`.
+- **Briefkasten:** Liegt beim Start `/quotes.txt` im Flash, übernimmt der ESP
+  die Liste ins FRAM und löscht danach die Datei. Fällt der Strom dazwischen
+  aus, übernimmt er dieselbe Datei beim nächsten Start noch einmal. Dasselbe gilt
+  für `/text.txt` (Umstieg wie unten). `esp/data/` im Repo bleibt leer; eine
+  Liste zum Hochladen liegt als Beispiel daneben.
+- **Lesefehler am Bus:** Die Wand zeigt `KEIN TEXT`, und der ESP schreibt in
+  diesem Durchlauf nichts in die Liste.
+
+**Flash** (`FRAM_INSTALLED = false`, bis das FRAM bestückt ist; LittleFS):
+
+- `/quotes.txt` mit der Liste.
 - **Schreiben** immer atomar: die ganze Liste nach `/quotes.new`, dann umbenennen.
   Findet der ESP beim Start ein übriggebliebenes `/quotes.new`, löscht er es.
 - **Umstieg:** Fehlt `/quotes.txt`, aber `/text.txt` ist da, wird dessen erste
   Zeile der einzige Eintrag (ohne Datum, gilt als ältester), danach wird
   `/text.txt` gelöscht. Fehlt beides, zeigt die Wand „KEIN TEXT“.
-- `data/quotes.txt` im Repo ersetzt `data/text.txt` für `pio run -t uploadfs`.
+- `pio run -t uploadfs` lädt `esp/data/` hoch. Bis das FRAM bestückt ist, liegt
+  dort `quotes.txt` mit der Startliste.
 
 ---
 
@@ -476,7 +513,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | Antwort geht verloren | Absender wiederholt; Empfänger erkennt die Nummer und führt nicht doppelt aus |
 | ESP-Reset mitten in der Sitzung (Taste, Radar) | Zustand aus RTC-Speicher, weiter wie vorher |
 | ESP-Reset während des Schreibens der Anzeige | beim nächsten Durchlauf neu schreiben |
-| Stromausfall | Kaltstart: Pi ist aus (Flipflop zurückgesetzt), Uhr unbekannt → NTP; `/quotes.txt` bleibt |
+| Stromausfall | Kaltstart: Pi ist aus (Flipflop zurückgesetzt), Uhr unbekannt → NTP; die Liste bleibt (FRAM oder `/quotes.txt`) |
 | WLAN fehlt um Mitternacht | Auftrag nach eigener Uhr; der Pi braucht aber Internet für die KI – meist folgt ein KI-Fehler und der nächste Termin |
 | Flasher steckt | keine Verbindung; wie „Pi bootet nicht“ |
 | Pi hängt im Radar-Debug | nach 60 min `SHUTDOWN`; ohne Antwort nach `T_shutdown` hart aus |
@@ -534,6 +571,8 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | BT4–BT6 | ohne Flipflop | nur bei Bedarf in der Hardware nachrüsten |
 | Pi per Taste bedienen | Bis Teil 4 warten die Pi-Anwendungen auf ENTER; ein per BT2 gestarteter Pi lässt sich nur über SSH bedienen (S2-a) | Teil 4 |
 | Nachlaufzeit des Radars | Werkseinstellung etwa 60 s, nicht gemessen; bestimmt, wie lange die Wand nach dem Gehen an bleibt | im Radar-Debug messen und einstellen |
+| FRAM nicht bestückt | am Gerät geprüft: auf 0x50–0x57 antwortet nichts; der Owner bestätigt, dass es fehlt (2026-10-19) | bestücken, `FRAM_INSTALLED = true`, Abnahme von Teil 3a-2 am Gerät |
+| I²C mit 10 kHz | Der Bus läuft absichtlich langsam (`I2CMasterControl::I2C_CLOCK_HZ`). Eine volle Liste braucht im FRAM gerechnet etwa 3 s zum Lesen; die Wand zeigt das Zitat entsprechend später | nach dem Bestücken messen, ob das FRAM schneller zuverlässig läuft (ein früherer Test lief mit 100 kHz an allen Anzeigen ohne Fehler) |
 
 ---
 
@@ -545,17 +584,18 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | 1 | Verbindung: Codec und PiLink auf beiden Seiten, gemeinsame Testfälle, Fehler 1–5 | – |
 | 2 | Ein- und Ausschalten: PiSession, Dienst auf dem Pi, BT2 | 0, 1 |
 | 3a | Anzeige, Radar und Zitatliste (Abschnitte 8 und 11): Anzeige aus/an, Zitatliste `/quotes.txt` mit Umstieg, BT1 weiterschalten, wach bleiben solange INT_HLK HIGH | – |
+| 3a-2 | Zitate im FRAM (Abschnitt 11): FRAM-Speicher mit zwei Plätzen, Briefkasten im Flash, Schalter `FRAM_INSTALLED` | – (Abnahme am Gerät erst nach dem Bestücken) |
 | 3b | Mitternacht: WakePlan, Clock, Zitat, QuoteStore | 1, 2 |
 | 4 | Pi-Anwendungen von ENTER auf Tasten umstellen (wie in S2-a) | 2 |
 
-Teil 3a hängt nicht am Pi und kann als Erstes kommen. Jeder Teil bekommt einen
+Teil 3a und Teil 3a-2 hängen nicht am Pi und kommen als Erstes. Jeder Teil bekommt einen
 eigenen Plan und endet mit Tests und einer Abnahme am Gerät.
 
 ---
 
 ## 17. Nicht Teil dieses Entwurfs
 
-- OTA-Updates, eine Weboberfläche, der FRAM als Textspeicher.
+- OTA-Updates, eine Weboberfläche.
 - Scrollen zu langer Texte (verworfen in Runde 4).
 - Was die Pi-Anwendungen inhaltlich tun (Sprachassistent, Quiz, Reflection AI).
 - Neue Hardware (Flipflops für BT4–BT6).
