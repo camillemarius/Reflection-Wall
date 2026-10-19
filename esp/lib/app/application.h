@@ -51,8 +51,8 @@ private:
     // Zentrale Zuweisung Taster -> Aktion
     void handleInput(InputEvent button);
 
-    // Zeigt den naechsten Text und rueckt den Index vor
-    void showNextText();
+    // Zeigt den Text aus dem Flash (TextStorage)
+    void showText();
 
     void enterDeepSleep();
 
