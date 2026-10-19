@@ -216,6 +216,9 @@ void Application::run()
         handleInput(events[i]);
     }
 
+    // Tastenstand jetzt sichern: ein Druck waehrend der Warteschleife setzt den ESP zurueck
+    PersistentState::save(_state);
+
     // Was die Wand zeigt, entscheiden die Wand-Regeln
     // (Name bewusst nicht radarHigh: das ist die Methode)
     const bool radarNow = radarHigh();
