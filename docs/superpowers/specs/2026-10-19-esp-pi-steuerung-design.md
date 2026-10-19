@@ -1,11 +1,11 @@
 # ESP als Master über den Raspberry Pi – Entwurf
 
-Stand: 2026-10-19 · Status: **zur Durchsicht durch den Owner**
+Stand: 2026-10-19 · Status: **vom Owner angenommen** (2026-10-19)
 
-Dieses Dokument sammelt, was in vier Entscheidungsrunden festgelegt wurde, und
+Dieses Dokument sammelt, was in fünf Entscheidungsrunden festgelegt wurde, und
 ergänzt, was für die Umsetzung noch fehlt. Abschnitt 2 listet die Entscheide.
-Abschnitt 3 nennt alles, was dieser Entwurf **zusätzlich** festlegt – das ist
-noch nicht entschieden und braucht deine Durchsicht.
+Abschnitt 3 nennt, was dieser Entwurf zusätzlich festlegt; der Owner hat diese
+Punkte nach Durchsicht angenommen (Z3, Z5 und Z8 ersetzt durch T1-a und T2-a).
 
 ---
 
@@ -54,6 +54,9 @@ Pi nimmt keinen Schaden, und keine Nachricht geht unbemerkt verloren.
 | M4-a | Bei Fehlern in der Nacht bleibt das alte Zitat; neue Versuche um 01:00 und 02:00, danach erst in der nächsten Nacht; läuft gerade eine Sitzung, wird das Zitat darin geholt; endet sie vorher, gilt das als Fehlversuch | 3 |
 | — | Die zwölf festen Texte sind entfallen; die Wand zeigt `/text.txt` aus dem Flash | nach Runde 4 |
 | — | BT1–BT3 laufen über Toggle-Flipflops; BT1 zeigt das Zitat, BT2 schaltet den Pi, BT3 ist frei | nach Runde 4 |
+| T1-a | Während einer Sitzung gehen alle Tasten ausser BT2 an den Pi (BT1, BT3–BT6); BT1 schaltet dann kein Zitat weiter; BT4–BT6 verlieren kurze Drücke, bis Flipflops nachgerüstet sind | 5 |
+| T2-a | Der Flash hält bis zu 30 Zitate (neuestes zuerst). Wand dunkel + Radar oder BT1 → neuestes Zitat. Wand leuchtet + BT1 → nächstälteres, nach dem ältesten wieder das neueste. Wand aus, wenn INT_HLK LOW und der letzte BT1-Druck 1 min zurückliegt. Beim nächsten Einschalten wieder das neueste | 5 |
+| Z1–Z15 | Die Zusatzpunkte aus Abschnitt 3 sind angenommen, ausser Z3 (ersetzt durch T1-a) und Z5, Z8 (ersetzt durch T2-a) | 5 |
 
 A1–A6 waren in Runde 1 als Annahmen formuliert; du hast sie bestätigt. Die
 Begründungen und Gegenprüfungen standen in den Rundendateien der
@@ -61,21 +64,22 @@ Arbeitssitzung und liegen nicht im Repo. Massgeblich ist diese Tabelle.
 
 ---
 
-## 3. Was dieser Entwurf zusätzlich festlegt (bitte prüfen)
+## 3. Was dieser Entwurf zusätzlich festlegt
 
-Diese Punkte sind **nicht** in den Runden entschieden worden. Sie ergeben sich
-aus dem Ausarbeiten.
+Diese Punkte ergaben sich aus dem Ausarbeiten. Der Owner hat sie nach
+Durchsicht angenommen; **Z3, Z5 und Z8 gelten nicht mehr** – an ihre Stelle
+treten T1-a und T2-a (Abschnitt 2).
 
 | Nr. | Festlegung | Warum |
 |---|---|---|
 | Z1 | Jede Nachricht trägt eine **laufende Nummer** (0–255, je Absender). Die Antwort wiederholt die Nummer. Kommt eine Nachricht mit derselben Nummer noch einmal, schickt der Empfänger nur die alte Antwort noch einmal und führt nichts doppelt aus. | Ohne Nummer würde eine wiederholte Nachricht doppelt ausgeführt, wenn nur die Antwort verloren ging – zum Beispiel zweimal `BUTTON`. |
 | Z2 | Das Format wird damit `$NN:BEFEHL\|DATEN*hh` (NN = Nummer, zwei Hex-Ziffern). | Folgt aus Z1. |
-| Z3 | BT2 als Ein/Aus-Taste hast du entschieden. Neu ist: BT1 und BT3 gehen während einer Sitzung als `BUTTON` an den Pi (BT3 hat ausserhalb einer Sitzung keine Funktion). BT4–BT6 werden **gar nicht** verwendet, auch nicht vom Pi – abweichend von S2-a, wo alle anderen Tasten an den Pi gehen sollten. | Nur BT1–BT3 laufen über Flipflops; an BT4–BT6 gehen kurze Drücke verloren. |
+| Z3 | *Ersetzt durch T1-a.* ~~BT2 als Ein/Aus-Taste hast du entschieden. Neu ist: BT1 und BT3 gehen während einer Sitzung als `BUTTON` an den Pi (BT3 hat ausserhalb einer Sitzung keine Funktion). BT4–BT6 werden **gar nicht** verwendet, auch nicht vom Pi – abweichend von S2-a, wo alle anderen Tasten an den Pi gehen sollten.~~ | |
 | Z4 | Der Code für das Nachrichtenformat ist auf dem ESP **reines C++ ohne Arduino-Typen**, damit er auf dem PC getestet werden kann. Beide Seiten prüfen dieselben Testfälle aus einer gemeinsamen Datei. | So ist belegt, dass ESP und Pi dasselbe Format sprechen. |
-| Z5 | `/text.txt` bekommt eine zweite Zeile mit dem Datum der Nacht (`JJJJ-MM-TT`). Die Anzeige zeigt nur die erste Zeile. Geschrieben wird erst in `/text.new`, dann umbenannt. | Datum für M3/M4 (fehlt das Zitat dieser Nacht noch?), atomares Schreiben aus Runde 3. |
+| Z5 | *Ersetzt durch T2-a.* ~~`/text.txt` bekommt eine zweite Zeile mit dem Datum der Nacht (`JJJJ-MM-TT`). Die Anzeige zeigt nur die erste Zeile. Geschrieben wird erst in `/text.new`, dann umbenannt.~~ | |
 | Z6 | Lehnt der ESP ein Zitat ab, fragt er mit `GET\|QUOTE` noch einmal; nach drei abgelehnten Zitaten gilt die Nacht als Fehlversuch. | Bildet „höchstens dreimal“ aus M2 im Ablauf ab. |
 | Z7 | Während der Radar-Anzeige oder der BT1-Minute bleibt der ESP wach und schläft nicht dazwischen. | Folgt aus M1-d; der ESP muss INT_HLK beobachten und die Minute messen. |
-| Z8 | **BT1 und Radar gleichzeitig:** Endet die BT1-Minute, während das Radar noch jemanden sieht, bleibt die Anzeige an, bis INT_HLK LOW ist. Die Minute allein gilt nur, wenn das Radar niemanden sieht. | Wer BT1 drückt, steht meist vor der Wand; die Wand soll dann nicht vor ihm ausgehen. **Folge:** In der Praxis gilt meist die Radar-Regel, die 1-Minuten-Regel selten. Soll BT1 immer nach 1 min ausschalten, sag es. |
+| Z8 | *Ersetzt durch T2-a.* ~~**BT1 und Radar gleichzeitig:** Endet die BT1-Minute, während das Radar noch jemanden sieht, bleibt die Anzeige an, bis INT_HLK LOW ist. Die Minute allein gilt nur, wenn das Radar niemanden sieht.~~ | |
 | Z9 | Protokolldetails: eine Zeile höchstens 256 Bytes; pro Richtung höchstens eine offene Anfrage; unbekannter Befehl → `ERROR\|UNKNOWN`; was bei abgelaufener Frist passiert, steht in 6.2. | Damit beide Seiten gleich reagieren. |
 | Z10 | Bricht ein Reset das Schreiben der Anzeige ab, merkt der ESP das am Zustand „wird geschrieben“ und schreibt beim nächsten Durchlauf neu. | Am Gerät beobachtet: Ein Reset kam mitten im Schreiben. |
 | Z11 | Mitternacht, während der ESP wegen des Radars wach ist: Er prüft die Uhrzeit selbst (nicht über den Weckgrund) und startet den Auftrag. Ist die Anzeige an, zeigt er das neue Zitat sofort. | Wach gibt es kein Timer-Wecken, das den Auftrag auslösen würde. |
@@ -120,7 +124,7 @@ Frage, die die Zeichnung beantwortet: *Welche Teile gibt es, und worüber reden 
  │  ├─ WakePlan   (wann wecken)   │                          │  ├─ Zitat (KI, Thema, Kette) │
  │  ├─ Clock      (NTP, Schätzung)│                          │  ├─ Tasten → Anwendungen     │
  │  ├─ DisplayCtl (an/aus/Text)   │                          │  └─ Herunterfahren           │
- │  ├─ QuoteStore (/text.txt)     │                          │      (systemctl poweroff)    │
+ │  ├─ QuoteStore (/quotes.txt)   │                          │      (systemctl poweroff)    │
  │  └─ Tasten (Expander lesen)    │                          └──────────────────────────────┘
  └────┬───────────────────────────┘
       ├ GPIO12 Puls ──► Flipflop ──► Relais ──► Speisung Pi
@@ -141,7 +145,7 @@ Was jeder Teil tut:
 | WakePlan | ESP | Rechnet aus, wann der ESP das nächste Mal aufwacht. |
 | Clock | ESP | Uhrzeit per NTP holen und zwischen den Abgleichen weiterzählen. |
 | DisplayCtl | ESP | Anzeige ein- und ausschalten, Text schreiben. |
-| QuoteStore | ESP | `/text.txt` lesen, prüfen, atomar schreiben. |
+| QuoteStore | ESP | Liste `/quotes.txt` (bis 30 Zitate) lesen, prüfen, atomar schreiben; Umstieg von `/text.txt`. |
 | Zitat | Pi | Thema lesen, KI fragen, Text bereinigen und prüfen. |
 | Dienst | Pi | Startet beim Booten, besitzt die UART, meldet `READY`, fährt auf Anfrage herunter. |
 
@@ -272,15 +276,33 @@ Regeln, die die Zeichnung nicht zeigt:
 
 ---
 
-## 8. Anzeige und Radar (M1-d)
+## 8. Anzeige und Radar (M1-d, T2-a)
+
+Frage, die die Zeichnung beantwortet: *Welches Zitat zeigt die Wand nach welchem Ereignis?*
+
+```
+                 Radar erkennt jemanden            BT1                BT1
+ Wand dunkel  ───────────────────────────►  Zitat 1  ──────────►  Zitat 2  ──────────►  Zitat 3 …
+                 oder BT1 bei dunkler Wand  (neuestes)            (gestern)           (vorgestern)
+
+ nach dem ältesten gespeicherten Zitat folgt wieder Zitat 1
+ Wand geht aus (Radar LOW und BT1-Minute vorbei) → beim nächsten Einschalten wieder Zitat 1
+```
+
+*Gezeichnet 2026-10-19 aus T2-a.*
 
 | Ereignis | Was passiert |
 |---|---|
-| Radar erkennt jemanden (INT_HLK steigt → Reset) | Zitat schreiben, Anzeige ein. Der ESP bleibt wach und liest GPIO13 alle 200 ms. Ist INT_HLK LOW, Anzeige aus, schlafen. |
-| BT1 | Zitat schreiben, Anzeige ein, 60 s wach bleiben, dann Anzeige aus. Ist INT_HLK nach den 60 s HIGH, bleibt die Anzeige an, bis es LOW ist (Z8). |
-| BT1 während die Anzeige schon an ist | Zitat neu schreiben, die 60 s beginnen neu. |
-| Mitternacht, während der ESP wegen der Anzeige wach ist | Der ESP prüft in seiner Warteschleife die Uhrzeit und startet den Auftrag (Z11). Kommt ein neues Zitat, zeigt er es sofort. Die Anzeige geht aus, wenn die Radar- oder BT1-Regel es sagt. |
-| Sitzung läuft | Anzeige gehört dem Pi; nichts davon gilt. |
+| Radar erkennt jemanden, Wand dunkel (INT_HLK steigt → Reset) | Neuestes Zitat schreiben, Anzeige ein. Der ESP bleibt wach und liest GPIO13 alle 200 ms. |
+| BT1, Wand dunkel | Neuestes Zitat schreiben, Anzeige ein, die BT1-Minute beginnt. |
+| BT1, Wand leuchtet | Nächstälteres Zitat schreiben; nach dem ältesten wieder das neueste. Die BT1-Minute beginnt neu. |
+| Wand ausschalten | Wenn INT_HLK LOW ist **und** der letzte BT1-Druck mindestens 60 s zurückliegt: Anzeige aus, schlafen. |
+| Mitternacht, während der ESP wegen der Anzeige wach ist | Der ESP prüft in seiner Warteschleife die Uhrzeit und startet den Auftrag (Z11). Kommt ein neues Zitat, zeigt er es sofort; die Position steht dann wieder beim neuesten. |
+| Sitzung läuft | Anzeige gehört dem Pi; nichts davon gilt. BT1 geht an den Pi (T1-a). |
+
+Welches Zitat gerade zu sehen ist, steht im RTC-Speicher als **Datum des Zitats**,
+nicht als Platz in der Liste. So zeigt die Position auch dann auf das richtige
+Zitat, wenn vorne ein neues dazukommt.
 
 Grenzen: Die Wand wird erst dunkel, wenn INT_HLK LOW wird – das ist die
 Nachlaufzeit des Radars nach dem Gehen (Werkseinstellung etwa 60 s, nicht
@@ -308,7 +330,7 @@ ihn verlieren, und die Wand geht aus.
  Funk aus       letzte Strecke      1  WLAN + NTP (höchstens 15 s, nie das Portal)
                 bis 00:00 gekürzt,     noch vor 00:00? → Rest schlafen
                 nächster Start      2  Pi EIN, warten auf READY
-                mit Funk            3  GET|QUOTE → prüfen → /text.txt atomar schreiben
+                mit Funk            3  GET|QUOTE → prüfen → in /quotes.txt aufnehmen
                                     4  SHUTDOWN → OK → T_halt → Pi AUS
                                     5  Deep Sleep, Funk aus (Anzeige bleibt dunkel)
 
@@ -329,11 +351,11 @@ bei jedem Timer-Weckvorgang (höchstens alle 3 h, dafür schläft er vorher mit
 Funk ein) und lässt bis dahin den Mitternachts-Auftrag aus (M3-a).
 
 **Kaltstart in der Nacht.** Kommt der Strom zwischen 00:00 und 03:00 zurück und
-ist die Uhrzeit bekannt, vergleicht der ESP das Datum in `/text.txt` mit dem
+ist die Uhrzeit bekannt, vergleicht der ESP das Datum des neuesten Eintrags in `/quotes.txt` mit dem
 heutigen. Fehlt das Zitat dieser Nacht, startet er den Auftrag sofort; die
 Termine 01:00 und 02:00 gelten danach wie sonst.
 
-**Zitat.** Der ESP schickt die erste Zeile von `/text.txt` als Text vom Vortag mit.
+**Zitat.** Der ESP schickt das neueste Zitat aus `/quotes.txt` als Text vom Vortag mit.
 Der Pi:
 
 1. liest das Thema aus `rpi/app/config/thema.txt` – eine Zeile, Anfangsinhalt „Was ist der Sinn des Lebens“; fehlt die Datei, gilt dieser Satz,
@@ -344,7 +366,7 @@ Der Pi:
 6. antwortet `QUOTE|<Text>`.
 
 Der ESP prüft dasselbe noch einmal (Zeichen, Umbruch). Passt es, schreibt er
-`/text.new` mit Text und Datum und benennt die Datei in `/text.txt` um. Passt es
+das Zitat mit Datum vorne in die Liste (Abschnitt 11; das älteste fällt bei mehr als 30 weg). Passt es
 nicht, fragt er noch einmal, höchstens dreimal (Z6). Gescrollt wird nie.
 
 **Fehler in der Nacht** (kein `READY`, keine Antwort, `ERROR`, drei abgelehnte
@@ -355,14 +377,18 @@ RTC-Speicher und erscheint beim nächsten Weckvorgang im Log.
 
 ---
 
-## 10. Tasten (E5-c, S2-a, Z3)
+## 10. Tasten (E5-c, S2-a, T1-a)
 
 | Taste | Ohne Sitzung | Während einer Sitzung |
 |---|---|---|
-| BT1 | Zitat anzeigen (Abschnitt 8) | `BUTTON\|1` an den Pi |
-| BT2 | Sitzung von Hand starten | Sitzung beenden (`SHUTDOWN`) |
+| BT1 | Zitat anzeigen bzw. weiterschalten (Abschnitt 8) | `BUTTON\|1` an den Pi |
+| BT2 | Sitzung von Hand starten | Sitzung beenden (`SHUTDOWN`, der Pi darf `BUSY` antworten) |
 | BT3 | – | `BUTTON\|3` an den Pi |
-| BT4–BT6 | – | – (kurze Drücke gehen verloren, F9) |
+| BT4–BT6 | – | `BUTTON\|4` bis `BUTTON\|6` an den Pi – nur gehaltene Drücke kommen an (F9; gemessen: 5 von 5 kurzen Taps verloren, 6 von 6 gehaltenen Drücken erkannt) |
+
+Ein Druck während der Sitzung setzt den ESP zurück. Er bootet, liest seinen
+Sitzungszustand aus dem RTC-Speicher, liest den Expander und schickt `BUTTON|n`.
+BT4–BT6 werten dabei die fallende Flanke aus, BT1–BT3 jeden Wechsel.
 
 Jeder Pegelwechsel an BT1–BT3 ist ein Druck (`InputTrigger::ANY_EDGE`).
 Während einer Sitzung holt sich der ESP für das Lesen kurz den I²C-Bus (GPIO15
@@ -384,7 +410,9 @@ Stromausfall). Das Layout ändert sich, deshalb neue `MAGIC`.
 | `piPowered` | ob der ESP die Speisung zuletzt eingeschaltet hat |
 | `sessionSeconds` | verstrichene Sitzungszeit (für 3 h), alle 10 s gesichert |
 | `pendingShutdown` | BT2 während RADAR-DEBUG gedrückt |
-| `display` | aus / Radar / BT1-Minute / wird geschrieben |
+| `display` | aus / an / wird geschrieben |
+| `shownQuoteDate` | Datum des Zitats, das gerade zu sehen ist (T2-a) |
+| `bt1Since` | Zeitpunkt des letzten BT1-Drucks, für die BT1-Minute |
 | `clockEpoch`, `clockValid` | geschätzte Uhrzeit beim Einschlafen, ob sie aus einem NTP-Abgleich stammt |
 | `sleepSeconds` | geplante Schlafdauer, zum Weiterzählen |
 | `nightAttempts`, `nightResult` | Versuche und Ergebnis der letzten Nacht |
@@ -392,8 +420,17 @@ Stromausfall). Das Layout ändert sich, deshalb neue `MAGIC`.
 
 Das Feld `textIndex` entfällt.
 
-**Flash** (`/text.txt`, LittleFS): Zeile 1 = angezeigter Text, Zeile 2 = Datum der
-Nacht. Atomar über `/text.new` (Z5).
+**Flash** (LittleFS, T2-a):
+
+- `/quotes.txt` – eine Zeile pro Zitat, `JJJJ-MM-TT|Text`, das neueste zuerst,
+  höchstens 30 Zeilen. Ein Text hat höchstens 96 Zeichen, eine Zeile also
+  höchstens 107 Bytes.
+- **Schreiben** immer atomar: die ganze Liste nach `/quotes.new`, dann umbenennen.
+  Findet der ESP beim Start ein übriggebliebenes `/quotes.new`, löscht er es.
+- **Umstieg:** Fehlt `/quotes.txt`, aber `/text.txt` ist da, wird dessen erste
+  Zeile der einzige Eintrag (ohne Datum, gilt als ältester), danach wird
+  `/text.txt` gelöscht. Fehlt beides, zeigt die Wand „KEIN TEXT“.
+- `data/quotes.txt` im Repo ersetzt `data/text.txt` für `pio run -t uploadfs`.
 
 ---
 
@@ -439,7 +476,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | Antwort geht verloren | Absender wiederholt; Empfänger erkennt die Nummer und führt nicht doppelt aus |
 | ESP-Reset mitten in der Sitzung (Taste, Radar) | Zustand aus RTC-Speicher, weiter wie vorher |
 | ESP-Reset während des Schreibens der Anzeige | beim nächsten Durchlauf neu schreiben |
-| Stromausfall | Kaltstart: Pi ist aus (Flipflop zurückgesetzt), Uhr unbekannt → NTP; `/text.txt` bleibt |
+| Stromausfall | Kaltstart: Pi ist aus (Flipflop zurückgesetzt), Uhr unbekannt → NTP; `/quotes.txt` bleibt |
 | WLAN fehlt um Mitternacht | Auftrag nach eigener Uhr; der Pi braucht aber Internet für die KI – meist folgt ein KI-Fehler und der nächste Termin |
 | Flasher steckt | keine Verbindung; wie „Pi bootet nicht“ |
 | Pi hängt im Radar-Debug | nach 60 min `SHUTDOWN`; ohne Antwort nach `T_shutdown` hart aus |
@@ -465,6 +502,11 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
   „Uhr unbekannt“.
 - **Zitat (Pi):** Bereinigung und Umbruchprüfung mit festen Texten; die KI wird
   im Test durch feste Antworten ersetzt.
+- **Zitatliste und Anzeige-Regeln (ESP):** Liste lesen und schreiben (höchstens 30,
+  neuestes zuerst, ältestes fällt weg), übriggebliebenes `/quotes.new`, Umstieg von
+  `/text.txt`, Weiterschalten mit Rückkehr zum neuesten, Position über ein neues
+  Zitat hinweg, Ausschaltregel (INT_HLK und BT1-Minute) – mit einem Dateisystem
+  und einer Uhr im Speicher statt LittleFS und `millis()`.
 
 **Am Gerät (Abnahme):**
 
@@ -502,7 +544,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | 0 | Pi einrichten: `dtparam=uart0=on`, I²C, venv mit `lgpio` und `pyserial`, `piper` (Sprachausgabe, ruft die README schon auf), `.env`, sudoers-Regel | laufenden Pi mit SSH |
 | 1 | Verbindung: Codec und PiLink auf beiden Seiten, gemeinsame Testfälle, Fehler 1–5 | – |
 | 2 | Ein- und Ausschalten: PiSession, Dienst auf dem Pi, BT2 | 0, 1 |
-| 3a | Anzeige und Radar (Abschnitt 8) | – |
+| 3a | Anzeige, Radar und Zitatliste (Abschnitte 8 und 11): Anzeige aus/an, Zitatliste `/quotes.txt` mit Umstieg, BT1 weiterschalten, wach bleiben solange INT_HLK HIGH | – |
 | 3b | Mitternacht: WakePlan, Clock, Zitat, QuoteStore | 1, 2 |
 | 4 | Pi-Anwendungen von ENTER auf Tasten umstellen (wie in S2-a) | 2 |
 
