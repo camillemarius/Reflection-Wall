@@ -44,6 +44,22 @@ void test_parse_accepts_entry_without_date()
     TEST_ASSERT_EQUAL_STRING("Alter Text", l.at(0).text.c_str());
 }
 
+void test_parse_trims_date_and_text()
+{
+    QuoteList l = QuoteList::parse(" 2026-10-19 |\t Text mit Rand \t\n");
+    TEST_ASSERT_EQUAL(1, l.size());
+    TEST_ASSERT_EQUAL_STRING("2026-10-19", l.at(0).date.c_str());
+    TEST_ASSERT_EQUAL_STRING("Text mit Rand", l.at(0).text.c_str());
+}
+
+void test_parse_clears_overlong_date()
+{
+    QuoteList l = QuoteList::parse("2026-10-19-extra|Text\n");
+    TEST_ASSERT_EQUAL(1, l.size());
+    TEST_ASSERT_EQUAL_STRING("", l.at(0).date.c_str());
+    TEST_ASSERT_EQUAL_STRING("Text", l.at(0).text.c_str());
+}
+
 void test_parse_keeps_at_most_30()
 {
     QuoteList l = QuoteList::parse(numbered(35));
@@ -125,6 +141,8 @@ int main(int, char**)
     RUN_TEST(test_parse_strips_carriage_return);
     RUN_TEST(test_parse_skips_invalid_lines);
     RUN_TEST(test_parse_accepts_entry_without_date);
+    RUN_TEST(test_parse_trims_date_and_text);
+    RUN_TEST(test_parse_clears_overlong_date);
     RUN_TEST(test_parse_keeps_at_most_30);
     RUN_TEST(test_serialize_roundtrip);
     RUN_TEST(test_add_newest_puts_entry_first);
