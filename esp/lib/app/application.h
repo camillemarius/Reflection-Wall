@@ -70,6 +70,10 @@ private:
 
     void enterDeepSleep();
 
+    // Radar meldet "jemand da"? Liest INT_HLK nur, wenn der Radar
+    // eingebaut ist (RADAR_INSTALLED in application.cpp)
+    bool radarHigh();
+
     UartHandler _uart;
     TextStorage _storage;
     Display _display;

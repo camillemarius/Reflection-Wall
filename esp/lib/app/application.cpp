@@ -78,6 +78,11 @@ namespace
     // BufferTest.h. Laeuft endlos statt in den Deep Sleep.
     // Fuer den Normalbetrieb auf false.
     constexpr bool BUFFER_TEST = false;
+
+    // Radar (HLK-LD2410S) angeschlossen? Ohne Radar liest GPIO13 wegen des
+    // Pull-ups dauerhaft HIGH ("jemand steht davor"). Auf false ignoriert die
+    // Firmware INT_HLK: die Wand geht nur mit BT1 an und nach 60 s wieder aus.
+    constexpr bool RADAR_INSTALLED = false;
 }
 
 // ---------------------------------------------------------
@@ -194,6 +199,9 @@ void Application::run()
                        state,
                        count);
 
+    if (!RADAR_INSTALLED)
+        DebugSerial.println("[WALL] Radar nicht eingebaut (RADAR_INSTALLED = false), INT_HLK wird ignoriert");
+
     // Nach dem Einschalten bleibt die Wand dunkel, bis der
     // Radar oder BT1 sie einschaltet.
     bool button1 = false;
@@ -209,7 +217,8 @@ void Application::run()
     }
 
     // Was die Wand zeigt, entscheiden die Wand-Regeln
-    const bool radarHigh = digitalRead(Pins::INT_HLK) == HIGH;
+    // (Name bewusst nicht radarHigh: das ist die Methode)
+    const bool radarNow = radarHigh();
 
     // Nach dem Einschalten ist der Inhalt der Module unbekannt (nach
     // einem Firmware-Update steht noch der alte Text): die Wand
@@ -224,7 +233,7 @@ void Application::run()
     WallBoot boot;
     boot.displayOn = _state.displayState != 0;
     boot.displayWriting = _state.displayState == 2;
-    boot.radarHigh = radarHigh;
+    boot.radarHigh = radarNow;
     boot.button1 = button1;
 
     const WallAction action = decideOnBoot(boot);
@@ -408,6 +417,18 @@ void Application::showQuote(WallAction action)
 }
 
 // ---------------------------------------------------------
+// Radar
+// ---------------------------------------------------------
+// Einzige Stelle, die INT_HLK liest. Ohne eingebauten Radar
+// (RADAR_INSTALLED = false) meldet sie nie "jemand da", sonst
+// wuerde der Pull-up die Wand dauerhaft an halten.
+
+bool Application::radarHigh()
+{
+    return RADAR_INSTALLED && digitalRead(Pins::INT_HLK) == HIGH;
+}
+
+// ---------------------------------------------------------
 // Wand an
 // ---------------------------------------------------------
 // Der ESP bleibt wach und prueft den Radar, bis die Regeln
@@ -420,9 +441,9 @@ void Application::runWallLoop()
     {
         delay(WALL_POLL_MS);
 
-        const bool radarHigh = digitalRead(Pins::INT_HLK) == HIGH;
+        const bool radarNow = radarHigh();
 
-        if (wallShouldTurnOff(radarHigh, _state.button1Active != 0, millis()))
+        if (wallShouldTurnOff(radarNow, _state.button1Active != 0, millis()))
         {
             turnWallOff();
             return;
