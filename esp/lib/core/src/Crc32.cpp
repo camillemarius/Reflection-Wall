@@ -1,6 +1,6 @@
 #include "Crc32.h"
 
-uint32_t crc32(const uint8_t* data, std::size_t length, uint32_t crc)
+uint32_t crc32Ieee(const uint8_t* data, std::size_t length, uint32_t crc)
 {
     crc = ~crc;
     for (std::size_t i = 0; i < length; ++i)

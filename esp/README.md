@@ -45,7 +45,7 @@ Nach dem Einschalten (Kaltstart, auch nach dem ersten Flashen) schaltet der ESP 
 
 Mit `FRAM_INSTALLED = true` (`lib/app/application.cpp`) liegt die Zitatliste im FRAM MB85RC256V auf 0x50 (`FramBus`, `FramQuoteStore`). Das FRAM wird mit 100 kHz gelesen und beschrieben; danach steht der Bus wieder auf 10 kHz. Die Liste liegt in Plätzen mit Prüfsumme (Spezifikation Abschnitt 11). Eine `/quotes.txt` im Flash dient als Briefkasten: Beim nächsten Lesen übernimmt der ESP sie ins FRAM und löscht sie im Flash.
 
-Liste laden: Datei nach `data/quotes.txt` legen, `pio run -t uploadfs`, dann BT1 drücken. Achtung: Das ersetzt die Zitate, die die KI geschrieben hat. Eine Beispielliste liegt in `data-beispiel/quotes.txt`; `data/` bleibt sonst leer, damit ein `uploadfs` die Liste der KI nicht aus Versehen ersetzt. Mit `FRAM_INSTALLED = false` gilt wieder der Abschnitt unten.
+Liste laden: Datei nach `data/quotes.txt` legen, `pio run -t uploadfs`, dann BT1 drücken. Danach `data/quotes.txt` wieder entfernen. Eine liegen gebliebene Datei wird beim nächsten `uploadfs` erneut hochgeladen und ersetzt die Liste, die die KI geschrieben hat. Achtung: Das ersetzt die Zitate, die die KI geschrieben hat. Eine Beispielliste liegt in `data-beispiel/quotes.txt`; `data/` bleibt sonst leer, damit ein `uploadfs` die Liste der KI nicht aus Versehen ersetzt. Mit `FRAM_INSTALLED = false` gilt wieder der Abschnitt unten.
 
 ## Zitatliste im Flash
 
