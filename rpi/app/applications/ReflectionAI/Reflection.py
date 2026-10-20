@@ -1,5 +1,5 @@
 import logging
-from rpi.app.applications.ReflectionAI.promt_template import PROMPT_TEMPLATE
+from rpi.app.applications.ReflectionAI.prompt_template import PROMPT_TEMPLATE
 from rpi.app.driver.database.mysql import get_previous_answers, save_answer, setup_db
 from rpi.app.driver.chatbot.groqAPI import write_to_ai
 from rpi.app.driver.display.display import Display  # deine Display-Klasse
