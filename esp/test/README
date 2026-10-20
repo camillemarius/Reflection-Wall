@@ -6,7 +6,7 @@ Suiten:
 - test_quote_list: Zitatliste parsen und bauen (Datum|Text, neueste zuerst, maximal 30).
 - test_quote_store: QuoteStore im LittleFS (/quotes.txt) samt Umzug von /text.txt.
 - test_wall_logic: Ablauf der Wand (Aufwachen, naechstes Zitat, Ausschalten nach 1 Minute).
-- test_slot_store: Slots A und B im FRAM mit Kennung, Nummer, Laenge und CRC-32.
+- test_slot_store: Plaetze A und B im FRAM mit Kennung, Nummer, Laenge und CRC-32.
 - test_fram_quote_store: FramQuoteStore, auch Briefkasten /quotes.txt und Abbruch beim Schreiben.
 
 Hilfen in support/:

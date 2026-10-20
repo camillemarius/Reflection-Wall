@@ -43,21 +43,23 @@ Nach dem Einschalten (Kaltstart, auch nach dem ersten Flashen) schaltet der ESP 
 
 ## Zitate im FRAM
 
-Die Zitatliste liegt im FRAM MB85RC256V auf 0x50 (`FRAM_INSTALLED = true` in `lib/app/application.cpp`; Code: `FramBus`, `FramQuoteStore`, `SlotStore`, `Crc32`). Das FRAM ist seit 2026-10-20 bestückt. Die Liste steht in zwei Plätzen: A bei 0x0000 und B bei 0x1000, je 4 KB mit einem Kopf von 16 Byte (Kennung, laufende Nummer, Länge, CRC-32). Geschrieben wird immer in den älteren Platz, erst die Liste, zuletzt der Kopf. Bricht ein Reset mitten im Schreiben ab, gilt die alte Liste weiter. Der Entwurf steht in `docs/superpowers/specs/2026-10-19-esp-pi-steuerung-design.md` (Abschnitt 11).
+Die Zitatliste liegt im FRAM MB85RC256V auf 0x50. Dafür muss `FRAM_INSTALLED = true` in `lib/app/application.cpp` stehen. Das FRAM ist seit 2026-10-20 bestückt. Der Code dazu steht in `FramBus`, `FramQuoteStore`, `SlotStore` und `Crc32`.
+
+Die Liste steht doppelt im FRAM, in zwei Plätzen. Ein Platz ist ein Bereich von 4 KB: Platz A beginnt bei 0x0000, Platz B bei 0x1000. Jeder Platz beginnt mit einem Kopf von 16 Byte. Der Kopf enthält Kennung, laufende Nummer, Länge und CRC-32. Die CRC-32 ist eine Prüfsumme; sie zeigt, ob der Platz vollständig geschrieben wurde. Geschrieben wird immer in den älteren Platz. Zuerst kommt die Liste, zuletzt der Kopf. Bricht ein Reset mitten im Schreiben ab, gilt die alte Liste weiter. Der Entwurf steht in `docs/superpowers/specs/2026-10-19-esp-pi-steuerung-design.md` (Abschnitt 11).
 
 **Briefkasten:** Eine `/quotes.txt` im Flash (LittleFS) übernimmt der ESP beim nächsten Lesen einmal ins FRAM und löscht sie danach. Dabei löscht er auch `/quotes.new` und eine alte `/text.txt`. Eine leere `/text.txt` wird ignoriert.
 
 **Liste laden:** Datei nach `data/quotes.txt` legen, `pio run -t uploadfs`, dann BT1 drücken. Danach `data/quotes.txt` wieder entfernen.
 
-**Achtung:** Eine liegen gebliebene Datei ersetzt beim nächsten `uploadfs` die Liste, die die KI geschrieben hat. Darum bleibt `data/` normalerweise leer (nur `.gitkeep`). Eine Beispielliste liegt in `data-beispiel/quotes.txt`.
+**Achtung:** Bleibt die Datei in `data/` liegen, ersetzt sie beim nächsten `uploadfs` die Liste, die die KI geschrieben hat. Darum bleibt `data/` normalerweise leer (nur `.gitkeep`). Eine Beispielliste liegt in `data-beispiel/quotes.txt`.
 
-Der Bus läuft mit 10 kHz. Nur das FRAM wird mit 100 kHz angesprochen (`FramBus::CLOCK_HZ`), in Stücken von 30 Byte; danach stehen Takt und Hold wieder auf den alten Werten. Gemessen: 30 Zitate (2730 Byte) lesen in 0,56 s.
+Der Bus läuft mit 10 kHz und einer SDA-Haltezeit (Hold) von 10 µs. Die Haltezeit ist die Zeit, die der ESP SDA ruhig hält, nachdem SCL gefallen ist. Nur das FRAM wird mit 100 kHz angesprochen (`FramBus::CLOCK_HZ`). Das geschieht in Stücken von 30 Byte. Danach stellt der ESP den Takt wieder auf 10 kHz und die Haltezeit auf 10 µs. Gemessen wurde: Das Lesen von 30 Zitaten (2730 Byte) dauert 0,56 s.
 
 ## Format der Zitatliste
 
 Höchstens 30 Zitate, das neueste zuerst. Pro Zeile ein Zitat im Format `JJJJ-MM-TT|Text`; ein Eintrag ohne Datum wird `|Text` geschrieben. Eine Zeile ohne `|` wird übersprungen. Leerzeichen und Tabs am Rand von Datum und Text werden entfernt; ein Datum mit mehr als 10 Zeichen wird verworfen (der Eintrag bleibt, ohne Datum).
 
-Die Anzeige fasst 96 Zeichen (12 Module × 8); Umlaute müssen umschrieben sein, die Segmentschrift kennt nur `A–Z`, `0–9` und `- . / : + *`. Ist ein Text länger, meldet das Log die Länge. Ist die Liste leer oder nicht lesbar, zeigt die Wand „KEIN TEXT“.
+Die Anzeige fasst 96 Zeichen (12 Module × 8). Umlaute müssen umschrieben sein. Die Segmentschrift kennt nur `A–Z`, `0–9` und `- . / : + *`. Ist ein Text länger, meldet das Log die Länge. Ist die Liste leer oder nicht lesbar, zeigt die Wand „KEIN TEXT“.
 
 ## Ohne FRAM (`FRAM_INSTALLED = false`)
 
@@ -99,7 +101,7 @@ pio test -e native
 | 0x7F | Zeile 3, Spalte 3 – hinter LTC4316 A (nativ 0x77) |
 | 0x79, 0x7B, 0x7D | Zeile 4 – hinter LTC4316 B (nativ 0x71, 0x73, 0x75) |
 
-Takt: 10 kHz (`I2CMasterControl::I2C_CLOCK_HZ`), gemessen ~9 kHz, mit 10 µs SDA-Hold. Nur das FRAM läuft mit 100 kHz (`FramBus::CLOCK_HZ`).
+Der Takt ist 10 kHz (`I2CMasterControl::I2C_CLOCK_HZ`), gemessen sind etwa 9 kHz. Die SDA-Haltezeit (Hold) beträgt 10 µs. Nur das FRAM läuft mit 100 kHz (`FramBus::CLOCK_HZ`).
 
 ## Aufbau
 
@@ -113,7 +115,7 @@ lib/gpioExpander/         Taster-Auswertung (Flanken, Pegel)
 lib/system/               Weckgrund, Zustand im RTC-Speicher
 lib/core/                 Zitatliste, Zitatspeicher, Wand-Regeln (ohne Arduino, Tests auf dem PC)
 lib/storage/              LittleFS-Anbindung (LittleFsAdapter), FRAM-Bus (FramBus);
-                          textStorage, espTextStorage, framTextStorage: alter Code, ersetzt in Teil 1
+                          textStorage, espTextStorage, framTextStorage: alter Code, ersetzt in Teil 1 der Umsetzung (neue Verbindung zwischen ESP und Pi, siehe Spezifikation Abschnitt 16)
 data/                     Briefkasten für pio run -t uploadfs (normalerweise leer)
 data-beispiel/quotes.txt  Startliste als Beispiel zum Hochladen
 lib/communication/        UART-Protokoll zum Raspberry Pi (COMMAND|DATA); alter Code, ersetzt in Teil 1
