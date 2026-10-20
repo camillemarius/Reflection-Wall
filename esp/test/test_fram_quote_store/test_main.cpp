@@ -98,6 +98,22 @@ void test_load_without_mailbox_keeps_fram_list()
     TEST_ASSERT_TRUE(store.lastLoad().bytes > 0);
 }
 
+void test_mailbox_import_also_drops_legacy_text()
+{
+    MemoryBytes fram;
+    MemoryFs fs;
+    fs.files["/quotes.txt"] = "2026-10-21|Neu\n";
+    fs.files["/text.txt"] = "Alter Text\n";
+    QuoteList l = FramQuoteStore(fram, fs).load();
+    TEST_ASSERT_EQUAL(1, l.size());
+    TEST_ASSERT_EQUAL_STRING("Neu", l.at(0).text.c_str());
+    TEST_ASSERT_FALSE(fs.exists("/quotes.txt"));
+    TEST_ASSERT_FALSE(fs.exists("/text.txt"));
+    QuoteList l2 = FramQuoteStore(fram, fs).load();
+    TEST_ASSERT_EQUAL(1, l2.size());
+    TEST_ASSERT_EQUAL_STRING("Neu", l2.at(0).text.c_str());
+}
+
 void test_load_imports_empty_mailbox_file()
 {
     MemoryBytes fram;
@@ -183,6 +199,7 @@ int main(int, char**)
     RUN_TEST(test_load_ignores_empty_legacy_text);
     RUN_TEST(test_mailbox_replaces_existing_fram_list);
     RUN_TEST(test_load_without_mailbox_keeps_fram_list);
+    RUN_TEST(test_mailbox_import_also_drops_legacy_text);
     RUN_TEST(test_load_imports_empty_mailbox_file);
     RUN_TEST(test_bus_error_gives_empty_list_and_refuses_save);
     RUN_TEST(test_failed_import_keeps_file_shows_list_and_refuses_save);
