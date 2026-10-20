@@ -19,6 +19,7 @@ namespace
         ~BusSession()
         {
             Wire.setClock(I2CMasterControl::I2C_CLOCK_HZ);
+            Wire.setSdaHold(I2C_SDA_HOLD_US);   // erst nach setClock: die Haltezeit wird an die Halbperiode geklemmt
             I2CMasterControl::disable();
         }
     };
