@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include "IQuoteStore.h"
 #include "QuoteList.h"
 
 namespace QuotePaths
@@ -23,15 +24,18 @@ public:
     virtual bool remove(const char* path) = 0;
 };
 
-class QuoteStore
+// Erste Zeile ohne Zeilenende-Zeichen und ohne Leerzeichen am Rand; gemeinsam fuer Flash- und FRAM-Speicher
+std::string firstLineTrimmed(const std::string& content);
+
+class QuoteStore : public IQuoteStore
 {
 public:
     explicit QuoteStore(IFileSystem& fs);
 
     // Liest die Liste; steigt bei Bedarf von /text.txt um
-    QuoteList load();
+    QuoteList load() override;
     // Schreibt atomar ueber eine Temp-Datei
-    bool save(const QuoteList& list);
+    bool save(const QuoteList& list) override;
 
 private:
     IFileSystem& fs_;

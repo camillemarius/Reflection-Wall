@@ -1,20 +1,17 @@
 #include "QuoteStore.h"
 
-namespace
+// Erste Zeile ohne \r und ohne Leerzeichen am Rand
+std::string firstLineTrimmed(const std::string& content)
 {
-    // Erste Zeile ohne \r und ohne Leerzeichen am Rand
-    std::string firstLineTrimmed(const std::string& content)
+    std::string line = content.substr(0, content.find('\n'));
+    const char* blanks = " \t\r";
+    std::size_t begin = line.find_first_not_of(blanks);
+    if (begin == std::string::npos)
     {
-        std::string line = content.substr(0, content.find('\n'));
-        const char* blanks = " \t\r";
-        std::size_t begin = line.find_first_not_of(blanks);
-        if (begin == std::string::npos)
-        {
-            return "";
-        }
-        std::size_t end = line.find_last_not_of(blanks);
-        return line.substr(begin, end - begin + 1);
+        return "";
     }
+    std::size_t end = line.find_last_not_of(blanks);
+    return line.substr(begin, end - begin + 1);
 }
 
 QuoteStore::QuoteStore(IFileSystem& fs) : fs_(fs)
