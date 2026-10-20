@@ -46,21 +46,12 @@ QuoteList FramQuoteStore::load()
             refuseSave_ = true;
             return list;
         }
-        // Ergebnisse egal: Eine uebrig gebliebene Datei wird beim naechsten Start
-        // noch einmal mit demselben Ergebnis uebernommen.
-        const bool wasMailbox = mailbox_.exists(QuotePaths::QUOTES);
-        if (wasMailbox)
-        {
-            mailbox_.remove(QuotePaths::QUOTES);
-        }
-        else
-        {
-            mailbox_.remove(QuotePaths::LEGACY);
-        }
-        if (mailbox_.exists(QuotePaths::TEMP))
-        {
-            mailbox_.remove(QuotePaths::TEMP);
-        }
+        // Der Briefkasten ersetzt auch ein altes /text.txt, sonst wuerde es beim naechsten
+        // Start ueber die neue Liste importiert. Ergebnisse egal: Eine uebrig gebliebene
+        // Datei wird beim naechsten Start noch einmal mit demselben Ergebnis uebernommen.
+        mailbox_.remove(QuotePaths::QUOTES);
+        mailbox_.remove(QuotePaths::LEGACY);
+        mailbox_.remove(QuotePaths::TEMP);
         info_.imported = true;
         return list;
     }
