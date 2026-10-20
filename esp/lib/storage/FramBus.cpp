@@ -53,7 +53,7 @@ bool FramBus::read(uint16_t address, uint8_t* out, std::size_t length)
         if (Wire.endTransmission(false) != 0)
             return false;
 
-        if (Wire.requestFrom(ADDRESS, n) != n)
+        if (Wire.requestFrom(ADDRESS, static_cast<uint8_t>(n)) != n)
             return false;
 
         for (std::size_t i = 0; i < n; ++i)

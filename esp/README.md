@@ -49,9 +49,9 @@ Die Liste steht doppelt im FRAM, in zwei Plätzen. Ein Platz ist ein Bereich von
 
 **Briefkasten:** Eine `/quotes.txt` im Flash (LittleFS) übernimmt der ESP beim nächsten Lesen einmal ins FRAM und löscht sie danach. Dabei löscht er auch `/quotes.new` und eine alte `/text.txt`. Eine leere `/text.txt` wird ignoriert.
 
-**Liste laden:** Datei nach `data/quotes.txt` legen, `pio run -t uploadfs`, dann BT1 drücken. Danach `data/quotes.txt` wieder entfernen.
+**Liste laden:** Datei nach `data/quotes.txt` legen, `pio run -t uploadfs`, dann BT1 drücken.
 
-**Achtung:** Bleibt die Datei in `data/` liegen, ersetzt sie beim nächsten `uploadfs` die Liste, die die KI geschrieben hat. Darum bleibt `data/` normalerweise leer (nur `.gitkeep`). Eine Beispielliste liegt in `data-beispiel/quotes.txt`.
+**Achtung:** Entferne `data/quotes.txt` danach wieder. Sonst ersetzt die Datei beim nächsten `uploadfs` die Liste, die die KI geschrieben hat. Darum bleibt `data/` normalerweise leer (nur `.gitkeep`). Eine Beispielliste liegt in `data-beispiel/quotes.txt`.
 
 Der Bus läuft mit 10 kHz und einer SDA-Haltezeit (Hold) von 10 µs. Die Haltezeit ist die Zeit, die der ESP SDA ruhig hält, nachdem SCL gefallen ist. Nur das FRAM wird mit 100 kHz angesprochen (`FramBus::CLOCK_HZ`). Das geschieht in Stücken von 30 Byte. Danach stellt der ESP den Takt wieder auf 10 kHz und die Haltezeit auf 10 µs. Gemessen wurde: Das Lesen von 30 Zitaten (2730 Byte) dauert 0,56 s.
 

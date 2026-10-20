@@ -28,7 +28,7 @@ Application::Application()
 
 namespace
 {
-    // Die Zitatliste steht im FRAM (FramQuoteStore). Mit FRAM_INSTALLED = false
+    // Die Zitatliste steht im FRAM (FramQuoteStore). Mit FRAM_INSTALLED = true
     // steht sie in /quotes.txt im LittleFS (QuoteStore). Ist die Liste leer
     // oder nicht lesbar, zeigt die Wand diesen Hinweis statt dunkel zu bleiben.
     constexpr char NO_TEXT[] = "KEIN TEXT";
@@ -372,22 +372,24 @@ void Application::showQuote(WallAction action)
     if (!_fs.begin())
         DebugSerial.println("[WALL] FEHLER: Dateisystem laesst sich nicht einbinden");
 
-    const uint32_t loadStart = millis();
+    // Zeit nur messen, wenn das FRAM die Liste liefert.
+    const uint32_t loadStart = FRAM_INSTALLED ? millis() : 0;
     const QuoteList list = quotes().load();
-    const uint32_t loadMs = millis() - loadStart;
 
     if (FRAM_INSTALLED)
     {
+        const uint32_t loadMs = millis() - loadStart;
         const FramLoadInfo& info = _framQuotes.lastLoad();
         if (info.busError)
             DebugSerial.println("[QUOTES] FEHLER: FRAM 0x50 nicht lesbar");
+        else if (info.imported)
+            DebugSerial.printf("[QUOTES] Liste aus dem Flash ins FRAM uebernommen: %u Bytes in %u ms\n",
+                               (unsigned)info.bytes, (unsigned)loadMs);
+        else if (info.importFailed)
+            DebugSerial.println("[QUOTES] FEHLER: Uebernahme ins FRAM gescheitert (FRAM 0x50 nicht beschreibbar oder Liste zu lang), Liste aus dem Flash angezeigt, Datei bleibt");
         else
             DebugSerial.printf("[QUOTES] FRAM: %u Bytes in %u ms gelesen\n",
                                (unsigned)info.bytes, (unsigned)loadMs);
-        if (info.imported)
-            DebugSerial.println("[QUOTES] Liste aus dem Flash ins FRAM uebernommen");
-        if (info.importFailed)
-            DebugSerial.println("[QUOTES] FEHLER: Uebernahme ins FRAM gescheitert, Datei bleibt");
     }
 
     std::string text;
