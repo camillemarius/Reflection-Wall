@@ -41,6 +41,12 @@ Nach dem Einschalten (Kaltstart, auch nach dem ersten Flashen) schaltet der ESP 
 - **Radar-Schalter:** `RADAR_INSTALLED` in `lib/app/application.cpp` steht auf `false`, solange kein Radar angeschlossen ist. Ohne Radar liest GPIO13 durch den Pull-up dauerhaft HIGH; die Firmware ignoriert INT_HLK dann, und die Wand geht nur mit BT1 an und nach 60 s wieder aus. Nach dem Anschliessen des Radars muss der Schalter auf `true` gesetzt werden.
 - **Ausschalten:** die Anzeige wird dunkel geschaltet (HT16K33 Display-off), der Inhalt bleibt in den Modulen erhalten. Der Zustand (aus / an / wird geschrieben) liegt im RTC-Speicher; bricht ein Durchlauf beim Schreiben ab, schreibt der nächste genau dasjenige Zitat neu, das beim abgebrochenen Durchlauf gewählt war (Index und Datum werden vor dem Schreiben im RTC-Speicher abgelegt).
 
+## Zitate im FRAM
+
+Mit `FRAM_INSTALLED = true` (`lib/app/application.cpp`) liegt die Zitatliste im FRAM MB85RC256V auf 0x50 (`FramBus`, `FramQuoteStore`). Das FRAM wird mit 100 kHz gelesen und beschrieben; danach steht der Bus wieder auf 10 kHz. Die Liste liegt in Plätzen mit Prüfsumme (Spezifikation Abschnitt 11). Eine `/quotes.txt` im Flash dient als Briefkasten: Beim nächsten Lesen übernimmt der ESP sie ins FRAM und löscht sie im Flash.
+
+Liste laden: Datei nach `data/quotes.txt` legen, `pio run -t uploadfs`, dann BT1 drücken. Achtung: Das ersetzt die Zitate, die die KI geschrieben hat. Eine Beispielliste liegt in `data-beispiel/` (ab Task 4). Mit `FRAM_INSTALLED = false` gilt wieder der Abschnitt unten.
+
 ## Zitatliste im Flash
 
 Die Zitate stehen in `/quotes.txt` im LittleFS des ESP (`lib/storage`, `lib/core`), höchstens 30, das neueste zuerst. Pro Zeile ein Zitat im Format `JJJJ-MM-TT|Text`; ein Eintrag ohne Datum wird `|Text` geschrieben. Eine Zeile ohne `|` wird übersprungen. Leerzeichen und Tabs am Rand von Datum und Text werden entfernt; ein Datum mit mehr als 10 Zeichen wird verworfen (der Eintrag bleibt, ohne Datum). Die erste Liste legt man in `data/quotes.txt` ab und lädt sie einmal hoch:
@@ -78,7 +84,7 @@ pio test -e native
 | Adresse | Teilnehmer |
 |---|---|
 | 0x20 | PCF8575 GPIO-Expander (Taster) |
-| 0x50 | FRAM (Textspeicher, optional) |
+| 0x50 | FRAM MB85RC256V (Zitatliste) |
 | 0x70–0x77 | Anzeigen Zeile 1–3, direkt am Bus |
 | 0x7F | Zeile 3, Spalte 3 – hinter LTC4316 A (nativ 0x77) |
 | 0x79, 0x7B, 0x7D | Zeile 4 – hinter LTC4316 B (nativ 0x71, 0x73, 0x75) |
@@ -96,7 +102,7 @@ lib/Wire/                 eigene Software-I²C (ersetzt die Core-Bibliothek, sie
 lib/gpioExpander/         Taster-Auswertung (Flanken, Pegel)
 lib/system/               Weckgrund, Zustand im RTC-Speicher
 lib/core/                 Zitatliste, Zitatspeicher, Wand-Regeln (ohne Arduino, Tests auf dem PC)
-lib/storage/              LittleFS-Anbindung der Zitatliste (LittleFsAdapter), Textspeicher ESP bzw. FRAM
+lib/storage/              LittleFS-Anbindung (LittleFsAdapter), FRAM-Bus (FramBus), alter Textspeicher ESP bzw. FRAM
 data/quotes.txt           Zitatliste für pio run -t uploadfs
 lib/communication/        UART-Protokoll zum Raspberry Pi (COMMAND|DATA)
 lib/ota/                  WLAN, OTA, Debug-Logger (Telnet)
