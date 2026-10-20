@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <Wire.h>
 #include <cstddef>
 #include <cstdint>
 
@@ -13,7 +14,10 @@ class FramBus : public IByteStore
 {
 public:
     static constexpr uint8_t ADDRESS = 0x50;
-    static constexpr std::size_t CHUNK = 32;
+    // Datenbytes je Uebertragung: Der Puffer der eigenen Wire (lib/Wire) fasst
+    // BUFFER_LENGTH = 32 Bytes, davon gehen 2 Adressbytes ab.
+    static constexpr std::size_t CHUNK = 30;
+    static_assert(CHUNK + 2 <= BUFFER_LENGTH, "CHUNK + 2 Adressbytes passen nicht in den Wire-Puffer");
     static constexpr uint32_t CLOCK_HZ = 100000;   // nur fuer das FRAM
     static constexpr std::size_t SIZE = 0x8000;
 
