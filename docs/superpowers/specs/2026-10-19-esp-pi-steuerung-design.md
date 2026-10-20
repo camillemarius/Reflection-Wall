@@ -445,6 +445,8 @@ Liste liegt, entscheidet der Schalter `FRAM_INSTALLED` in der Firmware (F1-a).
   Der ESP holt sich den Bus dafür mit GPIO15 (F7) und taktet ihn für das FRAM
   mit 100 kHz statt 10 kHz. Gemessen 2026-10-20 mit 3,3 KB: Schreiben 0,42 s,
   Lesen 0,43 s (bei 10 kHz 4,4 s; bei 400 kHz 0,1 s, mit den Anzeigen nicht geprüft).
+  Abnahme 2026-10-20 mit der Firmware (Stücke zu 30 Bytes, eigene Wire): 30 Zitate,
+  2730 Bytes, in 0,56 s gelesen; die Übernahme aus dem Briefkasten dauerte 0,61 s.
 - **Zwei Plätze** A und B zu je 4 KB. Jeder Platz beginnt mit einem Kopf:
   Kennung, laufende Nummer, Länge der Liste, CRC-32 über Nummer, Länge und
   Liste. Danach folgt die Liste im Textformat oben.
@@ -458,7 +460,7 @@ Liste liegt, entscheidet der Schalter `FRAM_INSTALLED` in der Firmware (F1-a).
   die Liste ins FRAM und löscht danach die Datei. Fällt der Strom dazwischen
   aus, übernimmt er dieselbe Datei beim nächsten Start noch einmal. Dasselbe gilt
   für `/text.txt` (Umstieg wie unten). `esp/data/` im Repo bleibt leer; eine
-  Liste zum Hochladen liegt als Beispiel daneben.
+  Liste zum Hochladen liegt als Beispiel in `esp/data-beispiel/quotes.txt`.
 - **Lesefehler am Bus:** Die Wand zeigt `KEIN TEXT`, und der ESP schreibt in
   diesem Durchlauf nichts in die Liste.
 
@@ -575,7 +577,6 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | BT4–BT6 | ohne Flipflop | nur bei Bedarf in der Hardware nachrüsten |
 | Pi per Taste bedienen | Bis Teil 4 warten die Pi-Anwendungen auf ENTER; ein per BT2 gestarteter Pi lässt sich nur über SSH bedienen (S2-a) | Teil 4 |
 | Nachlaufzeit des Radars | Werkseinstellung etwa 60 s, nicht gemessen; bestimmt, wie lange die Wand nach dem Gehen an bleibt | im Radar-Debug messen und einstellen |
-| FRAM mit 100 kHz | gemessen nur 5 Durchläufe pro Takt (2026-10-20), alle fehlerfrei | Abnahme von Teil 3a-2 mit einer Liste von 30 Zitaten; Ladezeit hier eintragen |
 | Boot-Modus 7 nach dem Bestücken | Nach dem Bestücken des FRAM (2026-10-20) antworteten die Anzeigen nicht, und der ESP startete bei jedem Reset mit `boot mode:(7,7)` (GPIO15 HIGH). Ein vollständiger Stromunterbruch hat beides behoben; die Ursache ist unbekannt | tritt es wieder auf: Spannung an GPIO15 im Reset messen, Speisung des Pi und der Anzeigen prüfen |
 | Flipflops ohne Strom, ESP mit Strom | Speist der Flasher den ESP weiter, während die Platine keinen Strom hat, laufen die Flipflops von BT1–BT3 in einem anderen Zustand an. Der ESP liest das als Tastendruck (beobachtet: BT2 schaltete die Speisung des Pi um) | nur in der Entwicklung mit Flasher; beobachten |
 
