@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Die Zitatliste kann im FRAM liegen. Sie liegt dort auf zwei Plätzen, damit ein Reset mitten im Schreiben die alte Liste nicht zerstört. Eine `/quotes.txt` im Flash wird einmal ins FRAM übernommen und danach gelöscht. Weil das FRAM noch nicht bestückt ist, bleibt der Schalter `FRAM_INSTALLED` auf `false`, und am Gerät läuft alles wie heute aus dem Flash.
+**Goal:** Die Zitatliste kann im FRAM liegen. Sie liegt dort auf zwei Plätzen, damit ein Reset mitten im Schreiben die alte Liste nicht zerstört. Eine `/quotes.txt` im Flash wird einmal ins FRAM übernommen und danach gelöscht. Das FRAM ist seit 2026-10-20 bestückt; der Schalter `FRAM_INSTALLED` steht auf `true`. Mit `false` läuft die Firmware wie heute aus dem Flash.
 
 **Architecture:** Das Format der Plätze, die Prüfsumme und der Briefkasten sind reines C++ ohne Arduino in `esp/lib/core` und werden auf dem PC mit einem nachgebildeten FRAM getestet. Die Firmware bindet sie mit einem dünnen I²C-Adapter an das MB85RC256V und wählt über `FRAM_INSTALLED` zwischen FRAM und dem bestehenden Flash-Speicher. Das Zitat der Nacht (P1-a, RTC-Feld `nightQuote`) gehört zu Teil 3b und ist nicht Teil dieses Plans.
 
 **Tech Stack:** ESP8266 Arduino-Core über PlatformIO (`env:esp12e`), Wire (I²C), LittleFS, Unity-Tests in der PlatformIO-Umgebung `native` mit MinGW GCC 6.3.
 
-**Spec:** `docs/superpowers/specs/2026-10-19-esp-pi-steuerung-design.md` – Abschnitt 2 (P1-a bis F1-a), 11 (Liste der Zitate, FRAM, Flash), 15 (FRAM nicht bestückt, I²C mit 10 kHz), 16 (Teil 3a-2).
+**Spec:** `docs/superpowers/specs/2026-10-19-esp-pi-steuerung-design.md` – Abschnitt 2 (P1-a bis F1-a und die zwei Zeilen danach), 11 (Liste der Zitate, FRAM, Flash), 15 (FRAM mit 100 kHz), 16 (Teil 3a-2).
 
 ## Global Constraints
 
@@ -21,18 +21,19 @@
 - Schreiben: in den anderen Platz als den massgeblichen (keiner gültig → Platz A), Nummer = massgebliche Nummer + 1 (keiner gültig → 1). **Erst die Liste, dann der Kopf.**
 - Briefkasten (P3-b): Liegt `/quotes.txt` im Flash, wird ihr Inhalt ins FRAM geschrieben und danach `/quotes.txt` gelöscht, ebenso ein übriggebliebenes `/quotes.new`. Fehlt `/quotes.txt`, gilt dasselbe für `/text.txt` (erste Zeile, ohne Datum, wie im heutigen Umstieg). **Keine Datei → das FRAM bleibt unverändert. Eine leere Datei → die Liste im FRAM wird leer.**
 - Lesefehler am Bus → leere Liste (die Wand zeigt `KEIN TEXT`), und `save()` verweigert in diesem Durchlauf.
-- `FRAM_INSTALLED = false` als `constexpr bool` neben `RADAR_INSTALLED` in `esp/lib/app/application.cpp`. Mit `false` verhält sich die Firmware **genau wie heute**.
-- Die I²C-Taktrate bleibt **10 kHz** (`I2CMasterControl::I2C_CLOCK_HZ`). Jeder Buszugriff wird mit `I2CMasterControl::enable()` / `disable()` geklammert.
-- `esp/data/quotes.txt` bleibt, solange `FRAM_INSTALLED = false` ist.
+- `FRAM_INSTALLED = true` als `constexpr bool` neben `RADAR_INSTALLED` in `esp/lib/app/application.cpp`. Mit `false` verhält sich die Firmware **genau wie heute**.
+- Für FRAM-Zugriffe taktet `FramBus` den Bus mit **100 kHz** (`FramBus::CLOCK_HZ = 100000`) und stellt danach auf jedem Weg wieder `I2CMasterControl::I2C_CLOCK_HZ` (10 kHz) ein. Alle anderen Zugriffe bleiben bei 10 kHz. Jeder Buszugriff wird mit `I2CMasterControl::enable()` / `disable()` geklammert.
+- Gemessen 2026-10-20 mit 3,3 KB bei 100 kHz: Schreiben 415 ms, Lesen 429 ms, 5 von 5 fehlerfrei.
+- `esp/data/quotes.txt` bleibt, bis die Liste am Gerät ins FRAM übernommen ist (Task 4).
 - Die alten Dateien `esp/lib/storage/textStorage.*`, `framTextStorage.*`, `espTextStorage.*`, `ITextStorage.h` **nicht anfassen**: Die alte Pi-Kommunikation nutzt sie bis Teil 1.
 
 ## Review Focus
 
-1. **Watchdog:** Eine volle Liste (3,2 KB) braucht bei 10 kHz gut 3 s am Bus. Ohne `yield()` zwischen den Stücken setzt der Watchdog den ESP zurück. → Kein PC-Test möglich; der Adapter in Task 3 ruft `yield()` nach jedem Stück, die Prüfung am Gerät in Task 4 misst die Zeit.
+1. **Watchdog und Taktrate:** Eine volle Liste braucht bei 100 kHz etwa 0,4 s am Bus, bei versehentlich 10 kHz über 4 s. Ohne `yield()` zwischen den Stücken setzt der Watchdog den ESP zurück, und ein vergessenes Zurückstellen des Takts liesse die Anzeigen mit 100 kHz laufen. → Kein PC-Test möglich; der Adapter in Task 3 ruft `yield()` nach jedem Stück und stellt den Takt auf jedem Weg zurück; Task 4 misst die Zeit am Gerät.
 2. **I²C-Puffer:** Der Wire-Puffer des ESP8266 fasst 128 Bytes. Ein Stück darf mit den 2 Adressbytes nicht darüber liegen. → Der Adapter in Task 3 überträgt Stücke von **32 Bytes**.
 3. **Reset mitten im Schreiben:** Die alte Liste muss gültig bleiben. → Test `test_interrupted_write_keeps_previous_list` in Task 1.
 4. **`uploadfs` ohne Datei:** Ein Hochladen ohne `quotes.txt` darf die Liste im FRAM nicht löschen; eine leere `quotes.txt` dagegen leert sie. → Tests `test_load_without_mailbox_keeps_fram_list` und `test_load_imports_empty_mailbox_file` in Task 2.
-5. **Bus bleibt belegt:** Bricht ein Lese- oder Schreibvorgang ab, muss der Adapter den Bus trotzdem freigeben (`disable()` auf jedem Weg). → Prüfpunkt im Review von Task 3.
+5. **Bus bleibt belegt:** Bricht ein Lese- oder Schreibvorgang ab, muss der Adapter den Bus trotzdem freigeben (`disable()` und Takt zurück auf jedem Weg). → Prüfpunkt im Review von Task 3.
 
 ---
 
@@ -200,7 +201,7 @@ Expected: alle Tests PASSED.
 **Files:**
 - Create: `esp/lib/storage/FramBus.h`, `esp/lib/storage/FramBus.cpp`
 - Modify: `esp/lib/app/application.h` (Mitglieder), `esp/lib/app/application.cpp` (Schalter, `showQuote`, Log)
-- Modify: `esp/README.md` (I²C-Tabelle: FRAM „noch nicht bestückt“; Abschnitt „Zitate im FRAM“ mit den Schritten zum Umstellen)
+- Modify: `esp/README.md` (I²C-Tabelle: FRAM nicht mehr „optional“; Abschnitt „Zitate im FRAM“)
 
 **Interfaces:**
 - Consumes: `IByteStore`, `FramQuoteStore`, `FramLoadInfo`, `IQuoteStore` (Task 1, 2); `I2CMasterControl::enable()` / `disable()`.
@@ -210,6 +211,7 @@ Expected: alle Tests PASSED.
   public:
       static constexpr uint8_t ADDRESS = 0x50;
       static constexpr std::size_t CHUNK = 32;
+      static constexpr uint32_t CLOCK_HZ = 100000;   // nur fuer das FRAM
       bool read(uint16_t address, uint8_t* out, std::size_t length) override;
       bool write(uint16_t address, const uint8_t* data, std::size_t length) override;
   };
@@ -217,11 +219,11 @@ Expected: alle Tests PASSED.
 
 - [ ] **Step 1: `FramBus` umsetzen**
 
-Zugriffe ausserhalb `0x0000`–`0x7FFF` → `false`. Jeder Aufruf: `enable()`, dann Stücke zu höchstens `CHUNK` Bytes (Schreiben: Adresse + Daten in einer Übertragung; Lesen: Adresse senden mit `endTransmission(false)`, dann `requestFrom`), nach jedem Stück `yield()`, am Ende auf **jedem** Weg `disable()`. Gescheitertes `endTransmission` oder zu wenig Bytes → `false`.
+Zugriffe ausserhalb `0x0000`–`0x7FFF` → `false`. Jeder Aufruf: `enable()`, `Wire.setClock(CLOCK_HZ)`, dann Stücke zu höchstens `CHUNK` Bytes (Schreiben: Adresse + Daten in einer Übertragung; Lesen: Adresse senden mit `endTransmission(false)`, dann `requestFrom`), nach jedem Stück `yield()`, am Ende auf **jedem** Weg `Wire.setClock(I2CMasterControl::I2C_CLOCK_HZ)` und `disable()`. Gescheitertes `endTransmission` oder zu wenig Bytes → `false`.
 
 - [ ] **Step 2: Anwendung umstellen**
 
-- `constexpr bool FRAM_INSTALLED = false;` direkt unter `RADAR_INSTALLED`, mit Kommentar: FRAM noch nicht bestückt; auf `true` nach dem Bestücken (siehe README).
+- `constexpr bool FRAM_INSTALLED = true;` direkt unter `RADAR_INSTALLED`, mit Kommentar: MB85RC256V auf 0x50; mit `false` liegt die Liste wie früher in `/quotes.txt` im Flash.
 - Mitglieder in dieser Reihenfolge: `LittleFsAdapter _fs; FramBus _framBus; QuoteStore _flashQuotes; FramQuoteStore _framQuotes;` und eine private Methode `IQuoteStore& quotes();`, die je nach `FRAM_INSTALLED` einen der beiden zurückgibt.
 - `showQuote`: `_fs.begin()` wie bisher, dann `quotes().load()`. Ist `FRAM_INSTALLED`, die Ladezeit messen und loggen:
   - `[QUOTES] FRAM: <bytes> Bytes in <ms> ms gelesen`
@@ -232,25 +234,21 @@ Zugriffe ausserhalb `0x0000`–`0x7FFF` → `false`. Jeder Aufruf: `enable()`, d
 
 - [ ] **Step 3: README nachziehen**
 
-Abschnitt „Zitate im FRAM“: Plätze und Briefkasten in zwei Sätzen, Verweis auf Spezifikation Abschnitt 11. Schritte nach dem Bestücken: (1) `FRAM_INSTALLED = true`, flashen; (2) BT1 drücken – der ESP übernimmt die Liste aus dem Flash, Log „uebernommen“; (3) `esp/data/quotes.txt` nach `esp/data-beispiel/quotes.txt` verschieben, damit ein späteres `uploadfs` die Liste der KI nicht ersetzt.
+Abschnitt „Zitate im FRAM“: Plätze, 100 kHz und Briefkasten in wenigen Sätzen, Verweis auf Spezifikation Abschnitt 11. Wie man eine Liste lädt: Datei nach `esp/data/quotes.txt` legen, `pio run -t uploadfs`, BT1 – der ESP übernimmt sie und löscht sie im Flash; Achtung, das ersetzt die Zitate der KI. Eine Beispielliste liegt in `esp/data-beispiel/` (ab Task 4).
 
 - [ ] **Step 4: Prüfen**
 
 Run: `cd esp && pio test -e native` → alle PASSED. `pio run` → SUCCESS ohne neue Warnungen.
-Zusätzlich einmal mit `FRAM_INSTALLED = true` übersetzen (`pio run`, danach zurück auf `false`), damit der FRAM-Zweig sicher kompiliert.
+Zusätzlich einmal mit `FRAM_INSTALLED = false` übersetzen (`pio run`, danach zurück auf `true`), damit der Flash-Zweig sicher kompiliert.
 
-- [ ] **Step 5: Gerät, Schalter aus (mit dem Owner)** – flashen; BT1 bei dunkler Wand zeigt das Zitat wie bisher, Log `[WALL] neuestes -> #0 ...`, kein `[QUOTES]`-Eintrag. Nach etwa 1 Minute `[WALL] aus`.
-
-- [ ] **Step 6: Commit** – „FRAM-Anbindung mit Schalter FRAM_INSTALLED (noch aus)“
+- [ ] **Step 5: Commit** – „FRAM-Anbindung mit Schalter FRAM_INSTALLED, Bus fuer das FRAM mit 100 kHz“
 
 ---
 
-### Task 4: Abnahme mit FRAM (erst nach dem Bestücken)
+### Task 4: Abnahme am Gerät mit FRAM (mit dem Owner)
 
-Dieser Task bleibt offen, bis das FRAM bestückt ist. Er gehört nicht zum Abschluss dieses Branches.
-
-- [ ] **Step 1:** Scan: das FRAM antwortet auf 0x50.
-- [ ] **Step 2:** `FRAM_INSTALLED = true`, flashen, BT1. Erwartet: Log „uebernommen“, das Zitat erscheint, `/quotes.txt` ist danach im Flash gelöscht.
-- [ ] **Step 3:** Strom aus und wieder an, BT1. Erwartet: dasselbe Zitat, Log `FRAM: … Bytes in … ms gelesen`. Die Zeit in Spezifikation Abschnitt 15 eintragen.
-- [ ] **Step 4:** Liste mit 30 Zitaten über den Briefkasten laden, Ladezeit messen. Liegt sie über etwa 1 s, mit dem Owner entscheiden, ob der Bus für das FRAM schneller laufen soll (Messung wie im FRAM-Messaufbau bei 10, 100 und 400 kHz).
-- [ ] **Step 5:** `esp/data/quotes.txt` nach `esp/data-beispiel/` verschieben (README Schritt 3), committen.
+- [ ] **Step 1: Übernahme** – flashen. Auf dem Gerät liegt noch `/quotes.txt` aus Teil 3a. BT1 bei dunkler Wand. Erwartet: Log `[QUOTES] Liste aus dem Flash ins FRAM uebernommen`, das Zitat erscheint, `[WALL] neuestes -> #0 ...`.
+- [ ] **Step 2: Aus dem FRAM** – Wand ausgehen lassen, BT1. Erwartet: dasselbe Zitat, Log `[QUOTES] FRAM: … Bytes in … ms gelesen`, keine Übernahme mehr (die Datei im Flash ist weg).
+- [ ] **Step 3: Stromunterbruch** – Speisung **und** Flasher trennen, wieder anschliessen, BT1. Erwartet: dasselbe Zitat aus dem FRAM.
+- [ ] **Step 4: Volle Liste** – 30 Zitate nach `esp/data/quotes.txt`, `uploadfs`, BT1, dann BT1 weiterschalten (1 → 2 → …). Erwartet: Übernahme, Durchschalten wie in Teil 3a; Ladezeit aus dem Log in Spezifikation Abschnitt 15 eintragen (Zeile „FRAM mit 100 kHz“ schliessen).
+- [ ] **Step 5: Startliste zurück** – `esp/data/quotes.txt` mit der Startliste aus Teil 3a (ein Zitat) hochladen, BT1, Übernahme prüfen. Danach die Datei nach `esp/data-beispiel/quotes.txt` verschieben, damit `esp/data/` leer ist (P3-b), README-Verweis prüfen, committen.
