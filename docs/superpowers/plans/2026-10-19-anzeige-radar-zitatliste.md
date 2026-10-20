@@ -1,5 +1,7 @@
 # Teil 3a: Anzeige, Radar und Zitatliste – Umsetzungsplan
 
+**Stand 2026-10-20:** umgesetzt (PR #1). Offen: Abnahme mit Radar (Task 5, Schritte 4 und 6), sobald das Radar angeschlossen ist.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Die Wand ist dunkel, bis das Radar jemanden erkennt oder BT1 gedrückt wird; dann zeigt sie das neueste Zitat aus einer Liste im Flash, BT1 schaltet bei leuchtender Wand weiter, und der ESP schaltet die Anzeige aus, sobald niemand mehr da ist und die BT1-Minute vorbei ist.

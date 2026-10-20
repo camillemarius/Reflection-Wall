@@ -1,5 +1,7 @@
 # Teil 3a-2: Zitate im FRAM – Umsetzungsplan
 
+**Stand 2026-10-20:** umgesetzt und am Gerät abgenommen (PR #1).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Die Zitatliste kann im FRAM liegen. Sie liegt dort auf zwei Plätzen, damit ein Reset mitten im Schreiben die alte Liste nicht zerstört. Eine `/quotes.txt` im Flash wird einmal ins FRAM übernommen und danach gelöscht. Das FRAM ist seit 2026-10-20 bestückt; der Schalter `FRAM_INSTALLED` steht auf `true`. Mit `false` läuft die Firmware wie heute aus dem Flash.
