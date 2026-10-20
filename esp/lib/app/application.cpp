@@ -13,7 +13,9 @@ Application::Application()
       _display(),
       _pi(_uart, _storage, _display),
       _fs(),
-      _quotes(_fs),
+      _framBus(),
+      _flashQuotes(_fs),
+      _framQuotes(_framBus, _fs),
       _gpioExpander(0x20),
       _inputs(_gpioExpander),
       _wakeupReason(WakeupReason::Reason::UNKNOWN),
@@ -27,7 +29,8 @@ Application::Application()
 
 namespace
 {
-    // Die Zitate stehen in /quotes.txt im LittleFS (QuoteStore).
+    // Die Zitate stehen im FRAM (FramQuoteStore); mit FRAM_INSTALLED = false
+    // in /quotes.txt im LittleFS (QuoteStore).
     // Fehlt die Datei oder ist sie leer, zeigt die Wand diesen
     // Hinweis statt dunkel zu bleiben.
     constexpr char NO_TEXT[] = "KEIN TEXT";
@@ -83,6 +86,11 @@ namespace
     // Pull-ups dauerhaft HIGH ("jemand steht davor"). Auf false ignoriert die
     // Firmware INT_HLK: die Wand geht nur mit BT1 an und nach 60 s wieder aus.
     constexpr bool RADAR_INSTALLED = false;
+
+    // FRAM (MB85RC256V auf 0x50) eingebaut? Dann liegt die Zitatliste dort,
+    // und eine /quotes.txt im Flash wird einmal ins FRAM uebernommen. Auf false
+    // liegt die Liste wie frueher in /quotes.txt im Flash.
+    constexpr bool FRAM_INSTALLED = true;
 }
 
 // ---------------------------------------------------------
@@ -362,12 +370,35 @@ void Application::ensureDisplayReady()
 // im RTC-Speicher, bevor die Module beschrieben werden: bricht
 // der Durchlauf dabei ab, schreibt der naechste dieses Zitat neu.
 
+IQuoteStore& Application::quotes()
+{
+    if (FRAM_INSTALLED)
+        return _framQuotes;
+    return _flashQuotes;
+}
+
 void Application::showQuote(WallAction action)
 {
     if (!_fs.begin())
         DebugSerial.println("[WALL] FEHLER: Dateisystem laesst sich nicht einbinden");
 
-    const QuoteList list = _quotes.load();
+    const uint32_t loadStart = millis();
+    const QuoteList list = quotes().load();
+    const uint32_t loadMs = millis() - loadStart;
+
+    if (FRAM_INSTALLED)
+    {
+        const FramLoadInfo& info = _framQuotes.lastLoad();
+        if (info.busError)
+            DebugSerial.println("[QUOTES] FEHLER: FRAM 0x50 nicht lesbar");
+        else
+            DebugSerial.printf("[QUOTES] FRAM: %u Bytes in %u ms gelesen\n",
+                               (unsigned)info.bytes, (unsigned)loadMs);
+        if (info.imported)
+            DebugSerial.println("[QUOTES] Liste aus dem Flash ins FRAM uebernommen");
+        if (info.importFailed)
+            DebugSerial.println("[QUOTES] FEHLER: Uebernahme ins FRAM gescheitert, Datei bleibt");
+    }
 
     std::string text;
     std::string date;
@@ -375,7 +406,7 @@ void Application::showQuote(WallAction action)
 
     if (list.empty())
     {
-        DebugSerial.println("[WALL] FEHLER: kein Zitat im Flash");
+        DebugSerial.println("[WALL] FEHLER: kein Zitat gespeichert");
         text = NO_TEXT;
     }
     else

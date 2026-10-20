@@ -8,6 +8,8 @@
 #include "PersistentState.h"
 #include "LittleFsAdapter.h"
 #include "QuoteStore.h"
+#include "FramQuoteStore.h"
+#include "FramBus.h"
 #include "WallLogic.h"
 
 #include "PCF8575.h"
@@ -79,9 +81,14 @@ private:
     Display _display;
     piCommunication _pi;
 
-    // Reihenfolge: _quotes haelt eine Referenz auf _fs
+    // Der aktive Zitatspeicher: FRAM oder Flash, je nach FRAM_INSTALLED
+    IQuoteStore& quotes();
+
+    // Reihenfolge: die Speicher halten Referenzen auf _fs bzw. _framBus
     LittleFsAdapter _fs;
-    QuoteStore _quotes;
+    FramBus _framBus;
+    QuoteStore _flashQuotes;
+    FramQuoteStore _framQuotes;
 
     PCF8575 _gpioExpander;
     InputManager _inputs;
