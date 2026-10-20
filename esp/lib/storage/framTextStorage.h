@@ -28,9 +28,10 @@ private:
 private:
     uint8_t _address;
 
-    // ACHTUNG: 0x0000 ist Slot A der Zitatliste (FramQuoteStore). Dieser
+    // ACHTUNG: 0x0000 ist Platz A der Zitatliste (FramQuoteStore). Dieser
     // alte Speicher darf nicht aktiv werden, sonst ueberschreibt er die Liste.
-    // Er wird in Teil 1 (ESP-Pi-Protokoll) ersetzt.
+    // Er wird in Teil 1 der Umsetzung (neue Verbindung
+    // zwischen ESP und Pi, siehe Spezifikation Abschnitt 16) ersetzt.
     static constexpr uint16_t TEXT_ADDRESS = 0x0000;
     static constexpr uint16_t MAX_TEXT_LENGTH = 1024;
 };
