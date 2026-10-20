@@ -19,8 +19,8 @@ Speisung trennt. Der Pi wird für zwei Dinge gebraucht:
 - **Von Hand:** Du schaltest ihn mit einer Taste ein und löst etwas aus,
   zum Beispiel ein Gespräch mit der KI.
 - **Um Mitternacht:** Der ESP schaltet ihn selbst ein, lässt die KI einen neuen
-  Text schreiben, speichert ihn im FRAM und schaltet den Pi wieder ab. Bis das
-  FRAM bestückt ist, liegt die Liste im Flash (F1-a).
+  Text schreiben, speichert ihn im FRAM und schaltet den Pi wieder ab. Mit dem
+  Schalter `FRAM_INSTALLED = false` liegt die Liste stattdessen im Flash (F1-a).
 
 Die Wand zeigt diesen Text, wenn jemand davorsteht oder BT1 gedrückt wird.
 Sonst ist sie dunkel.
@@ -65,6 +65,8 @@ Pi nimmt keinen Schaden, und keine Nachricht geht unbemerkt verloren.
 | P3-b | Der Flash dient als Briefkasten: Liegt dort `/quotes.txt`, übernimmt der ESP die Liste ins FRAM und löscht die Datei. `esp/data/` im Repo bleibt leer, sobald `FRAM_INSTALLED = true` ist | 6 |
 | P4-a | Der FRAM-Speicher kommt als eigener Teil 3a-2 nach Teil 3a, vor Teil 0 und 1, nur auf dem ESP | 6 |
 | F1-a | Das FRAM ist noch nicht bestückt. Der FRAM-Speicher wird trotzdem jetzt gebaut, mit dem Schalter `FRAM_INSTALLED = false`; bis zur Bestückung läuft alles aus dem Flash | 6 |
+| — | Das FRAM ist bestückt (2026-10-20). `FRAM_INSTALLED` steht auf `true`; die Abnahme mit FRAM gehört zu Teil 3a-2 | nach Runde 6 |
+| — | Für FRAM-Zugriffe schaltet der ESP den Bus auf 100 kHz und danach zurück auf 10 kHz | nach Runde 6 |
 
 A1–A6 waren in Runde 1 als Annahmen formuliert; du hast sie bestätigt. Die
 Begründungen und Gegenprüfungen standen in den Rundendateien der
@@ -440,7 +442,9 @@ Liste liegt, entscheidet der Schalter `FRAM_INSTALLED` in der Firmware (F1-a).
 **FRAM** (`FRAM_INSTALLED = true`; P2-a, P3-b):
 
 - MB85RC256V, 32 KB, I²C-Adresse 0x50, am selben Bus wie Expander und Anzeigen.
-  Der ESP holt sich den Bus dafür mit GPIO15 (F7).
+  Der ESP holt sich den Bus dafür mit GPIO15 (F7) und taktet ihn für das FRAM
+  mit 100 kHz statt 10 kHz. Gemessen 2026-10-20 mit 3,3 KB: Schreiben 0,42 s,
+  Lesen 0,43 s (bei 10 kHz 4,4 s; bei 400 kHz 0,1 s, mit den Anzeigen nicht geprüft).
 - **Zwei Plätze** A und B zu je 4 KB. Jeder Platz beginnt mit einem Kopf:
   Kennung, laufende Nummer, Länge der Liste, CRC-32 über Nummer, Länge und
   Liste. Danach folgt die Liste im Textformat oben.
@@ -458,7 +462,7 @@ Liste liegt, entscheidet der Schalter `FRAM_INSTALLED` in der Firmware (F1-a).
 - **Lesefehler am Bus:** Die Wand zeigt `KEIN TEXT`, und der ESP schreibt in
   diesem Durchlauf nichts in die Liste.
 
-**Flash** (`FRAM_INSTALLED = false`, bis das FRAM bestückt ist; LittleFS):
+**Flash** (`FRAM_INSTALLED = false`; LittleFS):
 
 - `/quotes.txt` mit der Liste.
 - **Schreiben** immer atomar: die ganze Liste nach `/quotes.new`, dann umbenennen.
@@ -466,8 +470,8 @@ Liste liegt, entscheidet der Schalter `FRAM_INSTALLED` in der Firmware (F1-a).
 - **Umstieg:** Fehlt `/quotes.txt`, aber `/text.txt` ist da, wird dessen erste
   Zeile der einzige Eintrag (ohne Datum, gilt als ältester), danach wird
   `/text.txt` gelöscht. Fehlt beides, zeigt die Wand „KEIN TEXT“.
-- `pio run -t uploadfs` lädt `esp/data/` hoch. Bis das FRAM bestückt ist, liegt
-  dort `quotes.txt` mit der Startliste.
+- `pio run -t uploadfs` lädt `esp/data/` hoch. Solange `FRAM_INSTALLED = false`
+  ist, liegt dort `quotes.txt` mit der Startliste.
 
 ---
 
@@ -571,8 +575,9 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | BT4–BT6 | ohne Flipflop | nur bei Bedarf in der Hardware nachrüsten |
 | Pi per Taste bedienen | Bis Teil 4 warten die Pi-Anwendungen auf ENTER; ein per BT2 gestarteter Pi lässt sich nur über SSH bedienen (S2-a) | Teil 4 |
 | Nachlaufzeit des Radars | Werkseinstellung etwa 60 s, nicht gemessen; bestimmt, wie lange die Wand nach dem Gehen an bleibt | im Radar-Debug messen und einstellen |
-| FRAM nicht bestückt | am Gerät geprüft: auf 0x50–0x57 antwortet nichts; der Owner bestätigt, dass es fehlt (2026-10-19) | bestücken, `FRAM_INSTALLED = true`, Abnahme von Teil 3a-2 am Gerät |
-| I²C mit 10 kHz | Der Bus läuft absichtlich langsam (`I2CMasterControl::I2C_CLOCK_HZ`). Eine volle Liste braucht im FRAM gerechnet etwa 3 s zum Lesen; die Wand zeigt das Zitat entsprechend später | nach dem Bestücken messen, ob das FRAM schneller zuverlässig läuft (ein früherer Test lief mit 100 kHz an allen Anzeigen ohne Fehler) |
+| FRAM mit 100 kHz | gemessen nur 5 Durchläufe pro Takt (2026-10-20), alle fehlerfrei | Abnahme von Teil 3a-2 mit einer Liste von 30 Zitaten; Ladezeit hier eintragen |
+| Boot-Modus 7 nach dem Bestücken | Nach dem Bestücken des FRAM (2026-10-20) antworteten die Anzeigen nicht, und der ESP startete bei jedem Reset mit `boot mode:(7,7)` (GPIO15 HIGH). Ein vollständiger Stromunterbruch hat beides behoben; die Ursache ist unbekannt | tritt es wieder auf: Spannung an GPIO15 im Reset messen, Speisung des Pi und der Anzeigen prüfen |
+| Flipflops ohne Strom, ESP mit Strom | Speist der Flasher den ESP weiter, während die Platine keinen Strom hat, laufen die Flipflops von BT1–BT3 in einem anderen Zustand an. Der ESP liest das als Tastendruck (beobachtet: BT2 schaltete die Speisung des Pi um) | nur in der Entwicklung mit Flasher; beobachten |
 
 ---
 
@@ -584,7 +589,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | 1 | Verbindung: Codec und PiLink auf beiden Seiten, gemeinsame Testfälle, Fehler 1–5 | – |
 | 2 | Ein- und Ausschalten: PiSession, Dienst auf dem Pi, BT2 | 0, 1 |
 | 3a | Anzeige, Radar und Zitatliste (Abschnitte 8 und 11): Anzeige aus/an, Zitatliste `/quotes.txt` mit Umstieg, BT1 weiterschalten, wach bleiben solange INT_HLK HIGH | – |
-| 3a-2 | Zitate im FRAM (Abschnitt 11): FRAM-Speicher mit zwei Plätzen, Briefkasten im Flash, Schalter `FRAM_INSTALLED` | – (Abnahme am Gerät erst nach dem Bestücken) |
+| 3a-2 | Zitate im FRAM (Abschnitt 11): FRAM-Speicher mit zwei Plätzen, Briefkasten im Flash, Schalter `FRAM_INSTALLED` | – |
 | 3b | Mitternacht: WakePlan, Clock, Zitat, QuoteStore | 1, 2 |
 | 4 | Pi-Anwendungen von ENTER auf Tasten umstellen (wie in S2-a) | 2 |
 
