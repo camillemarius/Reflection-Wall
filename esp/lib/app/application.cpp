@@ -28,7 +28,7 @@ Application::Application()
 
 namespace
 {
-    // Die Zitatliste steht im FRAM (FramQuoteStore). Mit FRAM_INSTALLED = true
+    // Die Zitatliste steht im FRAM (FramQuoteStore). Mit FRAM_INSTALLED = false
     // steht sie in /quotes.txt im LittleFS (QuoteStore). Ist die Liste leer
     // oder nicht lesbar, zeigt die Wand diesen Hinweis statt dunkel zu bleiben.
     constexpr char NO_TEXT[] = "KEIN TEXT";
