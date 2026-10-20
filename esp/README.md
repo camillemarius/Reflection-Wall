@@ -15,7 +15,7 @@ pio device monitor      # serielle Konsole, 74880 Baud
 
 ## Ablauf im Normalbetrieb
 
-Es gibt keine Hauptschleife. Der ESP liegt im Deep Sleep; ein Tastendruck am PCF8575 löst über dessen INT-Ausgang einen Reset aus, ebenso der Radar (INT_HLK). `Application::run()` läuft dann einmal durch und legt den ESP wieder schlafen. Nur solange die Wand an ist, bleibt der ESP in `run()` wach und liest den Radar (siehe unten):
+Es gibt keine Hauptschleife. Der ESP liegt im Deep Sleep; ein Tastendruck am PCF8575 löst über dessen INT-Ausgang einen Reset aus, ebenso der Radar (INT_HLK). `Application::run()` läuft dann durch und legt den ESP wieder schlafen. Solange die Wand mit dem Radar an ist, bleibt der ESP in `run()` wach und liest den Radar (siehe unten). Ohne Radar legt er sich nach dem Durchlauf schlafen und wacht mit dem nächsten Reset auf:
 
 1. WLAN aus (spart Strom und Bootzeit)
 2. Weckgrund lesen
@@ -26,7 +26,7 @@ Es gibt keine Hauptschleife. Der ESP liegt im Deep Sleep; ein Tastendruck am PCF
 
 | Taster | Aktion |
 |---|---|
-| BT1 | Wand an: zeigt das neueste Zitat, bei jedem weiteren Druck das nächste in der Liste; die Wand bleibt danach 60 s an |
+| BT1 | Wand an: zeigt das neueste Zitat, bei jedem weiteren Druck das nächste in der Liste; die Wand geht 1 min nach dem letzten Druck aus |
 | BT2 | Raspberry Pi ein-/ausschalten (Puls auf das Flipflop am Relais, GPIO12) |
 | BT3–BT6 | noch nicht belegt |
 
@@ -34,7 +34,7 @@ BT1–BT3 laufen über Toggle-Flipflops (Blatt „Button Debouncing“, Jumper J
 
 ## Wand dunkel, Radar und BT1
 
-Nach dem Einschalten (Kaltstart, auch nach dem ersten Flashen) schaltet der ESP die Wand dunkel und lässt sie dunkel. Sie geht an, wenn der Radar (INT_HLK) HIGH meldet oder BT1 gedrückt wird, und zeigt dann ein Zitat aus der Liste im Flash:
+Nach dem Einschalten (Kaltstart, auch nach dem ersten Flashen) schaltet der ESP die Wand dunkel und lässt sie dunkel. Sie geht an, wenn der Radar (INT_HLK) HIGH meldet oder BT1 gedrückt wird, und zeigt dann ein Zitat aus der Liste im FRAM:
 
 - **Radar:** zeigt das neueste Zitat. Bleibt der Radar HIGH, bleibt die Wand an; der ESP bleibt dann wach und liest den Radar alle 200 ms. Fällt der Radar auf LOW, geht die Wand aus (die Regeln stehen in `lib/core/src/WallLogic.cpp`).
 - **BT1:** schaltet die Wand ein und zeigt das neueste Zitat; jeder weitere Druck zeigt das nächste in der Liste. Die Wand bleibt dann mindestens 60 s an (`BUTTON1_ON_MS`), unabhängig vom Radar.
@@ -43,21 +43,31 @@ Nach dem Einschalten (Kaltstart, auch nach dem ersten Flashen) schaltet der ESP 
 
 ## Zitate im FRAM
 
-Mit `FRAM_INSTALLED = true` (`lib/app/application.cpp`) liegt die Zitatliste im FRAM MB85RC256V auf 0x50 (`FramBus`, `FramQuoteStore`). Das FRAM wird mit 100 kHz gelesen und beschrieben; danach steht der Bus wieder auf 10 kHz. Die Liste liegt in Plätzen mit Prüfsumme (Spezifikation Abschnitt 11). Eine `/quotes.txt` im Flash dient als Briefkasten: Beim nächsten Lesen übernimmt der ESP sie ins FRAM und löscht sie im Flash.
+Die Zitatliste liegt im FRAM MB85RC256V auf 0x50 (`FRAM_INSTALLED = true` in `lib/app/application.cpp`; Code: `FramBus`, `FramQuoteStore`, `SlotStore`, `Crc32`). Das FRAM ist seit 2026-10-20 bestückt. Die Liste steht in zwei Plätzen: A bei 0x0000 und B bei 0x1000, je 4 KB mit einem Kopf von 16 Byte (Kennung, laufende Nummer, Länge, CRC-32). Geschrieben wird immer in den älteren Platz, erst die Liste, zuletzt der Kopf. Bricht ein Reset mitten im Schreiben ab, gilt die alte Liste weiter. Der Entwurf steht in `docs/superpowers/specs/2026-10-19-esp-pi-steuerung-design.md` (Abschnitt 11).
 
-Liste laden: Datei nach `data/quotes.txt` legen, `pio run -t uploadfs`, dann BT1 drücken. Danach `data/quotes.txt` wieder entfernen. Eine liegen gebliebene Datei wird beim nächsten `uploadfs` erneut hochgeladen und ersetzt die Liste, die die KI geschrieben hat. Achtung: Das ersetzt die Zitate, die die KI geschrieben hat. Eine Beispielliste liegt in `data-beispiel/quotes.txt`; `data/` bleibt sonst leer, damit ein `uploadfs` die Liste der KI nicht aus Versehen ersetzt. Mit `FRAM_INSTALLED = false` gilt wieder der Abschnitt unten.
+**Briefkasten:** Eine `/quotes.txt` im Flash (LittleFS) übernimmt der ESP beim nächsten Lesen einmal ins FRAM und löscht sie danach. Dabei löscht er auch `/quotes.new` und eine alte `/text.txt`. Eine leere `/text.txt` wird ignoriert.
 
-## Zitatliste im Flash
+**Liste laden:** Datei nach `data/quotes.txt` legen, `pio run -t uploadfs`, dann BT1 drücken. Danach `data/quotes.txt` wieder entfernen.
 
-Die Zitate stehen in `/quotes.txt` im LittleFS des ESP (`lib/storage`, `lib/core`), höchstens 30, das neueste zuerst. Pro Zeile ein Zitat im Format `JJJJ-MM-TT|Text`; ein Eintrag ohne Datum wird `|Text` geschrieben. Eine Zeile ohne `|` wird übersprungen. Leerzeichen und Tabs am Rand von Datum und Text werden entfernt; ein Datum mit mehr als 10 Zeichen wird verworfen (der Eintrag bleibt, ohne Datum). Die erste Liste legt man in `data/quotes.txt` ab und lädt sie einmal hoch:
+**Achtung:** Eine liegen gebliebene Datei ersetzt beim nächsten `uploadfs` die Liste, die die KI geschrieben hat. Darum bleibt `data/` normalerweise leer (nur `.gitkeep`). Eine Beispielliste liegt in `data-beispiel/quotes.txt`.
+
+Der Bus läuft mit 10 kHz. Nur das FRAM wird mit 100 kHz angesprochen (`FramBus::CLOCK_HZ`), in Stücken von 30 Byte; danach stehen Takt und Hold wieder auf den alten Werten. Gemessen: 30 Zitate (2730 Byte) lesen in 0,56 s.
+
+## Format der Zitatliste
+
+Höchstens 30 Zitate, das neueste zuerst. Pro Zeile ein Zitat im Format `JJJJ-MM-TT|Text`; ein Eintrag ohne Datum wird `|Text` geschrieben. Eine Zeile ohne `|` wird übersprungen. Leerzeichen und Tabs am Rand von Datum und Text werden entfernt; ein Datum mit mehr als 10 Zeichen wird verworfen (der Eintrag bleibt, ohne Datum).
+
+Die Anzeige fasst 96 Zeichen (12 Module × 8); Umlaute müssen umschrieben sein, die Segmentschrift kennt nur `A–Z`, `0–9` und `- . / : + *`. Ist ein Text länger, meldet das Log die Länge. Ist die Liste leer oder nicht lesbar, zeigt die Wand „KEIN TEXT“.
+
+## Ohne FRAM (`FRAM_INSTALLED = false`)
+
+Dann liegt die Liste in `/quotes.txt` im LittleFS des ESP (`QuoteStore`). Die erste Liste legt man in `data/quotes.txt` ab und lädt sie einmal hoch:
 
 ```bash
 pio run -t uploadfs     # überschreibt das ganze Dateisystem
 ```
 
 **Umstieg:** Gibt es noch keine `/quotes.txt`, aber die alte `/text.txt`, übernimmt die Firmware deren Text beim ersten Lesen als einziges Zitat.
-
-Die Anzeige fasst 96 Zeichen (12 Module × 8); Umlaute müssen umschrieben sein, die Segmentschrift kennt nur `A–Z`, `0–9` und `- . / : + *`. Ist ein Text länger, meldet das Log die Länge. Ist die Liste leer oder fehlt die Datei, zeigt die Wand „KEIN TEXT“.
 
 ## Tests auf dem PC
 
@@ -89,23 +99,24 @@ pio test -e native
 | 0x7F | Zeile 3, Spalte 3 – hinter LTC4316 A (nativ 0x77) |
 | 0x79, 0x7B, 0x7D | Zeile 4 – hinter LTC4316 B (nativ 0x71, 0x73, 0x75) |
 
-Takt: 10 kHz (`I2CMasterControl::I2C_CLOCK_HZ`), gemessen ~9 kHz.
+Takt: 10 kHz (`I2CMasterControl::I2C_CLOCK_HZ`), gemessen ~9 kHz, mit 10 µs SDA-Hold. Nur das FRAM läuft mit 100 kHz (`FramBus::CLOCK_HZ`).
 
 ## Aufbau
 
 ```
 src/main.cpp              ruft nur Application::run() auf
-lib/app/                  Ablauf, Taster (application.cpp), Buffer-Test (BufferTest.cpp)
+lib/app/                  Ablauf, Taster (application.cpp)
 lib/display/              Display (12 Module), DisplayGrid (Zeilenumbruch), 16-Segment-Font
 lib/drivers/              HT16K33, PCF8575, I2CMasterControl (Master-Umschaltung, Bus-Befreiung)
 lib/Wire/                 eigene Software-I²C (ersetzt die Core-Bibliothek, siehe unten)
 lib/gpioExpander/         Taster-Auswertung (Flanken, Pegel)
 lib/system/               Weckgrund, Zustand im RTC-Speicher
 lib/core/                 Zitatliste, Zitatspeicher, Wand-Regeln (ohne Arduino, Tests auf dem PC)
-lib/storage/              LittleFS-Anbindung (LittleFsAdapter), FRAM-Bus (FramBus), alter Textspeicher ESP bzw. FRAM
+lib/storage/              LittleFS-Anbindung (LittleFsAdapter), FRAM-Bus (FramBus);
+                          textStorage, espTextStorage, framTextStorage: alter Code, ersetzt in Teil 1
 data/                     Briefkasten für pio run -t uploadfs (normalerweise leer)
 data-beispiel/quotes.txt  Startliste als Beispiel zum Hochladen
-lib/communication/        UART-Protokoll zum Raspberry Pi (COMMAND|DATA)
+lib/communication/        UART-Protokoll zum Raspberry Pi (COMMAND|DATA); alter Code, ersetzt in Teil 1
 lib/ota/                  WLAN, OTA, Debug-Logger (Telnet)
 lib/config/pinMapping.h   Pinbelegung
 ```
@@ -116,20 +127,5 @@ Ersetzt die Software-I²C des ESP8266-Cores und hat Vorrang vor ihr. Unterschied
 
 - **SDA-Hold:** wartet nach jedem „SCL low“ 10 µs, bevor SDA wechselt
 - **Clock-Stretch-Limit:** 20 ms
+- **Puffer:** 32 Byte; das FRAM wird deshalb in Stücken von 30 Byte gelesen und geschrieben
 - Diagnose: `setIgnoreDataNack()`, `setAckTrace()`, `lastAckFallAfterStartUs()` – die Firmware ruft sie derzeit nicht auf
-
-## Buffer-Test
-
-Abnahmetest für den I²C-Buffer PCA9517A. Eingeschaltet wird er mit `BUFFER_TEST = true` in `lib/app/application.cpp`; er läuft dann endlos statt in den Deep Sleep zu gehen. Der ganze Bildschirm zeigt „ADR xx n“, der Test prüft pro angeschlossenem Modul den Befehl 0x81 und liest den Text zurück. Nicht angeschlossene Module werden übersprungen. Code in `lib/app/BufferTest.cpp`.
-
-**Für den Normalbetrieb `BUFFER_TEST = false`.**
-
-### Ausgabe des Buffer-Tests
-
-```
-[BUF] #12  0x7B ok
-[BUF] ---- Stand nach 10 Runden ----
-[BUF]   0x7B: 10 ok, 0 Fehler (0x81 NACK 0, Text abgebrochen 0, Lesen 0, Text falsch 0, Bus 0)
-```
-
-Bestanden, wenn alle angeschlossenen Module über längere Zeit 0 Fehler zeigen – vor allem 0x7B und 0x7F.

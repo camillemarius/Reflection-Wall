@@ -6,7 +6,7 @@ Zwei Steuerungen teilen sich denselben I²C-Bus:
 
 | Teil | Ordner | Aufgabe |
 |---|---|---|
-| **ESP8266** | [`esp/`](esp/README.md) | Stromsparender Normalbetrieb: wacht per Taster auf, zeigt das Zitat, wenn jemand davorsteht, schläft wieder (Deep Sleep) |
+| **ESP8266** | [`esp/`](esp/README.md) | Stromsparender Normalbetrieb: Die Wand bleibt dunkel, bis BT1 (später der Radar) sie weckt. BT1 zeigt das neueste Zitat, jeder weitere Druck das nächste ältere. Eine Minute nach dem letzten Druck geht die Wand aus und der ESP schläft (Deep Sleep) |
 | **Raspberry Pi** | [`rpi/`](rpi/README.md) | Interaktive Funktionen: Sprachassistent, Quiz, Reflection AI, Radar- und Strichmännchen-Animationen |
 
 ## Hardware im Überblick
@@ -21,22 +21,24 @@ Raspi  ──┘  (Master-     3,3 → 5 V              ├─ Zeile 3: 0x76 0x7
 
 - **Anzeigen:** 12 × HT16K33. Die Jumper reichen nur für 0x70–0x77, deshalb sitzen vier Module hinter zwei Adress-Translatoren **LTC4316** (XOR 0x08).
 - **Master-Umschaltung:** Analogschalter 74HC4053. ESP-GPIO15 HIGH = ESP hat den Bus.
-- **Weitere I²C-Teilnehmer:** GPIO-Expander PCF8575 (0x20, Taster, INT weckt den ESP über RST), FRAM (0x50).
+- **Weitere I²C-Teilnehmer:** GPIO-Expander PCF8575 (0x20, Taster, INT weckt den ESP über RST), FRAM (0x50, enthält die Zitatliste).
 - **UART:** Der Raspberry Pi schaltet seine UART per GPIO23 zwischen ESP8266 und dem Radarsensor HLK LD2410S um.
 
 ## Bekanntes Problem: ACK-Verlust hinter den LTC4316
 
 Hinter den Translatoren verloren einzelne Module (0x7B, 0x7F) ihr ACK nach Bytes mit Bit 0 = 1. Die Ursache ist gemessen: SCL fällt auf dem 5-V-Bus zu langsam (> 1 µs statt ≤ 300 ns), weil sich die ganze Buskapazität über Analogschalter und BSS138-Pegelwandler entlädt. Der LTC4316 deutet das ACK dann als START und trennt.
 
-**Lösung in Arbeit:** I²C-Buffer **PCA9517A** zwischen Pegelwandler und Bus (VCCA = VCCB = 5 V). Die Firmware hat dafür einen eigenen Test, siehe [`esp/README.md`](esp/README.md#buffer-test).
+**Gelöst:** Der I²C-Buffer **PCA9517A** sitzt jetzt zwischen Pegelwandler und Bus (VCCA = VCCB = 5 V). Die Anzeigen laufen damit fehlerfrei bei voller Helligkeit (100 %).
 
 ## Repository-Struktur
 
 ```
+docs/     Entwurf und Pläne (docs/superpowers)
 esp/      PlatformIO-Projekt für den ESP8266 (Arduino)
+  data-beispiel/  Beispiel für die Zitatliste
 rpi/      Python-Anwendung für den Raspberry Pi
   app/    Hauptprogramm, Anwendungen und Treiber
-  tests/  Einzeltests pro Komponente (mit installation.txt)
+  tests/  Einzeltests pro Komponente (mit installation.txt), auch tests/microphone
   doc/    Notizen, z. B. Datenbankbefehle
 tests/    Übergreifende Tests (Mikrofon)
 ```
