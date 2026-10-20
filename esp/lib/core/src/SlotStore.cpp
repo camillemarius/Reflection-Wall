@@ -62,7 +62,7 @@ SlotStore::ReadResult SlotStore::read(std::string& content)
         {
             return ReadResult::BusError;
         }
-        const uint32_t crc = crc32(reinterpret_cast<const uint8_t*>(text.data()), length, crc32(h + 4, 8));
+        const uint32_t crc = crc32Ieee(reinterpret_cast<const uint8_t*>(text.data()), length, crc32Ieee(h + 4, 8));
         if (crc != getU32(h + 12))
         {
             continue;
@@ -103,7 +103,7 @@ bool SlotStore::write(const std::string& content)
     putU32(head, SlotLayout::MAGIC);
     putU32(head + 4, number);
     putU32(head + 8, length);
-    putU32(head + 12, crc32(reinterpret_cast<const uint8_t*>(content.data()), length, crc32(head + 4, 8)));
+    putU32(head + 12, crc32Ieee(reinterpret_cast<const uint8_t*>(content.data()), length, crc32Ieee(head + 4, 8)));
 
     // Erst die Liste, dann der Kopf
     if (length > 0 &&
