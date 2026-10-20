@@ -3,7 +3,6 @@
 #include "pinMapping.h"
 
 #include "DebugLogger.h"
-#include "BufferTest.h"
 
 #include <ESP8266WiFi.h>
 
@@ -29,10 +28,9 @@ Application::Application()
 
 namespace
 {
-    // Die Zitate stehen im FRAM (FramQuoteStore); mit FRAM_INSTALLED = false
-    // in /quotes.txt im LittleFS (QuoteStore).
-    // Fehlt die Datei oder ist sie leer, zeigt die Wand diesen
-    // Hinweis statt dunkel zu bleiben.
+    // Die Zitatliste steht im FRAM (FramQuoteStore). Mit FRAM_INSTALLED = false
+    // steht sie in /quotes.txt im LittleFS (QuoteStore). Ist die Liste leer
+    // oder nicht lesbar, zeigt die Wand diesen Hinweis statt dunkel zu bleiben.
     constexpr char NO_TEXT[] = "KEIN TEXT";
 
     // 12 Module x 8 Zeichen
@@ -76,11 +74,6 @@ namespace
     // die Einstellung wird im RTC-Speicher hinterlegt und gilt
     // erst ab dem naechsten Start.
     constexpr RFMode WAKE_RF_MODE = WAKE_RF_DISABLED;
-
-    // Abnahmetest fuer den I2C-Buffer (PCA9517A), siehe
-    // BufferTest.h. Laeuft endlos statt in den Deep Sleep.
-    // Fuer den Normalbetrieb auf false.
-    constexpr bool BUFFER_TEST = false;
 
     // Radar (HLK-LD2410S) angeschlossen? Ohne Radar liest GPIO13 wegen des
     // Pull-ups dauerhaft HIGH ("jemand steht davor"). Auf false ignoriert die
@@ -148,9 +141,6 @@ void Application::run()
     // -----------------------------------------------------
 
     I2CMasterControl::begin();
-
-    if (BUFFER_TEST)
-        BufferTest::run();
 
     const uint16_t state = readExpander();
 
