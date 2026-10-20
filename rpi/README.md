@@ -19,7 +19,7 @@ Start mit `python main.py` im Ordner `app/`, dann Modus wählen:
 | Ordner | Inhalt |
 |---|---|
 | `display/` | HT16K33-Treiber, DisplayGrid, Textlayout, Graphen |
-| `uart/` | alter Code, wird in Teil 1 ersetzt: UART zum ESP8266 (`COMMAND\|DATA`) und zum Radar LD2410S; Umschaltung per GPIO23 (HIGH = Radar, LOW = ESP) |
+| `uart/` | alter Code, wird in Teil 1 der Umsetzung ersetzt (neue Verbindung zwischen ESP und Pi, siehe Spezifikation Abschnitt 16): UART zum ESP8266 (`COMMAND\|DATA`) und zum Radar LD2410S; Umschaltung per GPIO23 (HIGH = Radar, LOW = ESP) |
 | `chatbot/` | Groq-API |
 | `speechRecognition/` | faster-whisper (lokal) bzw. Groq-Spracherkennung |
 | `speech/` | Sprachausgabe |
