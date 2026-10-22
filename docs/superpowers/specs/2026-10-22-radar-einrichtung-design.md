@@ -93,16 +93,28 @@ prüfen):
 
 1. Der ESP zählt BT1-Drücke in Folge in einem RTC-Feld `button1Streak`.
    - Jeder BT1-Druck erhöht es um eins.
-   - Geht die Wand aus, steht es wieder auf 0.
-   - Ein anderer Tastendruck oder eine laufende Sitzung setzt es ebenfalls auf 0.
+   - Geht die Wand aus, steht es wieder auf 0. Das ist eine Minute nach dem
+     letzten BT1-Druck (BT1-Minute, §8).
+   - Ein anderer Tastendruck setzt es ebenfalls auf 0.
+   - Läuft schon eine Sitzung, gehen BT1-Drücke an den Pi (T1-a). Dann zählt der Pi
+     die `BUTTON|1`-Meldungen nach derselben Regel und startet die Einrichtung
+     selbst; die Schritte 4 und 5 entfallen.
 2. Bis zum neunten Druck schaltet BT1 wie gewohnt durch die Zitate (T2-a).
 3. Beim **zehnten** Druck zeigt die Anzeige `RADAR EINRICHTEN`, und `button1Streak`
    steht wieder auf 0.
 4. Ist der Pi aus, schaltet der ESP ihn ein und wartet auf `READY` (wie in §7).
+   - Die Anzeige zeigt in dieser Zeit `RADAR EINRICHTEN` / `PI STARTET`.
+   - Ein RTC-Feld `setupPending` merkt sich den Auftrag über weitere Resets hinweg.
+     Weitere Tastendrücke ändern in dieser Zeit nichts; BT2 bricht ab.
+   - Kommt `READY` nicht innerhalb von `T_boot`, gilt §13 („Pi startet nicht“), und
+     die Anzeige zeigt `FEHLER PI`.
 5. Der ESP schickt dem Pi den Auftrag, die Einrichtung zu starten. Dafür braucht es
    eine neue Nachricht im Protokoll (§6.3), zum Beispiel `SETUP|RADAR`; der Pi
    antwortet `OK`.
 6. Der Pi meldet `MODE|RADAR` und schaltet auf das Radar um, wie im Radar-Debug.
+   Ab dem `OK` auf `SETUP|RADAR` gehört die Anzeige dem Pi (T1-a). Setzt ein
+   Tastendruck den ESP zurück, liest er nur den Expander, merkt sich BT2 als
+   `pendingShutdown` (§11) und fasst die Anzeige nicht an.
 7. Am Ende meldet der Pi `MODE|NORMAL` und `DONE`. Hat der ESP den Pi für die
    Einrichtung eingeschaltet, fährt er ihn danach wieder herunter (wie in §7).
 
@@ -134,6 +146,10 @@ zurück, sofern er schon etwas geändert hat, und beendet sich wie in 5.1, Schri
   deshalb nicht an.
 - Der Pi erkennt BT3 und BT2 selbst: Er liest den Expander über I²C. Weil die Tasten
   Flipflops haben, bleibt jeder Druck als Pegel stehen.
+- Ein Druck ist jede Änderung des Pegels gegenüber dem zuletzt gelesenen Stand.
+  Beim Beginn jedes Warteschritts liest der Pi den Stand neu ein. Ein BT3-Druck
+  davor oder während eines Countdowns zählt nicht.
+- BT2 bricht jederzeit ab, auch während eines Countdowns.
 - Er hält sich dabei an die I²C-Regel B (§10): Er liest erst, wenn der ESP den
   Expander gelesen und den Bus zurückgegeben hat.
 - Der ESP setzt bei BT2 im Radar-Debug wie bisher `pendingShutdown` (§11).
@@ -156,7 +172,13 @@ jedes Tor gilt:
   unter der Person.
 - **Nicht unterscheidbar:** Liegt das Signal der Person nicht klar über dem Rauschen,
   wird nichts gespeichert, und es folgt `NOCHMAL`.
-- **Nachlaufzeit:** 30 s (R5).
+- **Nachlaufzeit:** 30 s (R5), als Parameter im Radar. Erlaubt das Radar weniger,
+  verlängert der ESP die Zeit selbst um den Rest. Dafür gibt es eine Konstante in
+  der Firmware.
+- **Tests (Schritte 9–11):** Massgeblich ist der Ausgang INT_HLK (Pi-GPIO22), denn
+  auf ihn reagiert die Wand. Während der Tests setzt der Pi die Nachlaufzeit
+  vorübergehend auf den kleinsten Wert. So reicht eine Meldung nicht in den
+  nächsten Test hinein. Die 30 s schreibt er ganz zum Schluss.
 - **Vorbeigehen (R6):** Das Radar kann jemanden, der in derselben Entfernung
   vorbeigeht, nur über Stärke und Dauer von jemandem unterscheiden, der steht.
   Die Einstellung soll ein kurzes Vorbeigehen nicht genügen lassen. Wie, legt der
@@ -187,7 +209,7 @@ Der letzte Bericht erklärt später, warum die Wand reagiert, wie sie reagiert.
 | Rückgelesene Werte stimmen nicht mit den geschriebenen überein | einmal neu schreiben; dann `FEHLER – ALTE WERTE` |
 | Niemand drückt BT3 | nach 5 min Abbruch wie BT2 |
 | Radar-Debug länger als 60 min | wie §13 („Pi hängt im Radar-Debug“) |
-| Stromausfall mitten drin | Das Radar kann halbe Werte haben. Beim nächsten Start des Pi-Dienstes wird geprüft, ob ein Bericht ohne Abschluss liegt; dann werden die gesicherten Werte zurückgeschrieben |
+| Stromausfall mitten drin | Der Pi schreibt alle neuen Werte in einem einzigen Einstellvorgang (Schritt 8). Halbe Werte entstehen nur, wenn der Strom genau in dieser etwa einen Sekunde ausfällt. Sicherung und Bericht mit Status „laufend“ entstehen schon in Schritt 0. Beim nächsten Start des Pi-Dienstes, in irgendeiner Sitzung, prüft er das und schreibt bei Bedarf die alten Werte zurück. Bis dahin können halbe Werte im Radar stehen; das nimmt der Entwurf in Kauf |
 | Flasher steckt | Die UART zum ESP ist getrennt (F2); die Einrichtung startet nicht und der ESP zeigt `FLASHER STECKT` |
 
 ## 9. Was im Hauptentwurf dazukommt
@@ -228,7 +250,10 @@ Der letzte Bericht erklärt später, warum die Wand reagiert, wie sie reagiert.
 
 - Die Befehle an den LD2410S, nach dessen Protokoll-Datenblatt: Einstellmodus ein
   und aus, Parameter lesen und schreiben, Messmodus mit Werten je Tor, Bestätigungen.
-  Der vorhandene Treiber wird dafür überarbeitet.
+  Der Builder darf den Treiber neu schreiben. Das 5-Byte-Format des heutigen Codes
+  (`0x6E` … `0x62`) ist der Kurzmodus; für die Messung braucht es den Messmodus mit
+  Werten je Tor. `rpi/app/applications/Animations/Radar.py` nutzt den alten Treiber
+  und muss danach weiter laufen.
 - Die Faktoren der Berechnung in Abschnitt 6 und die genauen Messdauern innerhalb der
   genannten Grössenordnung.
 - Die genauen Anzeigetexte im Rahmen von 4 × 24 Zeichen.
