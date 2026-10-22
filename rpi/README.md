@@ -4,7 +4,7 @@ Python-Anwendung für die interaktiven Funktionen der Reflection Wall. Der Raspb
 
 ## Funktionen
 
-Start im Ordner `rpi/app/`: `PYTHONPATH=../.. python main.py` (ungeprüft, ohne Pi nicht getestet). Ein einfaches `python main.py` scheitert, weil `display.py` mit `rpi.app…` beginnt und `main.py` mit `driver…`. Der Pfad `../..` ist der Ordner über `rpi/`, damit beide Schreibweisen gefunden werden. Dann Modus wählen:
+Start im Ordner `rpi/app/`: `PYTHONPATH=../.. python main.py` (ungeprüft, ohne Pi nicht getestet). Ein einfaches `python main.py` scheitert, weil `display.py` mit `rpi.app…` beginnt und `main.py` mit `driver…`. Der Pfad `../..` ist die Wurzel des Repositorys. Dort findet Python beide Importformen, `rpi.app.…` und `driver.…`. Dann Modus wählen:
 
 | Taste | Modus | Ordner |
 |---|---|---|

@@ -11,11 +11,11 @@ pio run -t upload       # flashen über USB (esptool)
 pio device monitor      # serielle Konsole, 74880 Baud
 ```
 
-**OTA:** Zurzeit nicht nutzbar. Kein Code startet WLAN oder OTA: `WifiController::begin` und `OtaManager::begin` hat keine Stelle aufgerufen. Darum führen auch die Zeilen unter `#OTA` in `platformio.ini` und die VS-Code-Aufgabe „Upload ESP + Telnet“ ins Leere. Geflasht wird nur über USB. Teil 3b bringt WLAN und NTP zurück und startet sie dann.
+**OTA:** Zurzeit nicht nutzbar. Kein Code startet WLAN oder OTA: `WifiController::begin` und `OtaManager::begin` hat keine Stelle aufgerufen. Darum haben die Zeilen unter `#OTA` in `platformio.ini` und die VS-Code-Aufgabe „Upload ESP + Telnet“ heute keine Wirkung. Geflasht wird nur über USB. Teil 3b der Umsetzung (Mitternacht, siehe Spezifikation Abschnitt 16) bringt WLAN zurück. Er holt außerdem die Uhrzeit aus dem Internet (NTP).
 
 ## Ablauf im Normalbetrieb
 
-Es gibt keine Hauptschleife. Der ESP liegt im Deep Sleep; ein Tastendruck am PCF8575 löst über dessen INT-Ausgang einen Reset aus, ebenso der Radar (INT_HLK). `Application::run()` läuft dann durch und legt den ESP wieder schlafen. Solange die Wand mit dem Radar an ist, bleibt der ESP in `run()` wach und liest den Radar (siehe unten). Auch ohne Radar bleibt der ESP nach BT1 etwa 60 s wach, denn so lange bleibt die Wand an. Danach legt er sich schlafen und wacht mit dem nächsten Reset auf:
+Es gibt keine Hauptschleife. Der ESP liegt im Deep Sleep; ein Tastendruck am PCF8575 löst über dessen INT-Ausgang einen Reset aus, ebenso der Radar (INT_HLK). `Application::run()` läuft dann durch und legt den ESP wieder schlafen. Solange die Wand mit dem Radar an ist, bleibt der ESP in `run()` wach und liest den Radar (siehe unten). Auch ohne Radar bleibt der ESP nach BT1 etwa 60 s wach. So lange bleibt die Wand an. Danach legt er sich schlafen und wacht mit dem nächsten Reset auf:
 
 1. WLAN aus (spart Strom und Bootzeit)
 2. Weckgrund lesen
@@ -38,7 +38,7 @@ Nach dem Einschalten (Kaltstart, auch nach dem ersten Flashen) schaltet der ESP 
 
 - **Radar:** zeigt das neueste Zitat. Bleibt der Radar HIGH, bleibt die Wand an; der ESP bleibt dann wach und liest den Radar alle 200 ms. Fällt der Radar auf LOW, geht die Wand aus (die Regeln stehen in `lib/core/src/WallLogic.cpp`).
 - **BT1:** schaltet die Wand ein und zeigt das neueste Zitat; jeder weitere Druck zeigt das nächste in der Liste. Die Wand bleibt dann mindestens 60 s an (`BUTTON1_ON_MS`), unabhängig vom Radar.
-- **Radar-Schalter:** `Features::RADAR_INSTALLED` in `lib/config/features.h` steht auf `false`, solange kein Radar angeschlossen ist. Ohne Radar liest GPIO13 durch den Pull-up dauerhaft HIGH; die Firmware ignoriert INT_HLK dann, und die Wand geht nur mit BT1 an und nach 60 s wieder aus. Nach dem Anschliessen des Radars muss der Schalter auf `true` gesetzt werden.
+- **Radar-Schalter:** `Features::RADAR_INSTALLED` in `lib/config/features.h` steht auf `false`, solange kein Radar angeschlossen ist. Ohne Radar liest GPIO13 durch den Pull-up dauerhaft HIGH. Die Firmware ignoriert INT_HLK dann. Die Wand geht nur mit BT1 an. Nach 60 s geht sie wieder aus. Ist der Radar angeschlossen, setzt man den Schalter auf `true`.
 - **Ausschalten:** die Anzeige wird dunkel geschaltet (HT16K33 Display-off), der Inhalt bleibt in den Modulen erhalten. Der Zustand (aus / an / wird geschrieben) liegt im RTC-Speicher; bricht ein Durchlauf beim Schreiben ab, schreibt der nächste genau dasjenige Zitat neu, das beim abgebrochenen Durchlauf gewählt war (Index und Datum werden vor dem Schreiben im RTC-Speicher abgelegt).
 
 ## Zitate im FRAM
@@ -119,7 +119,7 @@ data/                     Briefkasten für pio run -t uploadfs (normalerweise le
 data-beispiel/quotes.txt  Startliste als Beispiel zum Hochladen
 lib/ota/                  WLAN, OTA, Debug-Logger (Telnet); WLAN und OTA hat zurzeit niemand aufgerufen, Teil 3b braucht sie
                           Der alte Code für die Verbindung zum Pi (lib/communication) und der alte Textspeicher sind entfernt.
-                          Teil 1 bringt die neue Verbindung zwischen ESP und Pi (Spezifikation Abschnitt 16).
+                          Teil 1 der Umsetzung bringt die neue Verbindung zwischen ESP und Pi (Spezifikation Abschnitt 16).
 lib/config/pinMapping.h   Pinbelegung
 lib/config/features.h     alle Bauschalter (FRAM, Radar, Funkteil beim Aufwachen)
 ```
