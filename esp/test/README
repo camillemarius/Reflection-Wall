@@ -1,11 +1,14 @@
+Tests fuer die Firmware, laufen auf dem PC (kein Geraet noetig):
 
-This directory is intended for PlatformIO Test Runner and project tests.
+    pio test -e native
 
-Unit Testing is a software testing method by which individual units of
-source code, sets of one or more MCU program modules together with associated
-control data, usage procedures, and operating procedures, are tested to
-determine whether they are fit for use. Unit testing finds problems early
-in the development cycle.
+Suiten:
+- test_quote_list: Zitatliste parsen und bauen (Datum|Text, neueste zuerst, maximal 30).
+- test_quote_store: QuoteStore im LittleFS (/quotes.txt) samt Umzug von /text.txt.
+- test_wall_logic: Ablauf der Wand (Aufwachen, naechstes Zitat, Ausschalten nach 1 Minute).
+- test_slot_store: Plaetze A und B im FRAM mit Kennung, Nummer, Laenge und CRC-32.
+- test_fram_quote_store: FramQuoteStore, auch Briefkasten /quotes.txt und Abbruch beim Schreiben.
 
-More information about PlatformIO Unit Testing:
-- https://docs.platformio.org/en/latest/advanced/unit-testing/index.html
+Hilfen in support/:
+- MemoryFs: Dateisystem im Speicher statt LittleFS.
+- MemoryBytes: FRAM im Speicher statt am Bus.

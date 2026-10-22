@@ -19,7 +19,7 @@ Start mit `python main.py` im Ordner `app/`, dann Modus wählen:
 | Ordner | Inhalt |
 |---|---|
 | `display/` | HT16K33-Treiber, DisplayGrid, Textlayout, Graphen |
-| `uart/` | UART zum ESP8266 (`COMMAND\|DATA`) und zum Radar LD2410S; Umschaltung per GPIO23 (HIGH = Radar, LOW = ESP) |
+| `uart/` | alter Code, wird in Teil 1 der Umsetzung ersetzt (neue Verbindung zwischen ESP und Pi, siehe Spezifikation Abschnitt 16): UART zum ESP8266 (`COMMAND\|DATA`) und zum Radar LD2410S; Umschaltung per GPIO23 (HIGH = Radar, LOW = ESP) |
 | `chatbot/` | Groq-API |
 | `speechRecognition/` | faster-whisper (lokal) bzw. Groq-Spracherkennung |
 | `speech/` | Sprachausgabe |
@@ -37,7 +37,7 @@ pip install smbus2 lgpio groq python-dotenv mysql-connector-python \
             faster-whisper sounddevice numpy pyphen
 ```
 
-Die einzelnen Komponenten lassen sich in `tests/<Komponente>/` getrennt testen; dort steht jeweils eine `installation.txt`.
+Die einzelnen Komponenten lassen sich in `tests/<Komponente>/` getrennt testen (`chatbot_groq`, `ht16k33`, `ioExpander`, `ld2410s`, `lichtsensor`, `microphone`, `mysql`, `speechrecognition`, `wakeWord`); dort steht jeweils eine `installation.txt`. `tests/microphone` nimmt auf und legt die Aufnahmen in `tests/microphone/recordings/` ab (nicht im Repository).
 
 ## Zugangsdaten
 
@@ -64,4 +64,3 @@ Weitere Befehle in `doc/commands.txt`.
 
 - Die Importe sind gemischt (`driver.…` und `rpi.app.driver.…`). `main.py` erwartet, aus `app/` gestartet zu werden; einzelne Module importieren mit dem vollen Paketpfad.
 - Der Python-Treiber adressiert die Module als `0x70 + Index` und nutzt standardmässig nur 2 Zeilen (6 Module). Die Adressen hinter den LTC4316 (0x7F, 0x79, 0x7B, 0x7D) fehlen noch.
-- Der Python-Treiber setzt volle Helligkeit (0x0F). Die ESP-Firmware begrenzt bewusst auf 7, weil der LED-Strom sonst den I²C-Bus stört.

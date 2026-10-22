@@ -13,8 +13,7 @@ public:
     // Helligkeit 0..15 (Tastverhaeltnis (n+1)/16). Volle
     // Helligkeit setzt den PCA9517A voraus: ohne ihn stoerte der
     // LED-Strom der ganzen Kette den I2C-Bus, die Anzeigen liefen
-    // deshalb auf hoechstens 7. Der Buffer-Test laeuft mit
-    // DEFAULT_BRIGHTNESS und prueft den Bus damit unter voller Last.
+    // deshalb auf hoechstens 7.
     static constexpr uint8_t DEFAULT_BRIGHTNESS = 15;
     static constexpr uint8_t MAX_BRIGHTNESS = 15;
 
@@ -26,6 +25,10 @@ public:
     void setText(const String& text);
 
     void setBrightness(uint8_t level);
+
+    // Schaltet die Anzeige ab bzw. an. Der Inhalt bleibt im Chip
+    // erhalten, die LEDs sind nur dunkel.
+    void setDisplayOn(bool on);
 
     bool testConnection();
 

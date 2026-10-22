@@ -10,9 +10,11 @@ void PersistentState::setDefaults(Data& data)
     // Kaltstart ohnehin durch den tatsaechlich gelesenen
     // Registerwert ersetzt, bevor Flanken ausgewertet werden.
     data.lastExpanderState = 0xFFFF;
-    data.textIndex = 0;
-    data.reserved = 0;
+    data.displayState = 0;
+    data.button1Active = 0;
     data.wakeCount = 0;
+    data.shownIndex = 0;
+    memset(data.shownDate, 0, sizeof(data.shownDate));
 }
 
 
@@ -61,7 +63,7 @@ void PersistentState::save(const Data& data)
 
 
 // Standard-CRC32 (Polynom 0xEDB88320), bitweise gerechnet.
-// Bei 8 Byte Nutzdaten lohnt keine Tabelle.
+// Bei 20 Byte Nutzdaten lohnt keine Tabelle.
 
 uint32_t PersistentState::crc32(const uint8_t* data, size_t length)
 {

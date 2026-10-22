@@ -7,8 +7,10 @@
 // ---------------------------------------------------------
 // Der ESP haelt keine Hauptschleife mehr. Er liegt im Deep
 // Sleep, bis der GPIO Expander ueber seinen INT-Ausgang einen
-// Reset ausloest - dann laeuft setup() einmal durch, wertet den
-// Tastendruck aus und legt sich wieder hin.
+// Reset ausloest (ebenso der Radar) - dann laeuft setup() einmal
+// durch, wertet Taster und Radar aus und legt sich wieder hin.
+// Ist die Wand an, bleibt setup() wach, bis die Regeln das
+// Abschalten verlangen.
 
 Application application;
 
