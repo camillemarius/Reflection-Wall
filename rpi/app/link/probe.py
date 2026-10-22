@@ -53,17 +53,33 @@ def main(argv: list[str] | None = None) -> int:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%H:%M:%S"))
     old_level = log.level
+    port = None
+    link = None
+    code = 0
     log.setLevel(logging.DEBUG)
     log.addHandler(handler)
-
-    port = open_esp_port(args.port, args.baud, select_gpio=not args.no_gpio)
-    link = PiLink(port)
-    link.start()
-    end = time.monotonic() + args.seconds if args.seconds > 0 else None
     try:
+        try:
+            port = open_esp_port(args.port, args.baud, select_gpio=not args.no_gpio)
+        except ModuleNotFoundError as exc:
+            print(f"Fehler: {exc.name or 'lgpio'} fehlt - auf dem PC mit --no-gpio starten",
+                  flush=True)
+            return 1
+        except Exception as exc:
+            print(f"Fehler: Port nicht gefunden oder keine Rechte ({exc}) - "
+                  "uart0 aktiviert, Benutzer in dialout?", flush=True)
+            return 1
+        link = PiLink(port)
+        link.start()
+        end = time.monotonic() + args.seconds if args.seconds > 0 else None
         answered = False
         fut: "concurrent.futures.Future | None" = None
         while end is None or time.monotonic() < end:
+            if not link.alive:
+                print("Fehler: Verbindung abgebrochen (Portfehler) - Kabel und Port pruefen",
+                      flush=True)
+                code = 1
+                break
             if not answered:
                 if fut is None:
                     fut = link.request("READY")
@@ -77,12 +93,14 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         pass
     finally:
-        print(f"verworfen: {dict(link.discarded)}", flush=True)
-        link.stop()
-        port.close()
+        if link is not None:
+            print(f"verworfen: {dict(link.discarded)}", flush=True)
+            link.stop()
+        if port is not None:
+            port.close()
         log.removeHandler(handler)
         log.setLevel(old_level)
-    return 0
+    return code
 
 
 if __name__ == "__main__":
