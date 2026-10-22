@@ -250,6 +250,14 @@ void test_state_survives_restore()
     TEST_ASSERT_EQUAL_STRING("", sb.takeTx().c_str());
 }
 
+void test_state_reports_next_number_while_request_open()
+{
+    MemorySerial s; PiLink l(s);
+    l.send("PING", "", 0);
+    TEST_ASSERT_TRUE(l.busy());
+    TEST_ASSERT_EQUAL_UINT8(1, l.state().txSeq);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -275,5 +283,6 @@ int main(int, char**)
     RUN_TEST(test_empty_lines_are_not_counted);
     RUN_TEST(test_reply_without_request_is_refused);
     RUN_TEST(test_state_survives_restore);
+    RUN_TEST(test_state_reports_next_number_while_request_open);
     return UNITY_END();
 }

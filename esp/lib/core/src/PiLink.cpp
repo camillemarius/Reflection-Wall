@@ -18,6 +18,7 @@ bool PiLink::send(const std::string& command, const std::string& data, unsigned 
     m.data = data;
     std::string line;
     if (encode(m, line) != Error::None) return false;
+    ++m_txSeq;
     m_pending = m;
     m_pendingLine = line;
     m_open = true;
@@ -56,7 +57,6 @@ bool PiLink::handleLine(const std::string& line, LinkEvent& ev)
     {
         if (!m_open || m.seq != m_pending.seq) return false;
         m_open = false;
-        ++m_txSeq;
         ev.kind = LinkEvent::Kind::Response;
         ev.message = m;
         return true;
@@ -118,7 +118,6 @@ LinkEvent PiLink::poll(unsigned long nowMs)
         if (nowMs - m_start >= deadlineMs(m_pending.command))
         {
             m_open = false;
-            ++m_txSeq;
             ev.kind = LinkEvent::Kind::Expired;
             ev.message = m_pending;
             return ev;
