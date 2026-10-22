@@ -1,0 +1,12 @@
+# Versionen nach Teil 0 mit pip freeze festhalten
+smbus2
+lgpio; sys_platform == "linux"
+pyserial
+groq
+python-dotenv
+mysql-connector-python
+faster-whisper
+sounddevice
+numpy
+pyphen
+piper-tts; sys_platform == "linux"

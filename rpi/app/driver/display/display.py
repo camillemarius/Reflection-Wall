@@ -1,6 +1,6 @@
-from rpi.app.driver.display.segment_chain import SegmentChain
-from rpi.app.driver.display.display_grid import DisplayGrid
-from rpi.app.driver.display.ht16k33_driver import TestModule, I2CModule, CHARS_PER_MODULE, init_ht16k33, clear_all
+from app.driver.display.segment_chain import SegmentChain
+from app.driver.display.display_grid import DisplayGrid
+from app.driver.display.ht16k33_driver import TestModule, I2CModule, CHARS_PER_MODULE, init_ht16k33, clear_all
 import pyphen
 import re 
 

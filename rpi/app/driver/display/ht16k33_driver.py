@@ -1,8 +1,16 @@
-import smbus2 as smbus
-from .ascii_map import ASCII_16SEG  # ASCII-Mapping muss vorhanden sein
+from app.driver.display.ascii_map import ASCII_16SEG  # ASCII-Mapping muss vorhanden sein
 
 HT16K33_BASE_ADDR = 0x70
-bus = smbus.SMBus(1)
+_bus_instance = None
+
+
+def _bus():
+    """Oeffnet den I2C-Bus beim ersten Aufruf (nicht beim Import)."""
+    global _bus_instance
+    if _bus_instance is None:
+        import smbus2
+        _bus_instance = smbus2.SMBus(1)
+    return _bus_instance
 
 CMD_SYSTEM_SETUP = 0x20
 CMD_DISPLAY_SETUP = 0x80
@@ -18,6 +26,7 @@ BYTES_PER_MODULE = CHARS_PER_MODULE * 2
 def init_module(module_index):
     """Initialisiert ein einzelnes Modul"""
     addr = HT16K33_BASE_ADDR + module_index
+    bus = _bus()
     try:
         bus.write_byte(addr, CMD_SYSTEM_SETUP | 0x01)
         bus.write_byte(addr, CMD_DISPLAY_SETUP | 0x01)
@@ -65,6 +74,7 @@ def set_digit(buffer, digit_idx, char):
 
 def write_buffer(module_index, buffer):
     addr = HT16K33_BASE_ADDR + module_index
+    bus = _bus()
     try:
         bus.write_i2c_block_data(addr, 0x00, buffer)
     except OSError as e:

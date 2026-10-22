@@ -1,14 +1,12 @@
 import logging
-from rpi.app.applications.ReflectionAI.prompt_template import PROMPT_TEMPLATE
-from rpi.app.driver.database.mysql import get_previous_answers, save_answer, setup_db
-from rpi.app.driver.chatbot.groqAPI import write_to_ai
-from rpi.app.driver.display.display import Display  # deine Display-Klasse
-
-setup_db("reflection")
-
+from app.applications.ReflectionAI.prompt_template import PROMPT_TEMPLATE
+from app.driver.database.mysql import get_previous_answers, save_answer, setup_db
+from app.driver.chatbot.groqAPI import write_to_ai
+from app.driver.display.display import Display  # deine Display-Klasse
 
 class ReflectionAI:
     def __init__(self, display: Display = None, db_key="reflection", retries: int = 3):
+        setup_db("reflection")
         self.db_key = db_key
         self.retries = retries
         # 🔹 Display setzen, sonst Default (Simulation)

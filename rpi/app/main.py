@@ -1,12 +1,15 @@
-from applications.VoiseAssistant.VoiceAssistant import VoiceAssistant
-from applications.Quiz.QuizGame import QuizGame
-from applications.ReflectionAI.Reflection import ReflectionAI
-from driver.display.display import Display
-from applications.Animations.Radar import Radar
-from applications.Animations.Stickman import Stickman
-from driver.speech.speaker import SpeechAssistant
+import logging
+
+from app.applications.VoiseAssistant.VoiceAssistant import VoiceAssistant
+from app.applications.Quiz.QuizGame import QuizGame
+from app.applications.ReflectionAI.Reflection import ReflectionAI
+from app.driver.display.display import Display
+from app.applications.Animations.Radar import Radar
+from app.applications.Animations.Stickman import Stickman
+from app.driver.speech.speaker import SpeechAssistant
 
 def main():
+    logging.basicConfig(level=logging.INFO)
     display = Display(simulation=False)
     speech_assistant  = SpeechAssistant()
 

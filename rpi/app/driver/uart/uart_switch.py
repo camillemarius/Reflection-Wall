@@ -11,8 +11,6 @@ from __future__ import annotations
 from enum import Enum, auto
 import time
 
-import lgpio
-
 
 class UARTSwitch:
 
@@ -24,6 +22,8 @@ class UARTSwitch:
 
     def __init__(self, gpio=23, chip=0):
         self.gpio = gpio
+        import lgpio
+        self._lgpio = lgpio
         self.handle = lgpio.gpiochip_open(chip)
 
         lgpio.gpio_claim_output(self.handle, self.gpio)
@@ -41,7 +41,7 @@ class UARTSwitch:
 
         value = 1 if device is self.Device.HLK else 0
 
-        lgpio.gpio_write(self.handle, self.gpio, value)
+        self._lgpio.gpio_write(self.handle, self.gpio, value)
         time.sleep(self.SWITCH_DELAY)
 
         self._device = device
@@ -53,7 +53,7 @@ class UARTSwitch:
         self.select(self.Device.ESP)
 
     def close(self):
-        lgpio.gpiochip_close(self.handle)
+        self._lgpio.gpiochip_close(self.handle)
 
     def __enter__(self):
         return self

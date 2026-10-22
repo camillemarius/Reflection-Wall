@@ -1,7 +1,7 @@
 import sys
-from driver.display.display import Display
-from driver.speechRecognition.fasterWhisper import fasterWhsiper
-from driver.chatbot.groqAPI import write_to_ai
+from app.driver.display.display import Display
+from app.driver.speechRecognition.fasterWhisper import fasterWhsiper
+from app.driver.chatbot.groqAPI import write_to_ai
 
 class VoiceAssistant:
     def __init__(self, simulation=False, display=None, speaker=None):

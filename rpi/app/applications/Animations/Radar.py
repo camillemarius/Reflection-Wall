@@ -1,8 +1,8 @@
 import time
 
-from driver.display.animations.stickman import Stickman
-from driver.uart.uart_master import UARTMaster
-from driver.uart.uart_hlk import UARTHLK
+from app.driver.display.animations.stickman import Stickman
+from app.driver.uart.uart_master import UARTMaster
+from app.driver.uart.uart_hlk import UARTHLK
 
 
 class Radar:

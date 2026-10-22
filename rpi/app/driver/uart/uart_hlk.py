@@ -29,8 +29,8 @@ import time
 
 from dataclasses import dataclass
 
-from .uart_switch import UARTSwitch
-from .uart_device import UARTDevice
+from app.driver.uart.uart_switch import UARTSwitch
+from app.driver.uart.uart_device import UARTDevice
 
 
 @dataclass

@@ -1,5 +1,5 @@
 # core/segment_chain.py
-from rpi.app.driver.display.segment_module import SegmentModule
+from app.driver.display.segment_module import SegmentModule
 
 class SegmentChain:
     def __init__(self, modules):
