@@ -38,7 +38,7 @@ static void expectDecoded(const Vector& v)
 void test_vector_file_is_read()
 {
     std::vector<Vector> v = loadAll();
-    TEST_ASSERT_TRUE(v.size() >= 60);
+    TEST_ASSERT_TRUE(v.size() >= 62);
     bool seenBackslash = false, seenGarbage = false;
     for (const Vector& x : v)
     {
@@ -107,7 +107,7 @@ void test_error_vectors()
         LinkCodec::Message m;
         TEST_ASSERT_EQUAL_STRING_MESSAGE(v.str("error").c_str(), LinkCodec::errorName(LinkCodec::decode(v.str("line"), m)), name.c_str());
     }
-    TEST_ASSERT_EQUAL(27, n);
+    TEST_ASSERT_EQUAL(29, n);
 }
 
 void test_encode_error_vectors()

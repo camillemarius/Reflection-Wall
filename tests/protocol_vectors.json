@@ -59,6 +59,8 @@
 {"name": "bad_format_wins_over_bad_checksum", "kind": "error", "line": "$00:PING*B", "error": "BAD_FORMAT"},
 {"name": "checksum_wins_over_bad_number", "kind": "error", "line": "$G0:PING*5C", "error": "BAD_CHECKSUM"},
 {"name": "checksum_wins_over_lowercase_command", "kind": "error", "line": "$00:ping*2B", "error": "BAD_CHECKSUM"},
-{"name": "checksum_wins_over_bad_escape", "kind": "error", "line": "$00:QUOTE|A\\xB*3A", "error": "BAD_CHECKSUM"}
+{"name": "checksum_wins_over_bad_escape", "kind": "error", "line": "$00:QUOTE|A\\xB*3A", "error": "BAD_CHECKSUM"},
+{"name": "bad_number_wins_over_lowercase_command", "kind": "error", "line": "$G0:ping*5D", "error": "BAD_FORMAT"},
+{"name": "lowercase_command_wins_over_bad_escape", "kind": "error", "line": "$00:ping|A\\xB*71", "error": "BAD_COMMAND"}
 ]
 }
