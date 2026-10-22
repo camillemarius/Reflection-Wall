@@ -15,6 +15,9 @@ public:
     bool failWrite = false;
     long writeBudget = -1;
     int corruptReads = 0;          // > 0: jedes Lesen ueber 16 Bytes kippt ein Byte, Zaehler sinkt
+    int corruptHeaderReads = 0;    // > 0: jedes Lesen von genau 16 Bytes kippt Bits, Zaehler sinkt
+    std::size_t headerFlipByte = 4;
+    uint8_t headerFlipMask = 0x04;
     bool corruptWrites = false;    // jedes Schreiben ueber 16 Bytes speichert ein gekipptes Byte
 
     bool read(uint16_t address, uint8_t* out, std::size_t length) override
@@ -26,6 +29,11 @@ public:
         for (std::size_t i = 0; i < length; ++i)
         {
             out[i] = data[address + i];
+        }
+        if (corruptHeaderReads > 0 && length == 16)
+        {
+            out[headerFlipByte] ^= headerFlipMask;
+            --corruptHeaderReads;
         }
         if (corruptReads > 0 && length > 16)
         {

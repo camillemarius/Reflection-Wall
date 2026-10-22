@@ -269,6 +269,37 @@ void test_bytes_reported_after_import()
     TEST_ASSERT_EQUAL(l.serialize().size(), store.lastLoad().bytes);
 }
 
+// Schreiben kommt an, wird aber nicht gespeichert (alter Stand bleibt): Rueckleseprobe liefert Ok mit anderem Inhalt
+class DropsSlotBWrites : public IByteStore
+{
+public:
+    explicit DropsSlotBWrites(MemoryBytes& inner) : inner_(inner) {}
+    bool read(uint16_t address, uint8_t* out, std::size_t length) override { return inner_.read(address, out, length); }
+    bool write(uint16_t address, const uint8_t* data, std::size_t length) override
+    {
+        return address >= SlotLayout::SLOT_B ? true : inner_.write(address, data, length);
+    }
+
+private:
+    MemoryBytes& inner_;
+};
+
+void test_import_with_readback_of_other_content_fails()
+{
+    MemoryBytes fram;
+    MemoryFs fs;
+    putList(fram, "Alter Stand");   // gueltig in A, Import wuerde nach B schreiben
+    DropsSlotBWrites dropping(fram);
+    fs.files["/quotes.txt"] = "2026-10-21|Neu\n";
+    FramQuoteStore store(dropping, fs);
+    QuoteList l = store.load();
+    TEST_ASSERT_TRUE(store.lastLoad().importFailed);
+    TEST_ASSERT_FALSE(store.lastLoad().imported);
+    TEST_ASSERT_TRUE(fs.exists("/quotes.txt"));
+    TEST_ASSERT_EQUAL_STRING("Neu", l.at(0).text.c_str());
+    TEST_ASSERT_FALSE(store.save(l));
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -289,5 +320,6 @@ int main(int, char**)
     RUN_TEST(test_oversized_import_fails);
     RUN_TEST(test_import_failed_on_legacy_path);
     RUN_TEST(test_bytes_reported_after_import);
+    RUN_TEST(test_import_with_readback_of_other_content_fails);
     return UNITY_END();
 }

@@ -388,7 +388,7 @@ void Application::showQuote(WallAction action)
             DebugSerial.printf("[QUOTES] Liste aus dem Flash ins FRAM uebernommen: %u Bytes in %u ms\n",
                                (unsigned)info.bytes, (unsigned)loadMs);
         else if (info.importFailed)
-            DebugSerial.println("[QUOTES] FEHLER: Uebernahme ins FRAM gescheitert (FRAM 0x50 nicht beschreibbar oder Liste zu lang), Liste aus dem Flash angezeigt, Datei bleibt");
+            DebugSerial.println("[QUOTES] FEHLER: Uebernahme ins FRAM gescheitert (FRAM 0x50 nicht beschreibbar, Kontrolle fehlgeschlagen oder Liste zu lang), Liste aus dem Flash angezeigt, Datei bleibt");
         else
             DebugSerial.printf("[QUOTES] FRAM: %u Bytes in %u ms gelesen\n",
                                (unsigned)info.bytes, (unsigned)loadMs);

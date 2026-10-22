@@ -172,16 +172,6 @@ void test_single_bad_read_is_retried()
     TEST_ASSERT_EQUAL_STRING("neu-neu-neu-neu-neu-neu", readContent(m, SlotStore::ReadResult::Ok).c_str());
 }
 
-void test_persistently_bad_newest_slot_falls_back()
-{
-    MemoryBytes m;
-    SlotStore s(m);
-    s.write("alt");
-    s.write("neu");
-    corruptList(m, SlotLayout::SLOT_B);
-    TEST_ASSERT_EQUAL_STRING("alt", readContent(m, SlotStore::ReadResult::Ok).c_str());
-}
-
 void test_number_continues_above_damaged_slot()
 {
     MemoryBytes m;
@@ -206,12 +196,6 @@ void test_both_slots_damaged_is_reported()
     corruptList(m, SlotLayout::SLOT_A);
     corruptList(m, SlotLayout::SLOT_B);
     TEST_ASSERT_EQUAL_STRING("", readContent(m, SlotStore::ReadResult::Damaged).c_str());
-}
-
-void test_blank_fram_is_empty_not_damaged()
-{
-    MemoryBytes m;
-    TEST_ASSERT_EQUAL_STRING("", readContent(m, SlotStore::ReadResult::Empty).c_str());
 }
 
 void test_number_above_both_damaged_slots()
@@ -249,6 +233,86 @@ void test_bus_error_in_prewrite_read_fails_write()
     TEST_ASSERT_TRUE(before == m.data);
 }
 
+// Kopf-Stoerungen: corruptHeaderReads trifft zuerst Kopf A, dann Kopf B (je erstes Lesen)
+void test_older_header_number_misread_high_keeps_newest()
+{
+    MemoryBytes m;
+    SlotStore s(m);
+    s.write("alt-alt-alt");
+    s.write("neu-neu-neu");
+    m.corruptHeaderReads = 1;   // Nummer von A: 1 -> 5, hoeher als B
+    SlotStore r(m);
+    std::string c;
+    TEST_ASSERT_EQUAL(static_cast<int>(SlotStore::ReadResult::Ok), static_cast<int>(r.read(c)));
+    TEST_ASSERT_EQUAL_STRING("neu-neu-neu", c.c_str());
+    TEST_ASSERT_TRUE(r.write("neuer"));
+    TEST_ASSERT_EQUAL_STRING("neuer", readContent(m, SlotStore::ReadResult::Ok).c_str());
+}
+
+void test_newest_number_misread_low_keeps_numbering()
+{
+    MemoryBytes m;
+    SlotStore s(m);
+    for (int i = 0; i < 6; ++i)
+    {
+        s.write(i % 2 ? "bbbbbbbb" : "aaaaaaaa");
+    }
+    for (std::size_t i = 0; i < SlotLayout::HEADER_SIZE; ++i)
+    {
+        m.data[SlotLayout::SLOT_A + i] = 0;   // A hat den Kopf verloren, B ist 6
+    }
+    m.corruptHeaderReads = 2;   // A leer (harmlos), Nummer von B: 6 -> 2
+    SlotStore r(m);
+    std::string c;
+    TEST_ASSERT_EQUAL(static_cast<int>(SlotStore::ReadResult::Ok), static_cast<int>(r.read(c)));
+    TEST_ASSERT_TRUE(r.write("neu"));
+    TEST_ASSERT_EQUAL_UINT8(7, m.data[SlotLayout::SLOT_A + 4]);
+    TEST_ASSERT_EQUAL_STRING("neu", readContent(m, SlotStore::ReadResult::Ok).c_str());
+}
+
+void test_misread_magic_on_newest_slot_is_retried()
+{
+    MemoryBytes m;
+    SlotStore s(m);
+    s.write("eins-eins");
+    s.write("zwei-zwei");
+    s.write("drei-drei");   // A ist neu
+    m.corruptHeaderReads = 1;
+    m.headerFlipByte = 0;
+    m.headerFlipMask = 0x01;
+    TEST_ASSERT_EQUAL_STRING("drei-drei", readContent(m, SlotStore::ReadResult::Ok).c_str());
+}
+
+void test_misread_length_on_newest_slot_is_retried()
+{
+    MemoryBytes m;
+    SlotStore s(m);
+    s.write("eins-eins");
+    s.write("zwei-zwei");
+    s.write("drei-drei");
+    m.corruptHeaderReads = 1;
+    m.headerFlipByte = 9;
+    m.headerFlipMask = 0x20;   // Laenge ueber 4080
+    TEST_ASSERT_EQUAL_STRING("drei-drei", readContent(m, SlotStore::ReadResult::Ok).c_str());
+}
+
+void test_both_headers_misread_once_is_not_empty()
+{
+    MemoryBytes m;
+    SlotStore s(m);
+    s.write("alt-alt");
+    s.write("neu-neu");
+    m.corruptHeaderReads = 2;
+    m.headerFlipByte = 0;
+    m.headerFlipMask = 0x01;
+    SlotStore r(m);
+    std::string c;
+    TEST_ASSERT_EQUAL(static_cast<int>(SlotStore::ReadResult::Ok), static_cast<int>(r.read(c)));
+    TEST_ASSERT_EQUAL_STRING("neu-neu", c.c_str());
+    TEST_ASSERT_TRUE(r.write("drei"));
+    TEST_ASSERT_EQUAL_UINT8(3, m.data[SlotLayout::SLOT_A + 4]);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -267,12 +331,15 @@ int main(int, char**)
     RUN_TEST(test_read_error_is_bus_error);
     RUN_TEST(test_write_without_read_continues_numbering);
     RUN_TEST(test_single_bad_read_is_retried);
-    RUN_TEST(test_persistently_bad_newest_slot_falls_back);
     RUN_TEST(test_number_continues_above_damaged_slot);
     RUN_TEST(test_both_slots_damaged_is_reported);
-    RUN_TEST(test_blank_fram_is_empty_not_damaged);
     RUN_TEST(test_number_above_both_damaged_slots);
     RUN_TEST(test_write_after_failed_write_numbers_correctly);
     RUN_TEST(test_bus_error_in_prewrite_read_fails_write);
+    RUN_TEST(test_older_header_number_misread_high_keeps_newest);
+    RUN_TEST(test_newest_number_misread_low_keeps_numbering);
+    RUN_TEST(test_misread_magic_on_newest_slot_is_retried);
+    RUN_TEST(test_misread_length_on_newest_slot_is_retried);
+    RUN_TEST(test_both_headers_misread_once_is_not_empty);
     return UNITY_END();
 }

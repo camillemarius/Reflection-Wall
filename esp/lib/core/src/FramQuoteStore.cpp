@@ -40,7 +40,7 @@ QuoteList FramQuoteStore::load()
     {
         const std::string serialized = list.serialize();
         info_.bytes = serialized.size();
-        // Erst schreiben, dann zurueckliest und vergleichen; erst danach darf der Briefkasten weg
+        // Erst schreiben, dann aus dem FRAM zurueckgelesen vergleichen; erst danach darf der Briefkasten weg
         std::string back;
         if (!slots_.write(serialized) ||
             slots_.read(back) != SlotStore::ReadResult::Ok || back != serialized)
