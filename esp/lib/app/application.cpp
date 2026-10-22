@@ -3,6 +3,7 @@
 #include "pinMapping.h"
 #include "features.h"
 #include "TextLayout.h"
+#include "LinkTest.h"
 
 #include "DebugLogger.h"
 
@@ -21,7 +22,10 @@ Application::Application()
       _coldBoot(false),
       _displayReady(false),
       _powerPin(),
-      _piPower(_powerPin)
+      _piPower(_powerPin),
+      _port(Serial),
+      _link(_port),
+      _linkTestRequested(false)
 {
 }
 
@@ -97,7 +101,9 @@ void Application::run()
     WiFi.mode(WIFI_OFF);
     WiFi.forceSleepBegin();
 
-    DebugSerial.begin(74880);  // same baud as the ESP8266 boot ROM -> boot log readable
+    // Eine Zeile der Verbindung hat bis 257 Bytes; der Standardpuffer fasst 256.
+    Serial.setRxBufferSize(1024);
+    DebugSerial.begin(Features::LINK_BAUD);  // same baud as the ESP8266 boot ROM -> boot log readable
 
     // -----------------------------------------------------
     // 2. Weckgrund
@@ -140,7 +146,7 @@ void Application::run()
     // Deshalb loesen sie nichts aus.
     _inputs.setTrigger(InputEvent::BT1, InputTrigger::ANY_EDGE);
     _inputs.setTrigger(InputEvent::BT2, InputTrigger::ANY_EDGE);
-    _inputs.setTrigger(InputEvent::BT3, InputTrigger::NONE);
+    _inputs.setTrigger(InputEvent::BT3, InputTrigger::ANY_EDGE);
     _inputs.setTrigger(InputEvent::BT4, InputTrigger::NONE);
     _inputs.setTrigger(InputEvent::BT5, InputTrigger::NONE);
     _inputs.setTrigger(InputEvent::BT6, InputTrigger::NONE);
@@ -196,6 +202,10 @@ void Application::run()
 
     // Tastenstand jetzt sichern: ein Druck waehrend der Warteschleife setzt den ESP zurueck
     PersistentState::save(_state);
+
+    // Tastenstand ist gesichert: ein Reset im Test wiederholt ihn nicht
+    if (_linkTestRequested)
+        runLinkTest(_link, 3000);
 
     // Was die Wand zeigt, entscheiden die Wand-Regeln
     // (Name bewusst nicht radarHigh: das ist die Methode)
@@ -452,7 +462,8 @@ void Application::handleInput(InputEvent button)
             break;
 
         case InputEvent::BT3:
-            DebugSerial.println("(keine Aktion)");
+            DebugSerial.println("Verbindungstest zum Pi");
+            _linkTestRequested = true;
             break;
 
         case InputEvent::BT4:

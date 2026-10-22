@@ -28,7 +28,8 @@ Es gibt keine Hauptschleife. Der ESP liegt im Deep Sleep; ein Tastendruck am PCF
 |---|---|
 | BT1 | Wand an: zeigt das neueste Zitat, bei jedem weiteren Druck das nächste in der Liste; die Wand geht 1 min nach dem letzten Druck aus |
 | BT2 | Raspberry Pi ein-/ausschalten (Puls auf das Flipflop am Relais, GPIO12) |
-| BT3–BT6 | noch nicht belegt |
+| BT3 | Verbindungstest zum Pi (bis Teil 2): `PING` senden, 3 s lang Anfragen des Pi beantworten, Ergebnis im Log |
+| BT4–BT6 | noch nicht belegt |
 
 BT1–BT3 laufen über Toggle-Flipflops (Blatt „Button Debouncing“, Jumper J10/J12/J14): jeder Druck kippt den Pegel am Expander, und der neue Pegel bleibt stehen, bis der ESP ihn liest. Die Firmware wertet deshalb jeden Wechsel als einen Druck (`InputTrigger::ANY_EDGE`), auch einen ganz kurzen. BT4–BT6 hängen direkt am Expander; ein kurzer Druck ist dort vorbei, bevor der ESP nach dem Reset liest, deshalb lösen sie nichts aus.
 
@@ -73,7 +74,7 @@ pio run -t uploadfs     # überschreibt das ganze Dateisystem
 
 ## Tests auf dem PC
 
-Die Logik ohne Arduino-Abhängigkeit (`lib/core`: Zitatliste, Zitatspeicher, Wand-Regeln) wird auf dem PC getestet:
+Die Logik ohne Arduino-Abhängigkeit (`lib/core`: Zitatliste, Zitatspeicher, Wand-Regeln, Verbindung zum Pi, Umbruch) wird auf dem PC getestet:
 
 ```bash
 cd esp
@@ -108,21 +109,28 @@ Der Takt ist 10 kHz (`I2CMasterControl::I2C_CLOCK_HZ`), gemessen sind etwa 9 kHz
 ```
 src/main.cpp              ruft nur Application::run() auf
 lib/app/                  Ablauf, Taster (application.cpp)
-lib/display/              Display (12 Module), DisplayGrid (Zeilenumbruch), 16-Segment-Font
+lib/display/              Display (12 Module), DisplayGrid (Anzeigeraster, nutzt TextLayout und Glyphs aus lib/core), SegmentChain
 lib/drivers/              HT16K33, PCF8575, I2CMasterControl (Master-Umschaltung, Bus-Befreiung)
 lib/Wire/                 eigene Software-I²C (ersetzt die Core-Bibliothek, siehe unten)
 lib/gpioExpander/         Taster-Auswertung (Flanken, Pegel)
-lib/system/               Weckgrund, Zustand im RTC-Speicher
-lib/core/                 Zitatliste, Zitatspeicher, Wand-Regeln (ohne Arduino, Tests auf dem PC)
+lib/system/               Weckgrund, Zustand im RTC-Speicher, PowerSwitchPin (Pin GPIO12 für die Pi-Speisung)
+lib/core/                 ohne Arduino, Tests auf dem PC: Zitatliste, Zitatspeicher, Wand-Regeln,
+                          LinkCodec (Zeilenformat), PiLink (Nummern, Wiederholung, Fristen), PiPower (Pi-Speisung),
+                          TextLayout (Umbruch) und Glyphs (Segmentschrift)
+lib/communication/        UartPort: Serial für die Verbindung zum Pi
 lib/storage/              LittleFS-Anbindung (LittleFsAdapter), FRAM-Bus (FramBus)
 data/                     Briefkasten für pio run -t uploadfs (normalerweise leer)
 data-beispiel/quotes.txt  Startliste als Beispiel zum Hochladen
 lib/ota/                  WLAN, OTA, Debug-Logger (Telnet); WLAN und OTA hat zurzeit niemand aufgerufen, Teil 3b braucht sie
-                          Der alte Code für die Verbindung zum Pi (lib/communication) und der alte Textspeicher sind entfernt.
-                          Teil 1 der Umsetzung bringt die neue Verbindung zwischen ESP und Pi (Spezifikation Abschnitt 16).
+                          Der alte Code für die Verbindung zum Pi und der alte Textspeicher sind entfernt.
 lib/config/pinMapping.h   Pinbelegung
-lib/config/features.h     alle Bauschalter (FRAM, Radar, Funkteil beim Aufwachen)
+lib/config/features.h     alle Bauschalter (FRAM, Radar, Funkteil beim Aufwachen, Baudrate der Verbindung)
 ```
+
+## Verbindung zum Pi
+
+Der ESP spricht mit dem Pi über `Serial`. Das ist dieselbe Leitung wie das Debug-Log. Beide laufen mit 74 880 Baud (`Features::LINK_BAUD`). Darum schreibt `PiLink` vor jede Nachricht ein `
+`. Eine Nachricht ist eine Zeile mit Nummer, Befehl und Daten sowie einer Prüfsumme. `LinkCodec` baut und liest die Zeile. `PiLink` vergibt die Nummern, wiederholt nach 250 ms und erkennt doppelte Nachrichten. Der Empfangspuffer fasst 1024 Byte, denn eine Zeile hat bis zu 257 Byte. Die Testfälle liegen in `tests/` und gelten für ESP und Pi gemeinsam. Das Format steht in der Spezifikation, Abschnitt 6.
 
 ### Eigene Wire-Bibliothek (`lib/Wire`)
 

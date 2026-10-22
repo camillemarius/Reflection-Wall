@@ -23,4 +23,8 @@ namespace Features
     // false: Es bleibt aus und spart rund 70 mA und 200 ms Bootzeit.
     // Der Wert liegt im RTC-Speicher. Darum gilt er erst ab dem naechsten Start.
     constexpr bool WAKE_RF_ENABLED = false;
+
+    // Baudrate der Leitung zum Pi, zugleich die der Debug-Ausgabe auf derselben UART.
+    // 74880 wie das Boot-ROM des ESP8266 (E2-a). Z12: sonst 115200 hier und in rpi/app/link/serial_port.py.
+    constexpr unsigned long LINK_BAUD = 74880;
 }

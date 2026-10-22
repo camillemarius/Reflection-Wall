@@ -11,6 +11,8 @@
 #include "WallLogic.h"
 #include "PiPower.h"
 #include "PowerSwitchPin.h"
+#include "UartPort.h"
+#include "PiLink.h"
 
 #include "PCF8575.h"
 #include "InputManager.h"
@@ -102,4 +104,11 @@ private:
     // Pi-Speisung (Clock-Puls auf das Flipflop); Reihenfolge: _piPower haelt eine Referenz auf _powerPin
     PowerSwitchPin _powerPin;
     PiPower _piPower;
+
+    // Verbindung zum Pi; Reihenfolge: _link haelt eine Referenz auf _port
+    UartPort _port;
+    PiLink _link;
+
+    // BT3 wurde in diesem Durchlauf gedrueckt: Verbindungstest nach dem Sichern des Tastenstands
+    bool _linkTestRequested;
 };
