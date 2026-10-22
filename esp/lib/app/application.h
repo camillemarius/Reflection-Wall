@@ -2,6 +2,7 @@
 
 #include "display.h"
 #include "wakeupReason.h"
+#include "features.h"
 #include "PersistentState.h"
 #include "LittleFsAdapter.h"
 #include "QuoteStore.h"
@@ -69,12 +70,12 @@ private:
     void enterDeepSleep();
 
     // Radar meldet "jemand da"? Liest INT_HLK nur, wenn der Radar
-    // eingebaut ist (RADAR_INSTALLED in application.cpp)
+    // eingebaut ist (Features::RADAR_INSTALLED)
     bool radarHigh();
 
     Display _display;
 
-    // Der aktive Zitatspeicher: FRAM oder Flash, je nach FRAM_INSTALLED
+    // Der aktive Zitatspeicher: FRAM oder Flash, je nach Features::FRAM_INSTALLED
     IQuoteStore& quotes();
 
     // Reihenfolge: die Speicher halten Referenzen auf _fs bzw. _framBus

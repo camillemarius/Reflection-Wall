@@ -17,6 +17,15 @@
 // unterscheiden gueltige Daten von dem Muell, der nach dem
 // Einschalten dort steht.
 
+// Zustand der Anzeige. Die Zahlenwerte stehen im RTC-Speicher und
+// duerfen sich nicht aendern (sonst stimmt MAGIC nicht mehr).
+enum class DisplayState : uint8_t
+{
+    Off     = 0,  // aus
+    On      = 1,  // an
+    Writing = 2   // wird geschrieben (der Durchlauf brach dabei ab)
+};
+
 class PersistentState
 {
 public:
@@ -26,9 +35,8 @@ public:
         // Referenz fuer die Flankenauswertung.
         uint16_t lastExpanderState;
 
-        // Zustand der Anzeige: 0 = aus, 1 = an, 2 = wird
-        // geschrieben (der Durchlauf brach dabei ab)
-        uint8_t  displayState;
+        // Zustand der Anzeige
+        DisplayState displayState;
 
         // 1 = die BT1-Minute laeuft
         uint8_t  button1Active;
