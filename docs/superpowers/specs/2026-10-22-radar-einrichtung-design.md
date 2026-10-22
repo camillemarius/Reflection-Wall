@@ -80,6 +80,8 @@ Schritte, die Tasten bestätigen sie. Ein Laptop ist nicht nötig.
 | R6 | Erkannt wird nur, wer davorsteht. Vorbeigehen soll die Wand nicht einschalten. |
 | R7 | Das Radar wird über seine UART eingestellt. |
 | R8 | Der Start mit zehn Drücken wird am Gerät auf Zuverlässigkeit geprüft (Abschnitt 10). |
+| R9 | Die Erkennung am gewählten Platz hat Vorrang. Die Reichweite wird nie unter diesen Platz gekürzt. Schalten Vorbeigehende die Wand trotzdem ein, zeigt die Anzeige nur `HINWEIS VORBEIGEHEN`. |
+| R10 | Der Leer-Test ist streng: Eine einzige Meldung in den 30 s gilt als nicht bestanden. Höchstens drei Anläufe; danach `FEHLER – ALTE WERTE`, und das Radar behält seine bisherigen Einstellungen. |
 
 **Vom Entwurf vorgeschlagen und vom Owner nicht widersprochen** (bitte beim Lesen
 prüfen):
@@ -133,7 +135,7 @@ Die Texte passen auf die Anzeige: 4 Zeilen zu 24 Zeichen, Umlaute umschrieben.
 | 6 | `MESSE MIT DIR 20 S` / `STILL STEHEN` | Er misst mit der Person an ihrem Platz. |
 | 7 | `BERECHNE` | Er berechnet die Werte (Abschnitt 6). Ist die Person nicht klar vom Raum zu unterscheiden, folgt `NOCHMAL` und zurück zu Schritt 1. |
 | 8 | `SPEICHERE` | Er schreibt alle Werte in einem Durchgang ins Radar und liest sie zur Kontrolle zurück. |
-| 9 | `TEST LEER` / `RAUM VERLASSEN – BT3` | Countdown, dann 30 s leer. Das Radar darf niemanden melden. |
+| 9 | `TEST LEER` / `RAUM VERLASSEN – BT3` | Countdown, dann 30 s leer. Das Radar darf niemanden melden, auch nicht einmal (R10). Sonst zurück zu Schritt 1, höchstens dreimal insgesamt. |
 | 10 | `TEST MIT DIR` / `AN DEINEN PLATZ – BT3` | Countdown, dann 15 s. Das Radar muss jemanden melden. |
 | 11 | `TEST VORBEIGEHEN` / `DREIMAL VORBEI – BT3` | Countdown, dann etwa 30 s, in denen man dreimal an der Wand vorbeigeht. Das Radar soll niemanden melden. |
 | 12 | `FERTIG BIS 1,4 M` oder `HINWEIS VORBEIGEHEN` oder `FEHLER – ALTE WERTE` | Ergebnis. Bei einem Fehler in 8–10 schreibt er die gesicherten alten Werte zurück. |
@@ -182,9 +184,14 @@ jedes Tor gilt:
 - **Vorbeigehen (R6):** Das Radar kann jemanden, der in derselben Entfernung
   vorbeigeht, nur über Stärke und Dauer von jemandem unterscheiden, der steht.
   Die Einstellung soll ein kurzes Vorbeigehen nicht genügen lassen. Wie, legt der
-  Builder fest, je nachdem, was das Radar anbietet. Gelingt das im Test (Schritt 11)
-  nicht, zeigt die Anzeige `HINWEIS VORBEIGEHEN`. Die Werte bleiben trotzdem
-  gespeichert, denn Leer und Person haben bestanden.
+  Builder fest, je nachdem, was das Radar anbietet. Die Reichweite wird dafür nie
+  unter den gewählten Platz gekürzt (R9). Gelingt es im Test (Schritt 11) nicht,
+  zeigt die Anzeige `HINWEIS VORBEIGEHEN`. Die Werte bleiben trotzdem gespeichert,
+  denn Leer und Person haben bestanden.
+- **Anläufe:** `NOCHMAL` (Schritt 7) und ein nicht bestandener Leer- oder
+  Personen-Test (Schritte 9 und 10) führen zurück zu Schritt 1. Nach dem dritten
+  Anlauf ohne Erfolg schreibt der Pi die gesicherten Werte zurück und zeigt
+  `FEHLER – ALTE WERTE` (R10).
 
 Falls der LD2410S eine eigene automatische Schwellen-Messung anbietet, darf der
 Builder sie für die Leer-Messung nutzen. Reichweite, Prüfung und Bericht bleiben
