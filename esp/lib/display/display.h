@@ -5,6 +5,7 @@
 #include "HT16K33.h"
 #include "SegmentChain.h"
 #include "DisplayGrid.h"
+#include "TextLayout.h"
 
 class Display
 {
@@ -24,7 +25,7 @@ public:
 
 private:
     static constexpr uint8_t MODULE_COUNT = 12;
-    static constexpr uint8_t ROWS = 4;
+    static constexpr uint8_t ROWS = TextLayout::ROWS;
 
     HT16K33 _modules[MODULE_COUNT];
 

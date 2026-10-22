@@ -1,5 +1,5 @@
 #pragma once
-// Liest tests/protocol_vectors.json (nur fuer Tests, header-only).
+// Liest tests/protocol_vectors.json und tests/display_vectors.json (nur fuer Tests, header-only).
 // Nur das feste Format der Datei: ein flaches Objekt je Zeile.
 #include <cstdlib>
 #include <fstream>
@@ -27,6 +27,7 @@ struct Vector
 };
 
 constexpr char PROTOCOL_VECTORS[] = "../tests/protocol_vectors.json";   // pio test laeuft in esp/
+constexpr char DISPLAY_VECTORS[] = "../tests/display_vectors.json";
 
 namespace vectorfile_detail
 {

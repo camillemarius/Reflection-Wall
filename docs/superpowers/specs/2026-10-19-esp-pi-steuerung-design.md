@@ -373,7 +373,7 @@ Der Pi:
 1. liest das Thema aus `rpi/app/config/thema.txt` – eine Zeile, Anfangsinhalt „Was ist der Sinn des Lebens“; fehlt die Datei, gilt dieser Satz,
 2. vergleicht es mit dem Thema der letzten Nacht (`rpi/app/config/.thema_zuletzt`); ist es neu, lässt er den Vortag weg,
 3. fragt die KI: Thema, Gedanke von gestern, „Entwickle daraus den nächsten Gedanken. Höchstens 96 Zeichen, auf keinen Fall länger. Nur Buchstaben, Ziffern, Leerzeichen und Punkt, keine Umlaute.“,
-4. ersetzt Umlaute (`ä→ae`, `ö→oe`, `ü→ue`, `ß→ss`), entfernt Zeichen ausserhalb von `A–Z 0–9 - . / : + *` und Leerzeichen,
+4. ersetzt Umlaute (`ä→ae`, `ö→oe`, `ü→ue`, `ß→ss`), entfernt Zeichen ausserhalb von `A–Z a–z 0–9 - . / : + *` und Leerzeichen. Kleinbuchstaben bleiben erlaubt. Die Anzeige zeigt sie als Grossbuchstaben,
 5. prüft mit derselben Umbruchregel wie die Anzeige (24 Zeichen pro Zeile, Umbruch an Wortgrenzen, höchstens 4 Zeilen), dass der Text passt; sonst fragt er die KI noch einmal – höchstens drei KI-Anfragen pro `GET|QUOTE`, danach antwortet er `ERROR|ZU_LANG`,
 6. antwortet `QUOTE|<Text>`.
 

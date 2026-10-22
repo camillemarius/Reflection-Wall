@@ -8,6 +8,11 @@ class VectorFileTest(unittest.TestCase):
         vectors = load_vectors("protocol_vectors.json")
         self.assertGreaterEqual(len(vectors), 52)
 
+    def test_display_vectors_have_the_shared_form(self):
+        vectors = load_vectors("display_vectors.json")
+        self.assertGreaterEqual(len(vectors), 60)
+        self.assertEqual({v["kind"] for v in vectors}, {"wrap", "glyph"})
+
 
 if __name__ == "__main__":
     unittest.main()

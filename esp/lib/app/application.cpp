@@ -2,6 +2,7 @@
 #include "I2CMasterControl.h"
 #include "pinMapping.h"
 #include "features.h"
+#include "TextLayout.h"
 
 #include "DebugLogger.h"
 
@@ -29,9 +30,6 @@ namespace
     // steht sie in /quotes.txt im LittleFS (QuoteStore). Ist die Liste leer
     // oder nicht lesbar, zeigt die Wand diesen Hinweis statt dunkel zu bleiben.
     constexpr char NO_TEXT[] = "KEIN TEXT";
-
-    // 12 Module x 8 Zeichen
-    constexpr unsigned int DISPLAY_CHARS = 96;
 
     const char* buttonName(InputEvent button)
     {
@@ -396,9 +394,9 @@ void Application::showQuote(WallAction action)
         date = list.at(index).date;
     }
 
-    if (text.length() > DISPLAY_CHARS)
-        DebugSerial.printf("[TEXT] Warnung: %u Zeichen, die Anzeige fasst %u\n",
-                           (unsigned)text.length(), DISPLAY_CHARS);
+    if (!TextLayout::wrap(text).fits)
+        DebugSerial.printf("[TEXT] Warnung: passt nicht auf die Anzeige (4 x 24, Umbruch an Wortgrenzen): \"%s\"\n",
+                           text.c_str());
 
     DebugSerial.printf("[WALL] %s -> #%u %s \"%s\"\n",
                        actionName(action),

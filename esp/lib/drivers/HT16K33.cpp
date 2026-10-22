@@ -1,6 +1,6 @@
 #include "HT16K33.h"
 
-#include "ASCII16Seg.h"
+#include "Glyphs.h"
 #include "pinMapping.h"
 
 
@@ -109,7 +109,7 @@ void HT16K33::setChar(uint8_t position, char c)
             (_buffer[(position - 1) * 2 + 1] << 8);
 
 
-        seg |= ASCII16Seg::get('.');
+        seg |= Glyphs::segments('.');
 
 
         _buffer[(position - 1) * 2] = seg & 0xFF;
@@ -119,7 +119,7 @@ void HT16K33::setChar(uint8_t position, char c)
     }
 
 
-    uint16_t seg = ASCII16Seg::get(c);
+    uint16_t seg = Glyphs::segments(c);
 
 
     _buffer[position * 2] = seg & 0xFF;

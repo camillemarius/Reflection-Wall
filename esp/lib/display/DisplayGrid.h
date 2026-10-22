@@ -16,6 +16,4 @@ public:
 private:
     SegmentChain* _rows;
     uint8_t _count;
-
-    void splitText(const String& text, String* lines);
 };
