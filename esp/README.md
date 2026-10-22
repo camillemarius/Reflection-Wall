@@ -129,8 +129,7 @@ lib/config/features.h     alle Bauschalter (FRAM, Radar, Funkteil beim Aufwachen
 
 ## Verbindung zum Pi
 
-Der ESP spricht mit dem Pi über `Serial`. Das ist dieselbe Leitung wie das Debug-Log. Beide laufen mit 74 880 Baud (`Features::LINK_BAUD`). Darum schreibt `PiLink` vor jede Nachricht ein `
-`. Eine Nachricht ist eine Zeile mit Nummer, Befehl und Daten sowie einer Prüfsumme. `LinkCodec` baut und liest die Zeile. `PiLink` vergibt die Nummern, wiederholt nach 250 ms und erkennt doppelte Nachrichten. Der Empfangspuffer fasst 1024 Byte, denn eine Zeile hat bis zu 257 Byte. Die Testfälle liegen in `tests/` und gelten für ESP und Pi gemeinsam. Das Format steht in der Spezifikation, Abschnitt 6.
+Der ESP spricht mit dem Pi über `Serial`. Das ist dieselbe Leitung wie das Debug-Log. Beide laufen mit 74 880 Baud (`Features::LINK_BAUD`). Darum schreibt `PiLink` vor jede Nachricht ein Zeilenende-Zeichen (`\n`). Eine Nachricht ist eine Zeile mit Nummer, Befehl und Daten sowie einer Prüfsumme. `LinkCodec` baut und liest die Zeile. `PiLink` vergibt die Nummern, wiederholt nach 250 ms und erkennt doppelte Nachrichten. Der Empfangspuffer fasst 1024 Byte, denn eine Zeile hat bis zu 257 Byte. Die Testfälle liegen in `tests/` und gelten für ESP und Pi gemeinsam. Das Format steht in der Spezifikation, Abschnitt 6.
 
 ### Eigene Wire-Bibliothek (`lib/Wire`)
 

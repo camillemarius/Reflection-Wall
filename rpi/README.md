@@ -19,11 +19,25 @@ Start im Ordner `rpi/`: `python -m app.main` (ohne Pi nicht getestet). Dann Modu
 | Ordner | Inhalt |
 |---|---|
 | `display/` | HT16K33-Treiber, DisplayGrid, Textlayout, Graphen |
-| `uart/` | alter Code, wird in Teil 1 der Umsetzung ersetzt (neue Verbindung zwischen ESP und Pi, siehe Spezifikation Abschnitt 16): UART zum ESP8266 (`COMMAND\|DATA`) und zum Radar LD2410S; Umschaltung per GPIO23 (HIGH = Radar, LOW = ESP) |
+| `uart/` | UART zum Radar LD2410S und Umschaltung per GPIO23 (HIGH = Radar, LOW = ESP); die Verbindung zum ESP liegt in `app/link/` |
 | `chatbot/` | Groq-API |
 | `speechRecognition/` | faster-whisper (lokal) bzw. Groq-Spracherkennung |
 | `speech/` | Sprachausgabe |
 | `database/` | MariaDB/MySQL für Reflexionen und Quiz |
+
+## Verbindung zum ESP (`app/link`)
+
+`codec.py` baut und liest die Zeilen der Verbindung (Nummer, Befehl, Daten, Prüfsumme). `PiLink` vergibt die Nummern, wiederholt Anfragen und erkennt doppelte Nachrichten. Dafür läuft ein eigener Thread. `serial_port.py` öffnet `/dev/ttyAMA0` mit 74 880 Baud und setzt GPIO23 auf LOW. Damit gehört die UART dem ESP.
+
+Das Prüfwerkzeug startet im Ordner `rpi/`:
+
+```bash
+python -m app.link.probe [--port /dev/ttyAMA0] [--baud 74880] [--seconds N] [--no-gpio]
+```
+
+Es sendet `READY`, bis der ESP antwortet, und gibt die Antwort aus. Danach beantwortet es die Anfragen des ESP: `BUTTON` mit `OK`, `SHUTDOWN` mit `BUSY` und alles andere mit `ERROR|PROBE`. Der Pi wird dabei nie heruntergefahren. `--seconds 0` läuft bis Ctrl+C. Mit `--no-gpio` bleibt GPIO23 unberührt.
+
+Das Prüfwerkzeug und die Radar-Anwendung (Taste 4 in `main.py`) dürfen nicht gleichzeitig laufen. Beide schalten GPIO23, und damit den CD4053. Der CD4053 legt fest, ob die UART des Pi mit dem ESP oder mit dem Radar spricht (Spezifikation F1, Abschnitt 6.4).
 
 ## Installation
 
