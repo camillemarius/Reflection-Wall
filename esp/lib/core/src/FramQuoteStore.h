@@ -10,6 +10,7 @@ struct FramLoadInfo
     bool imported = false;       // Briefkasten uebernommen und geloescht
     bool importFailed = false;   // Briefkasten gelesen, aber Schreiben ins FRAM gescheitert
     bool busError = false;       // FRAM nicht lesbar
+    bool damaged = false;        // Kennung da, aber kein Platz gueltig
     std::size_t bytes = 0;       // Laenge der gelesenen oder uebernommenen Liste
 };
 
@@ -21,7 +22,7 @@ public:
     FramQuoteStore(IByteStore& fram, IFileSystem& mailbox);
 
     QuoteList load() override;
-    // false nach Busfehler oder gescheitertem Import dieses Durchlaufs
+    // false nach Busfehler, beschaedigtem FRAM oder gescheitertem Import dieses Durchlaufs
     bool save(const QuoteList& list) override;
     const FramLoadInfo& lastLoad() const;
 

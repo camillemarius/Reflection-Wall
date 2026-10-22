@@ -14,6 +14,8 @@ public:
     bool failRead = false;
     bool failWrite = false;
     long writeBudget = -1;
+    int corruptReads = 0;          // > 0: jedes Lesen ueber 16 Bytes kippt ein Byte, Zaehler sinkt
+    bool corruptWrites = false;    // jedes Schreiben ueber 16 Bytes speichert ein gekipptes Byte
 
     bool read(uint16_t address, uint8_t* out, std::size_t length) override
     {
@@ -24,6 +26,11 @@ public:
         for (std::size_t i = 0; i < length; ++i)
         {
             out[i] = data[address + i];
+        }
+        if (corruptReads > 0 && length > 16)
+        {
+            out[length / 2] ^= 0x01;
+            --corruptReads;
         }
         return true;
     }
@@ -45,6 +52,10 @@ public:
             {
                 --writeBudget;
             }
+        }
+        if (corruptWrites && length > 16)
+        {
+            data[address + length / 2] ^= 0x01;
         }
         return true;
     }

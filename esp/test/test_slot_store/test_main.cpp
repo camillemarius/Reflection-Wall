@@ -102,7 +102,7 @@ void test_header_with_oversized_length_is_ignored()
     {
         m.data[SlotLayout::SLOT_A + i] = head[i];
     }
-    TEST_ASSERT_EQUAL_STRING("", readContent(m, SlotStore::ReadResult::Empty).c_str());
+    TEST_ASSERT_EQUAL_STRING("", readContent(m, SlotStore::ReadResult::Damaged).c_str());
 }
 
 void test_half_written_header_keeps_previous_list()
@@ -157,6 +157,98 @@ void test_write_without_read_continues_numbering()
     TEST_ASSERT_EQUAL_STRING("drei", readContent(m, SlotStore::ReadResult::Ok).c_str());
 }
 
+static void corruptList(MemoryBytes& m, uint16_t slot)
+{
+    m.data[slot + SlotLayout::HEADER_SIZE] ^= 0x01;
+}
+
+void test_single_bad_read_is_retried()
+{
+    MemoryBytes m;
+    SlotStore s(m);
+    s.write("alt-alt-alt-alt-alt-alt");
+    s.write("neu-neu-neu-neu-neu-neu");
+    m.corruptReads = 1;
+    TEST_ASSERT_EQUAL_STRING("neu-neu-neu-neu-neu-neu", readContent(m, SlotStore::ReadResult::Ok).c_str());
+}
+
+void test_persistently_bad_newest_slot_falls_back()
+{
+    MemoryBytes m;
+    SlotStore s(m);
+    s.write("alt");
+    s.write("neu");
+    corruptList(m, SlotLayout::SLOT_B);
+    TEST_ASSERT_EQUAL_STRING("alt", readContent(m, SlotStore::ReadResult::Ok).c_str());
+}
+
+void test_number_continues_above_damaged_slot()
+{
+    MemoryBytes m;
+    SlotStore s(m);
+    s.write("a");
+    s.write("b");
+    corruptList(m, SlotLayout::SLOT_B);
+    std::string content;
+    TEST_ASSERT_EQUAL(static_cast<int>(SlotStore::ReadResult::Ok), static_cast<int>(s.read(content)));
+    TEST_ASSERT_EQUAL_STRING("a", content.c_str());
+    TEST_ASSERT_TRUE(s.write("c"));
+    TEST_ASSERT_EQUAL_UINT8(3, m.data[SlotLayout::SLOT_B + 4]);
+    TEST_ASSERT_EQUAL_STRING("c", readContent(m, SlotStore::ReadResult::Ok).c_str());
+}
+
+void test_both_slots_damaged_is_reported()
+{
+    MemoryBytes m;
+    SlotStore s(m);
+    s.write("a");
+    s.write("b");
+    corruptList(m, SlotLayout::SLOT_A);
+    corruptList(m, SlotLayout::SLOT_B);
+    TEST_ASSERT_EQUAL_STRING("", readContent(m, SlotStore::ReadResult::Damaged).c_str());
+}
+
+void test_blank_fram_is_empty_not_damaged()
+{
+    MemoryBytes m;
+    TEST_ASSERT_EQUAL_STRING("", readContent(m, SlotStore::ReadResult::Empty).c_str());
+}
+
+void test_number_above_both_damaged_slots()
+{
+    MemoryBytes m;
+    SlotStore s(m);
+    s.write("a");
+    s.write("b");
+    corruptList(m, SlotLayout::SLOT_A);
+    corruptList(m, SlotLayout::SLOT_B);
+    SlotStore fresh(m);
+    TEST_ASSERT_TRUE(fresh.write("c"));
+    TEST_ASSERT_EQUAL_UINT8(3, m.data[SlotLayout::SLOT_A + 4]);   // A hat die niedrigere Nummer 1
+    TEST_ASSERT_EQUAL_STRING("c", readContent(m, SlotStore::ReadResult::Ok).c_str());
+}
+
+void test_write_after_failed_write_numbers_correctly()
+{
+    MemoryBytes m;
+    SlotStore s(m);
+    m.failWrite = true;
+    TEST_ASSERT_FALSE(s.write("a"));
+    m.failWrite = false;
+    TEST_ASSERT_TRUE(s.write("b"));
+    TEST_ASSERT_EQUAL_UINT8(1, m.data[SlotLayout::SLOT_A + 4]);
+    TEST_ASSERT_EQUAL_STRING("b", readContent(m, SlotStore::ReadResult::Ok).c_str());
+}
+
+void test_bus_error_in_prewrite_read_fails_write()
+{
+    MemoryBytes m;
+    const std::vector<uint8_t> before = m.data;
+    m.failRead = true;
+    TEST_ASSERT_FALSE(SlotStore(m).write("a"));
+    TEST_ASSERT_TRUE(before == m.data);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -174,5 +266,13 @@ int main(int, char**)
     RUN_TEST(test_too_long_content_is_refused);
     RUN_TEST(test_read_error_is_bus_error);
     RUN_TEST(test_write_without_read_continues_numbering);
+    RUN_TEST(test_single_bad_read_is_retried);
+    RUN_TEST(test_persistently_bad_newest_slot_falls_back);
+    RUN_TEST(test_number_continues_above_damaged_slot);
+    RUN_TEST(test_both_slots_damaged_is_reported);
+    RUN_TEST(test_blank_fram_is_empty_not_damaged);
+    RUN_TEST(test_number_above_both_damaged_slots);
+    RUN_TEST(test_write_after_failed_write_numbers_correctly);
+    RUN_TEST(test_bus_error_in_prewrite_read_fails_write);
     return UNITY_END();
 }

@@ -468,12 +468,21 @@ Liste liegt, entscheidet der Schalter `FRAM_INSTALLED` in der Firmware (F1-a).
   Liste. Danach folgt die Liste im Textformat oben.
 - **Lesen:** Gültig ist ein Platz mit richtiger Kennung, erlaubter Länge und
   passender Prüfsumme. Massgeblich ist der gültige Platz mit der höheren Nummer.
-  Ist keiner gültig, ist die Liste leer.
-- **Schreiben:** immer in den anderen Platz, mit der nächsten Nummer, die Liste
-  zuerst und den Kopf zuletzt. Bricht ein Reset das Schreiben ab, bleibt der
+  Passt die Prüfsumme eines Platzes nicht, liest der ESP diesen Platz noch einmal.
+  Erst wenn auch das zweite Lesen scheitert, gilt der Platz als ungültig.
+  Trägt kein Kopf eine Kennung, ist das FRAM leer und die Liste ebenfalls.
+- **Beschädigt:** Trägt mindestens ein Kopf die Kennung, aber kein Platz ist gültig,
+  gilt das FRAM als beschädigt. Die Wand zeigt `KEIN TEXT`. Der ESP speichert in
+  diesem Durchlauf nichts. Nur eine Liste aus dem Briefkasten repariert das FRAM.
+- **Schreiben:** immer in den anderen Platz als den gültigen. Ist keiner gültig,
+  nimmt er den Platz mit der niedrigeren Nummer. Die Nummer ist die höchste
+  gefundene Nummer plus 1. So bekommt ein Schreiben nie eine niedrigere Nummer
+  als ein Platz, der schon da ist. Die Liste kommt zuerst und der Kopf zuletzt. Bricht ein Reset das Schreiben ab, bleibt der
   alte Platz gültig. Das ersetzt das Umbenennen von `/quotes.new`.
 - **Briefkasten:** Liegt beim Start `/quotes.txt` im Flash, übernimmt der ESP
-  die Liste ins FRAM und löscht danach die Datei. Fällt der Strom dazwischen
+  die Liste ins FRAM. Danach liest er die Liste aus dem FRAM zurück. Nur wenn sie
+  übereinstimmt, löscht er die Datei. Stimmt sie nicht, bleibt die Datei, und der
+  ESP speichert in diesem Durchlauf nichts. Fällt der Strom dazwischen
   aus, übernimmt er dieselbe Datei beim nächsten Start noch einmal. Dasselbe gilt
   für `/text.txt` (Umstieg wie unten). `esp/data/` im Repo bleibt leer; eine
   Liste zum Hochladen liegt als Beispiel in `esp/data-beispiel/quotes.txt`.

@@ -382,6 +382,8 @@ void Application::showQuote(WallAction action)
         const FramLoadInfo& info = _framQuotes.lastLoad();
         if (info.busError)
             DebugSerial.println("[QUOTES] FEHLER: FRAM 0x50 nicht lesbar");
+        else if (info.damaged)
+            DebugSerial.println("[QUOTES] FEHLER: Liste im FRAM beschaedigt (Pruefsumme falsch), nichts gespeichert");
         else if (info.imported)
             DebugSerial.printf("[QUOTES] Liste aus dem Flash ins FRAM uebernommen: %u Bytes in %u ms\n",
                                (unsigned)info.bytes, (unsigned)loadMs);

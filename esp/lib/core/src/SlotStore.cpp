@@ -27,6 +27,36 @@ uint16_t SlotStore::slotAddress(int slot) const
     return slot == 0 ? SlotLayout::SLOT_A : SlotLayout::SLOT_B;
 }
 
+// Prueft einen Platz mit Kennung und erlaubter Laenge: Liste lesen, CRC vergleichen.
+// Bei falscher Pruefsumme wird Kopf und Liste ein zweites Mal gelesen (kurze Stoerung am Bus).
+SlotStore::SlotCheck SlotStore::checkSlot(int slot, uint8_t* head, std::string& text)
+{
+    for (int attempt = 0; attempt < 2; ++attempt)
+    {
+        if (attempt > 0 && !bytes_.read(slotAddress(slot), head, SlotLayout::HEADER_SIZE))
+        {
+            return SlotCheck::BusError;
+        }
+        const uint32_t length = getU32(head + 8);
+        if (getU32(head) != SlotLayout::MAGIC || length > SlotLayout::MAX_CONTENT)
+        {
+            return SlotCheck::Invalid;
+        }
+        text.assign(length, '\0');
+        if (length > 0 &&
+            !bytes_.read(slotAddress(slot) + SlotLayout::HEADER_SIZE, reinterpret_cast<uint8_t*>(&text[0]), length))
+        {
+            return SlotCheck::BusError;
+        }
+        const uint32_t crc = crc32Ieee(reinterpret_cast<const uint8_t*>(text.data()), length, crc32Ieee(head + 4, 8));
+        if (crc == getU32(head + 12))
+        {
+            return SlotCheck::Valid;
+        }
+    }
+    return SlotCheck::Invalid;
+}
+
 SlotStore::ReadResult SlotStore::read(std::string& content)
 {
     content.clear();
@@ -36,6 +66,23 @@ SlotStore::ReadResult SlotStore::read(std::string& content)
         if (!bytes_.read(slotAddress(s), head[s], SlotLayout::HEADER_SIZE))
         {
             return ReadResult::BusError;
+        }
+    }
+
+    // Hoechste Nummer aller Koepfe mit Kennung, gueltig oder nicht
+    bool anyMagic = false;
+    uint32_t highest = 0;
+    for (int s = 0; s < 2; ++s)
+    {
+        hasMagic_[s] = getU32(head[s]) == SlotLayout::MAGIC;
+        headNumber_[s] = hasMagic_[s] ? getU32(head[s] + 4) : 0;
+        if (hasMagic_[s])
+        {
+            anyMagic = true;
+            if (headNumber_[s] > highest)
+            {
+                highest = headNumber_[s];
+            }
         }
     }
 
@@ -50,26 +97,24 @@ SlotStore::ReadResult SlotStore::read(std::string& content)
     for (int i = 0; i < 2; ++i)
     {
         const int s = order[i];
-        const uint8_t* h = head[s];
-        const uint32_t length = getU32(h + 8);
-        if (getU32(h) != SlotLayout::MAGIC || length > SlotLayout::MAX_CONTENT)
+        if (!hasMagic_[s])
         {
             continue;
         }
-        std::string text(length, '\0');
-        if (length > 0 &&
-            !bytes_.read(slotAddress(s) + SlotLayout::HEADER_SIZE, reinterpret_cast<uint8_t*>(&text[0]), length))
+        std::string text;
+        const SlotCheck check = checkSlot(s, head[s], text);
+        if (check == SlotCheck::BusError)
         {
             return ReadResult::BusError;
         }
-        const uint32_t crc = crc32Ieee(reinterpret_cast<const uint8_t*>(text.data()), length, crc32Ieee(h + 4, 8));
-        if (crc != getU32(h + 12))
+        if (check == SlotCheck::Invalid)
         {
             continue;
         }
         known_ = true;
         slot_ = s;
-        number_ = getU32(h + 4);
+        number_ = getU32(head[s] + 4);
+        highest_ = highest;
         content = text;
         return ReadResult::Ok;
     }
@@ -77,7 +122,8 @@ SlotStore::ReadResult SlotStore::read(std::string& content)
     known_ = true;
     slot_ = NO_SLOT;
     number_ = 0;
-    return ReadResult::Empty;
+    highest_ = highest;
+    return anyMagic ? ReadResult::Damaged : ReadResult::Empty;
 }
 
 bool SlotStore::write(const std::string& content)
@@ -95,8 +141,18 @@ bool SlotStore::write(const std::string& content)
         }
     }
 
-    const int target = slot_ == 0 ? 1 : 0;
-    const uint32_t number = number_ + 1;
+    // Ziel: der andere Platz als der gueltige; ohne gueltigen der mit der niedrigeren Nummer
+    // (ohne Kennung zaehlt als niedrigste), sonst A
+    int target = 0;
+    if (slot_ != NO_SLOT)
+    {
+        target = slot_ == 0 ? 1 : 0;
+    }
+    else if (headNumber_[1] < headNumber_[0])
+    {
+        target = 1;
+    }
+    const uint32_t number = highest_ + 1;
     const uint32_t length = static_cast<uint32_t>(content.size());
 
     uint8_t head[SlotLayout::HEADER_SIZE];
@@ -120,5 +176,8 @@ bool SlotStore::write(const std::string& content)
     }
     slot_ = target;
     number_ = number;
+    highest_ = number;
+    hasMagic_[target] = true;
+    headNumber_[target] = number;
     return true;
 }
