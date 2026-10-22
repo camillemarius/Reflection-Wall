@@ -11,11 +11,11 @@ pio run -t upload       # flashen über USB (esptool)
 pio device monitor      # serielle Konsole, 74880 Baud
 ```
 
-**OTA:** In `platformio.ini` die Zeilen unter `#OTA` aktivieren (`upload_protocol = espota`, `upload_port = reflectionwall.local`). Dafür muss `WAKE_RF_MODE` in `application.cpp` auf `WAKE_RF_DEFAULT` stehen, sonst bleibt das WLAN aus.
+**OTA:** Zurzeit nicht nutzbar. Kein Code startet WLAN oder OTA: `WifiController::begin` und `OtaManager::begin` hat keine Stelle aufgerufen. Darum führen auch die Zeilen unter `#OTA` in `platformio.ini` und die VS-Code-Aufgabe „Upload ESP + Telnet“ ins Leere. Geflasht wird nur über USB. Teil 3b bringt WLAN und NTP zurück und startet sie dann.
 
 ## Ablauf im Normalbetrieb
 
-Es gibt keine Hauptschleife. Der ESP liegt im Deep Sleep; ein Tastendruck am PCF8575 löst über dessen INT-Ausgang einen Reset aus, ebenso der Radar (INT_HLK). `Application::run()` läuft dann durch und legt den ESP wieder schlafen. Solange die Wand mit dem Radar an ist, bleibt der ESP in `run()` wach und liest den Radar (siehe unten). Ohne Radar legt er sich nach dem Durchlauf schlafen und wacht mit dem nächsten Reset auf:
+Es gibt keine Hauptschleife. Der ESP liegt im Deep Sleep; ein Tastendruck am PCF8575 löst über dessen INT-Ausgang einen Reset aus, ebenso der Radar (INT_HLK). `Application::run()` läuft dann durch und legt den ESP wieder schlafen. Solange die Wand mit dem Radar an ist, bleibt der ESP in `run()` wach und liest den Radar (siehe unten). Auch ohne Radar bleibt der ESP nach BT1 etwa 60 s wach, denn so lange bleibt die Wand an. Danach legt er sich schlafen und wacht mit dem nächsten Reset auf:
 
 1. WLAN aus (spart Strom und Bootzeit)
 2. Weckgrund lesen
@@ -114,12 +114,12 @@ lib/Wire/                 eigene Software-I²C (ersetzt die Core-Bibliothek, sie
 lib/gpioExpander/         Taster-Auswertung (Flanken, Pegel)
 lib/system/               Weckgrund, Zustand im RTC-Speicher
 lib/core/                 Zitatliste, Zitatspeicher, Wand-Regeln (ohne Arduino, Tests auf dem PC)
-lib/storage/              LittleFS-Anbindung (LittleFsAdapter), FRAM-Bus (FramBus);
-                          textStorage, espTextStorage, framTextStorage: alter Code, ersetzt in Teil 1 der Umsetzung (neue Verbindung zwischen ESP und Pi, siehe Spezifikation Abschnitt 16)
+lib/storage/              LittleFS-Anbindung (LittleFsAdapter), FRAM-Bus (FramBus)
 data/                     Briefkasten für pio run -t uploadfs (normalerweise leer)
 data-beispiel/quotes.txt  Startliste als Beispiel zum Hochladen
-lib/communication/        UART-Protokoll zum Raspberry Pi (COMMAND|DATA); alter Code, ersetzt in Teil 1
-lib/ota/                  WLAN, OTA, Debug-Logger (Telnet)
+lib/ota/                  WLAN, OTA, Debug-Logger (Telnet); WLAN und OTA hat zurzeit niemand aufgerufen, Teil 3b braucht sie
+                          Der alte Code für die Verbindung zum Pi (lib/communication) und der alte Textspeicher sind entfernt.
+                          Teil 1 bringt die neue Verbindung zwischen ESP und Pi (Spezifikation Abschnitt 16).
 lib/config/pinMapping.h   Pinbelegung
 ```
 

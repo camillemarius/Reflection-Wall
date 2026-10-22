@@ -55,7 +55,7 @@ private:
     // Zentrale Zuweisung Taster -> Aktion
     void handleInput(InputEvent button);
 
-    // Zeigt ein Zitat aus der Liste im Flash; welches, bestimmt
+    // Zeigt ein Zitat aus der Liste im FRAM; welches, bestimmt
     // die Aktion (neuestes, aktuelles, naechstes)
     void showQuote(WallAction action);
 

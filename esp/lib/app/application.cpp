@@ -263,7 +263,7 @@ void Application::run()
 // das Relais bleibt unberuehrt.
 //
 // Aufgerufen wird das nur aus togglePowerSwitch(), also nur
-// dann, wenn BT5 tatsaechlich gedrueckt wurde. In jedem
+// dann, wenn BT2 tatsaechlich gedrueckt wurde. In jedem
 // anderen Durchlauf bleibt GPIO12 Eingang und damit hochohmig:
 // der ESP haengt sich nicht bei jedem Boot an die Taktleitung
 // des Flipflops.
@@ -333,7 +333,7 @@ uint16_t Application::readExpander()
 // ---------------------------------------------------------
 // begin() kostet ueber ein Dutzend Buszugriffe. Sie lohnen
 // sich nur, wenn tatsaechlich etwas geschrieben wird - ein
-// Druck auf BT5 laesst die Anzeige unberuehrt.
+// Druck auf BT2 laesst die Anzeige unberuehrt.
 
 void Application::ensureDisplayReady()
 {
