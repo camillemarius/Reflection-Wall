@@ -1,20 +1,22 @@
 # Teil 1: Verbindung zwischen ESP und Pi – Umsetzungsplan
 
-**Stand 2026-10-22:** Entwurf, noch nicht umgesetzt.
+**Stand 2026-10-22:** Entwurf, überarbeitet nach der Wartbarkeits-Durchsicht vom selben Tag (Top-10, Punkte 5–8). Noch nicht umgesetzt.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** ESP und Pi tauschen über die UART Nachrichten im Format `$NN:BEFEHL|DATEN*hh` aus, mit Prüfsumme, laufender Nummer, Bestätigung und Wiederholung; der alte Code (`COMMAND|DATA`) ist entfernt.
+**Goal:** ESP und Pi tauschen über die UART Nachrichten im Format `$NN:BEFEHL|DATEN*hh` aus, mit Prüfsumme, laufender Nummer, Bestätigung und Wiederholung. Vorher wird der Pi-Code ein testbares Paket, Umbruch und Schrift der Anzeige liegen als geprüfte Regel auf beiden Seiten, und die Pi-Speisung hat eine eigene Klasse.
 
-**Architecture:** Auf beiden Seiten gibt es denselben Codec (Zeile ↔ Nachricht) und einen PiLink (Zeilen lesen, Antworten zuordnen, wiederholen, Doppeltes erkennen). Auf dem ESP ist beides reines C++ in `esp/lib/core` mit einer Schnittstelle `ISerialPort` statt `Serial`; auf dem Pi ist es ein Python-Paket `rpi/app/link` mit einem eigenen Thread für die Leitung (S4-a). Eine gemeinsame Datei `tests/protocol_vectors.json` prüft beide Codecs mit denselben Zeilen. Sitzung, Speisung, Mitternacht und Tasten für die Pi-Anwendungen gehören zu Teil 2, 3b und 4.
+**Architecture:** Der Pi-Code wird ein Paket `app` mit einer Importschreibweise, das auf dem PC ohne Hardware lädt und mit `unittest` geprüft wird. Codec und PiLink gibt es auf beiden Seiten: auf dem ESP als reines C++ in `esp/lib/core` hinter einer Schnittstelle `ISerialPort`, auf dem Pi als Paket `app.link` mit eigenem Thread für die Leitung (S4-a). Zwei gemeinsame Dateien in `tests/` prüfen ESP und Pi mit denselben Fällen: `protocol_vectors.json` (Nachrichten) und `display_vectors.json` (Umbruch und Schrift). Sitzung, Speisung nach Zustand, Mitternacht und Tasten für die Pi-Anwendungen gehören zu Teil 2, 3b und 4.
 
 **Tech Stack:** ESP8266 Arduino-Core über PlatformIO (`env:esp12e`), Unity-Tests in `env:native` mit MinGW GCC 6.3; Python 3.13 mit `unittest`, `pyserial` 3.5, `lgpio` (nur auf dem Pi).
 
-**Spec:** `docs/superpowers/specs/2026-10-19-esp-pi-steuerung-design.md` – Abschnitte 2 (E1-b, E2-a, E3, E5-c, Regel, S4-a), 3 (Z1, Z2, Z4, Z9, Z12, Z13), 5, 6, 12, 13, 14, 15, 16 (Teil 1).
+**Spec:** `docs/superpowers/specs/2026-10-19-esp-pi-steuerung-design.md` – Abschnitte 2 (E1-b, E2-a, E3, E5-c, Regel, S4-a), 3 (Z1, Z2, Z4, Z9, Z12, Z13), 5, 6, 9 (Schritte 4 und 5: Zeichen und Umbruch), 12, 13, 14, 15, 16 (Teil 1).
 
 ## Annahmen dieses Plans
 
 Wo die Spezifikation offen ist, gilt hier die kleinste Wahl, die sie erfüllt. Der Owner kann jede Zeile überstimmen.
+
+**Verbindung**
 
 1. **Antwort oder Anfrage** erkennt der Empfänger am Befehl: `PONG`, `QUOTE`, `OK`, `BUSY`, `ERROR` sind Antworten, alles andere ist eine Anfrage. Eine Anfrage, die der Empfänger nicht kennt, bekommt `ERROR|UNKNOWN` – auch `PING` an den ESP oder `READY` an den Pi.
 2. **Ohne Daten kein `|`:** gesendet wird `$00:PING*2A`; `$00:PING|*56` wird gleich gelesen.
@@ -26,44 +28,67 @@ Wo die Spezifikation offen ist, gilt hier die kleinste Wahl, die sie erfüllt. D
 8. **Fristen stehen im Codec:** `GET` 120 s, `SHUTDOWN` 60 s (`T_shutdown`), alle anderen Anfragen 3 s. Die Verbindung meldet nur den Ablauf; was danach geschieht (Tabelle 6.2), entscheidet Teil 2.
 9. **`PING` beantwortet der PiLink auf dem Pi selbst** in seinem Thread. `PONG` heisst damit: Programm und Verbindung leben – nicht: die Anwendung reagiert.
 10. **Der ESP schreibt vor jede Nachricht ein `\n`.** Sein Debug-Log nutzt dieselbe Leitung und schreibt Zeilen ohne Ende (`[INPUT] BT3 -> `); sonst stünde die Nachricht nicht am Zeilenanfang.
-11. **Gemeinsame Testfälle** in `tests/protocol_vectors.json` im Wurzelverzeichnis des Repos (Spezifikation 14 nennt `tests/`), ein Testfall pro Zeile. Der ESP-Test liest die Datei zur Laufzeit mit einem kleinen Leser für genau diese Form; `pio test` läuft im Ordner `esp/`, der Pfad ist also `../tests/protocol_vectors.json`.
-12. **Python-Tests mit `unittest`** aus der Standardbibliothek, wie Spezifikation 14 sagt; pytest wird nicht installiert, eine requirements-Datei gibt es nicht. Neue Pi-Dateien liegen in `rpi/app/link/`; `rpi/app/driver/uart/` bleibt für den Radar.
+11. **Gemeinsame Testfälle** liegen in `tests/` im Wurzelverzeichnis (Spezifikation 14 nennt `tests/protocol_vectors.json`), ein Testfall pro Zeile, die Datei reines ASCII. Der ESP-Test liest sie zur Laufzeit mit einem kleinen Leser für genau diese Form; `pio test` läuft im Ordner `esp/`, der Pfad ist also `../tests/…`.
+12. **Python-Tests mit `unittest`** aus der Standardbibliothek, wie Spezifikation 14 sagt; pytest wird nicht installiert. Testpakete liegen als `tests/` neben dem Code in `rpi/app/…`; Aufruf `cd rpi && python -m unittest discover -s app -t . -v`.
 13. **BT3 ohne Sitzung startet bis Teil 2 einen Verbindungstest:** `PING` senden und 3 s lang Anfragen des Pi mit `OK` beantworten, Ergebnis im Log. Teil 2 ersetzt das durch `BUTTON|3`.
-14. **Die alten Textspeicher** (`esp/lib/storage/textStorage.*`, `espTextStorage.*`, `framTextStorage.*`, `ITextStorage.h`) werden zusammen mit `piCommunication` entfernt; nichts anderes nutzt sie.
+14. **Alter Code:** Den alten ESP-Code (`esp/lib/communication/*`, Textspeicher, unbenutzte Mitglieder von `Application`) hat die Aufräumrunde vom 2026-10-22 schon entfernt (Commit 75acafc). Die alten Pi-Dateien `uart_esp.py`, `protocol.py`, `commands.py`, `test.py` in `rpi/app/driver/uart/` löscht Task 1; niemand nutzt sie, und `test.py` würde beim Import Hardware ansprechen.
 15. **`txSeq`/`rxSeq`** gibt der ESP-PiLink über `state()`/`restore()` heraus. Sie im RTC-Speicher abzulegen gehört zu Teil 2 – bis dahin beginnt der ESP nach jedem Wecken bei `00`, und der Pi beantwortet ein zweites `PING #00` aus seinem Speicher.
 16. **Fehler 1–5** aus der „ersten Durchsicht“ stehen nirgends im Repo. Dieser Plan benennt sie aus dem alten Code neu (nächster Abschnitt).
-17. **Arbeitszweig** `feature/verbindung-esp-pi`, abgezweigt vom Zweig, auf dem Teil 3a-2 liegt (heute `feature/anzeige-radar-zitatliste`).
+17. **Arbeitszweig** `feature/verbindung-esp-pi`, abgezweigt vom Zweig mit der Aufräumrunde (heute `feature/anzeige-radar-zitatliste`).
+18. **Baudrate als Schalter:** `Features::LINK_BAUD = 74880` in `esp/lib/config/features.h`, auf dem Pi `ESP_BAUD` in `app/link/serial_port.py` (Z12: beide auf 115 200, falls nötig).
+
+**Pi-Aufräumrunde (Tasks 1–2)**
+
+19. **Ein Paket `app`:** Start mit `cd rpi && python -m app.main`. Alle Importe absolut ab `app.` – auch im Ordner `driver/uart`, der heute relativ importiert. Ordner, die Python-Module enthalten, bekommen ein leeres `__init__.py` – ausser `videoframes/`, dessen Dateien Daten sind. Ordner- und Klassennamen bleiben (auch `VoiseAssistant`).
+20. **Nichts beim Import:** `smbus2` und `lgpio` werden erst beim ersten Gebrauch importiert (`smbus2` lässt sich unter Windows gar nicht importieren, es fehlt `fcntl`), der Bus erst dann geöffnet. Groq-Schlüssel und Client erst beim ersten `write_to_ai`. `setup_db` läuft im Konstruktor von `QuizGame` und `ReflectionAI` statt beim Import – die Datenbank wird also beim Wählen des Modus eingerichtet statt beim Start. `logging.basicConfig` wandert aus `groqAPI.py` nach `main()`.
+21. **`QuizGame`:** Es bleibt die zweite Fassung der Klasse (heute Zeilen 52–99). Sie ist die, die heute läuft, weil sie die erste beim Import überschreibt.
+22. **`rpi/requirements.txt` ohne Versionsnummern;** `lgpio` und `piper-tts` nur unter Linux. Die Versionen hält Teil 0 mit `pip freeze` auf dem Pi fest.
+23. **Radar-Test:** `rpi/tests/ld2410s/test.py` läuft schon heute nicht: Er ruft `RadarGraph(min_distance=…, smoothing=…)` und `distance_to_x`, und beides gibt es in keiner Kopie. Er wird auf die App-Klassen `DisplayGraph` und `RadarGraph` umgestellt (eine Modulreihe, vier Höhenstufen) und bekommt `--simulation` und `--seconds`. Die Aufrufe, die es nicht gibt, entfallen. Damit `python -m tests.ld2410s.test` sicher den eigenen Ordner findet, bekommen `rpi/tests/` und `rpi/tests/ld2410s/` ein leeres `__init__.py`.
+
+**Anzeige-Regeln (Task 5)**
+
+24. **Umbruch = heutige ESP-Regel** (`DisplayGrid::splitText`), unverändert: 24 Zeichen pro Zeile, 4 Zeilen, Leerzeichen am Zeilenanfang überspringen, am letzten Leerzeichen umbrechen, ein Wort über 24 Zeichen hart trennen. Neu ist nur `fits` (der ganze Text steht in den vier Zeilen). Ein Punkt belegt eine Zelle; der Treiber zeichnet ihn ins vorherige Zeichen, das ändert sich nicht.
+25. **Schrift:** Darstellbar sind Leerzeichen, `- . / : + *`, `0–9`, `A–Z`; Kleinbuchstaben wie Grossbuchstaben. Alles andere ist dunkel (`0000`) und nicht darstellbar.
+26. **Die '7' wird `0x8022`** statt `0x8002` (dasselbe Muster wie die '1'): oberer Balken `0x0020` wie in '2', '3', 'O', 'T', dazu die rechte Seite `0x8002` der '1'. Gilt für ESP und Pi; Task 11 prüft es an der Wand.
+27. **Auf dem Pi** wird `app/driver/display/text_layout.py` (heute unbenutzt) zu dieser Regel. Die Pi-Anwendungen behalten ihren eigenen Umbruch mit Silbentrennung in `display.py`; die Regel braucht erst das Zitat in Teil 3b.
+
+**Pi-Speisung (Task 6)**
+
+28. **`PiPower`** kapselt den Puls auf GPIO12 und merkt sich, was der ESP zuletzt geschaltet hat (`isOn()`; F5: zurücklesen geht nicht). BT2 bleibt in Teil 1 ein reines Umschalten (`toggle()`); `switchTo()` und `restore()` sind für Teil 2 da.
 
 ## Alter Code und Fehler 1–5
 
-Z13 legt die Fehler 1–3 in den Pi-Code; 4 und 5 stammen aus dem ESP-Code.
+Z13 legt die Fehler 1–3 in den Pi-Code; 4 und 5 stammen aus dem ESP-Code, den die Aufräumrunde schon entfernt hat. Die Testfälle sichern, dass der neue Code sie nicht wiederholt.
 
 | Nr. | Ort (alt) | Fehler | Testfall |
 |---|---|---|---|
 | 1 | `rpi/app/driver/uart/protocol.py`, `uart_esp.py` | `readline()` liefert Bytes, `Protocol.decode` ruft `partition("\|")` mit Text auf → `TypeError` bei der ersten Zeile | Vektor `bytes_not_text`; `test_decode_takes_bytes`, `test_garbage_bytes_do_not_raise` |
 | 2 | `uart_esp.py` | `request()` liest sofort nach dem Senden und gibt `None` zurück; kein Warten, keine Wiederholung | `test_request_repeats_every_250ms_until_answer` (Python) |
 | 3 | `protocol.py` | kein Startzeichen, keine Prüfsumme: jede Debug-Zeile des ESP mit `\|` gilt als Befehl | Vektoren `debug_line_with_pipe`, `boot_message` |
-| 4 | `esp/lib/communication/protocol.cpp`, `uartHandler.cpp` | `encode` hängt `\n` an, `send` schreibt mit `println` → nach jeder Nachricht eine leere Zeile | `test_send_writes_newline_and_one_frame` (C++) |
-| 5 | `protocol.cpp` | `decode` kürzt die Daten mit `trim()` → Leerzeichen am Rand gehen verloren | Vektor `data_keeps_edge_spaces` |
+| 4 | `esp/lib/communication/protocol.cpp`, `uartHandler.cpp` (entfernt) | `encode` hängte `\n` an, `send` schrieb mit `println` → nach jeder Nachricht eine leere Zeile | `test_send_writes_newline_and_one_frame` (C++) |
+| 5 | `protocol.cpp` (entfernt) | `decode` kürzte die Daten mit `trim()` → Leerzeichen am Rand gingen verloren | Vektor `data_keeps_edge_spaces` |
 
-Was mit dem Ersetzen ausserdem verschwindet: `UARTMaster`/`UART` öffnen `/dev/serial0` mit 115 200 Baud – auf dem Pi 5 zeigt `serial0` in der Grundeinstellung auf den Debug-Anschluss (`ttyAMA10`), nicht auf GPIO14/15; `readStringUntil` blockiert bis 1 s und liefert halbe Zeilen; `commands.h` definiert Variablen im Header; `piCommunication` ist leer und hängt am alten Textspeicher, dessen FRAM-Variante ab `0x0000` in Platz A der Zitatliste schreiben würde.
+Ausserdem: `UARTMaster`/`UART` öffnen `/dev/serial0` mit 115 200 Baud – auf dem Pi 5 zeigt `serial0` in der Grundeinstellung auf den Debug-Anschluss (`ttyAMA10`), nicht auf GPIO14/15. Der Radar-Treiber behält das, bis die Radar-Einrichtung ihn neu schreibt.
 
 ## Dateien
 
-| Datei | Aufgabe |
-|---|---|
-| `tests/protocol_vectors.json` | gemeinsame Testfälle: Zeilen, Ergebnisse, Befehlstabelle, Fristen |
-| `esp/lib/core/src/LinkCodec.h/.cpp` | Codec (Spezifikation 5) für den ESP, ohne Arduino |
-| `esp/lib/core/src/ISerialPort.h` | Byte-Leitung, wie `IFileSystem` für LittleFS |
-| `esp/lib/core/src/PiLink.h/.cpp` | PiLink des ESP: Zeilen, Nummern, Wiederholung, Doppeltes |
-| `esp/lib/communication/UartPort.h/.cpp` | `ISerialPort` über `HardwareSerial` (ersetzt den ganzen alten Ordnerinhalt) |
-| `esp/test/support/VectorFile.h`, `MemorySerial.h` | Testhilfen: Testfall-Datei lesen, Leitung im Speicher |
-| `esp/test/test_link_codec/`, `esp/test/test_pi_link/` | Unity-Suiten |
-| `rpi/app/link/codec.py` | Codec für den Pi |
-| `rpi/app/link/pi_link.py` | PiLink des Pi mit Thread |
-| `rpi/app/link/serial_port.py` | `/dev/ttyAMA0`, 74 880 Baud, GPIO23 LOW |
-| `rpi/app/link/probe.py` | Prüfwerkzeug für die Abnahme |
-| `rpi/app/link/tests/` | `unittest`-Tests und `fakes.py` |
+| Datei | Aufgabe | Task |
+|---|---|---|
+| `rpi/requirements.txt` | Abhängigkeiten des Pi | 1 |
+| `rpi/app/tests/test_imports.py` | jedes Modul lädt ohne Hardware und Netz | 1 |
+| `rpi/tests/ld2410s/test.py` | Radar-Graph-Test auf den App-Treiber | 2 |
+| `rpi/app/driver/display/tests/test_radar_graph.py` | Radar-Graph in der Simulation | 2 |
+| `tests/protocol_vectors.json`, `tests/display_vectors.json` | gemeinsame Testfälle ESP und Pi | 3, 5 |
+| `esp/test/support/VectorFile.h` | Testfall-Dateien im C++-Test lesen | 3 |
+| `esp/lib/core/src/LinkCodec.h/.cpp` | Codec (Spezifikation 5) für den ESP | 3 |
+| `rpi/app/link/codec.py`, `rpi/app/tests/vectors.py` | Codec für den Pi; Testfall-Dateien lesen und ihre Form prüfen | 4 |
+| `esp/lib/core/src/TextLayout.h/.cpp`, `Glyphs.h/.cpp` | Umbruch und Schrift der Anzeige | 5 |
+| `rpi/app/driver/display/text_layout.py`, `ascii_map.py` | dieselbe Regel und Schrift auf dem Pi | 5 |
+| `esp/lib/core/src/PiPower.h/.cpp`, `esp/lib/system/PowerSwitchPin.h/.cpp` | Puls auf GPIO12 und Buchhaltung | 6 |
+| `esp/lib/core/src/ISerialPort.h`, `PiLink.h/.cpp` | PiLink des ESP | 7 |
+| `rpi/app/link/pi_link.py`, `serial_port.py` | PiLink des Pi mit Thread; `/dev/ttyAMA0` | 8 |
+| `esp/lib/communication/UartPort.h/.cpp`, `esp/lib/app/LinkTest.h/.cpp` | `Serial` als `ISerialPort`; Verbindungstest auf BT3 | 9 |
+| `rpi/app/link/probe.py` | Prüfwerkzeug für die Abnahme | 10 |
 
 ## Global Constraints
 
@@ -74,28 +99,143 @@ Was mit dem Ersetzen ausserdem verschwindet: `UARTMaster`/`UART` öffnen `/dev/s
 - Jede Anfrage bekommt genau eine Antwort mit derselben Nummer. Der Absender wiederholt alle **250 ms**, bis die Antwort da ist oder die Frist abläuft. Pro Richtung höchstens **eine** offene Anfrage. Kommt eine Nummer zweimal hintereinander, schickt der Empfänger seine letzte Antwort noch einmal und führt nichts doppelt aus. Unbekannter Befehl → `ERROR|UNKNOWN`.
 - Fristen (Abschnitt 12): einfache Anfrage **3 s** (`PING`, `BUTTON`, `READY`, `DONE`, `MODE`), `GET|QUOTE` **120 s**, `SHUTDOWN` **60 s** (`T_shutdown`).
 - Befehle (6.3): ESP → Pi `PING`, `GET`, `BUTTON`, `SHUTDOWN`; Pi → ESP `READY`, `DONE`, `MODE`; Antworten `PONG`, `QUOTE`, `OK`, `BUSY`, `ERROR`.
-- Leitung (6.4, E2-a): **74 880 Baud** auf beiden Seiten; der Pi öffnet `/dev/ttyAMA0` und setzt **GPIO23 LOW** (ESP). Nimmt der Pi 5 keine 74 880 Baud an, wechseln beide auf **115 200** (Z12) – je eine Konstante pro Seite (`LINK_BAUD`, `ESP_BAUD`).
+- Leitung (6.4, E2-a): **74 880 Baud** auf beiden Seiten; der Pi öffnet `/dev/ttyAMA0` und setzt **GPIO23 LOW** (ESP). Nimmt der Pi 5 keine 74 880 Baud an, wechseln beide auf **115 200** (Z12).
 - Fehlercodes, auf beiden Seiten gleich geschrieben: `NO_START`, `TOO_LONG`, `BAD_CHAR`, `BAD_FORMAT`, `BAD_CHECKSUM`, `BAD_COMMAND`, `BAD_ESCAPE`.
 - Prüfreihenfolge beim Lesen (damit beide Seiten denselben Code liefern): 1 länger als 256 → `TOO_LONG`; 2 leer oder erstes Byte nicht `$` → `NO_START`; 3 ein Byte ausserhalb 0x20–0x7E → `BAD_CHAR`; 4 kein `*`, oder das letzte `*` steht nicht an drittletzter Stelle, oder danach keine zwei Hex-Ziffern → `BAD_FORMAT`; 5 XOR passt nicht → `BAD_CHECKSUM`; 6 keine zwei Hex-Ziffern nach `$` oder kein `:` danach → `BAD_FORMAT`; 7 Befehl leer oder nicht nur `A–Z` → `BAD_COMMAND`; 8 `\` am Ende oder vor etwas anderem als `\`, `n`, `r` → `BAD_ESCAPE`.
 - Beim Senden: Befehl nicht nur `A–Z` → `BAD_COMMAND`; ein Datenzeichen ausserhalb 0x20–0x7E, das nicht Zeilenumbruch oder Wagenrücklauf ist → `BAD_CHAR`; fertige Zeile über 256 → `TOO_LONG`. Ohne Daten kein `|`. Hex gross.
 - Rollen in Testfällen und Code: `esp_request`, `pi_request`, `response`, `unknown`.
-- Code in `esp/lib/core/` bindet **keine** Arduino-Header ein und bleibt bei **C++14** (MinGW GCC 6.3: kein `std::optional`, kein `std::string_view`). Neue `#include` in genauer Gross-/Kleinschreibung.
+- Anzeige (Abschnitt 9, Schritt 5): **24 Zeichen pro Zeile, 4 Zeilen**, Umbruch an Wortgrenzen. Zeichen (Schritt 4): `A–Z 0–9 - . / : + *` und Leerzeichen.
+- Testfall-Dateien: ein JSON-Objekt `{"vectors": [ … ]}`; `{` und `"vectors": [` auf eigenen Zeilen; **jeder Testfall ein flaches Objekt auf genau einer Zeile**; Werte nur Zeichenketten oder ganze Zahlen; Datei reines ASCII, Steuerzeichen als JSON-Escape (`\n`, `\r`, `\t` oder `\u00XX`), Bytes über 0x7E nur als `\u00XX` (höchstens `\u00ff`). Wahrheitswerte als `1`/`0`.
+- Code in `esp/lib/core/` bindet **keine** Arduino-Header ein und bleibt bei **C++14** (MinGW GCC 6.3: kein `std::optional`, kein `std::string_view`). `#include` in genauer Gross-/Kleinschreibung. Schalter stehen in `esp/lib/config/features.h` (`namespace Features`).
 - Testsuiten-Namen kurz halten: MinGW GCC 6.3 scheitert an Pfaden über 260 Zeichen.
-- Python: `$PY` = `C:\Users\cross-INGCamilleChat\.venvs\reflection-wall-rpi\Scripts\python.exe` (Windows, alles ausser `lgpio`); auf dem Pi das venv aus Teil 0. Python-Tests laufen mit `cd rpi/app && $PY -m unittest discover -s link -t . -v`.
+- Python: `$PY` = `C:\Users\cross-INGCamilleChat\.venvs\reflection-wall-rpi\Scripts\python.exe` (Windows, alles ausser `lgpio`); auf dem Pi das venv aus Teil 0. Alle Python-Tests: `cd rpi && $PY -m unittest discover -s app -t . -v`. Importe nur absolut ab `app.`.
 - Dieser Plan ändert `SlotStore*`, `FramQuoteStore*`, ihre Tests und Abschnitt 11 der Spezifikation nicht.
-- Commit-Nachrichten auf Deutsch, letzte Zeile `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Commit-Nachrichten auf Deutsch, eine Zeile Betreff, ohne Zusatzzeilen.
 
 ## Review Focus
 
-1. **Debug-Text ohne Zeilenende vor einer Nachricht:** `DebugSerial.printf("[INPUT] %s -> ", …)` steht direkt vor `handleInput`; eine Nachricht danach stünde nicht am Zeilenanfang, und der Pi würde sie verwerfen. → ESP schreibt `\n` vor jede Nachricht; Test `test_send_writes_newline_and_one_frame` in Task 3.
-2. **Späte Antwort nach einer neuen Anfrage:** Der Absender hat wiederholt, der Empfänger hat zweimal geantwortet; die zweite Antwort trifft ein, wenn schon die nächste Anfrage offen ist. Sie darf nicht als deren Antwort gelten. → Tests `test_late_answer_for_previous_number_is_ignored` in Task 3 und Task 4.
-3. **Langsame Anfrage:** `GET|QUOTE` wird bis 120 s lang alle 250 ms wiederholt, während die KI rechnet. Die Wiederholungen dürfen weder einen zweiten Auftrag auslösen noch eine leere Antwort erzeugen. → Test `test_repeated_get_quote_before_reply_is_delivered_once` in Task 4 (und `test_duplicate_before_reply_is_ignored` in Task 3).
-4. **Empfangspuffer des ESP:** Der Arduino-Core puffert 256 Bytes; eine Zeile hat mit `\n` bis 257. Schreibt der ESP gerade die Anzeige (I²C mit 10 kHz) oder liest das FRAM (0,4 s), läuft der Puffer über, und die Zeile kommt kaputt an. → Kein PC-Test möglich; Task 5 setzt `Serial.setRxBufferSize(1024)` vor `begin`, Task 7 Schritt 5 zählt kaputte Zeilen.
-5. **Thread auf dem Pi stirbt:** Ein Fehler am Port (Gerät weg) beendet den Thread; eine Anwendung, die auf eine Antwort wartet, darf nicht ewig hängen. → Test `test_port_error_ends_thread_and_open_request` in Task 4.
+1. **Debug-Text ohne Zeilenende vor einer Nachricht:** `DebugSerial.printf("[INPUT] %s -> ", …)` steht direkt vor `handleInput`; eine Nachricht danach stünde nicht am Zeilenanfang, und der Pi würde sie verwerfen. → ESP schreibt `\n` vor jede Nachricht; Test `test_send_writes_newline_and_one_frame` in Task 7.
+2. **Späte Antwort nach einer neuen Anfrage:** Der Absender hat wiederholt, der Empfänger hat zweimal geantwortet; die zweite Antwort trifft ein, wenn schon die nächste Anfrage offen ist. Sie darf nicht als deren Antwort gelten. → Tests `test_late_answer_for_previous_number_is_ignored` in Task 7 und Task 8.
+3. **Langsame Anfrage:** `GET|QUOTE` wird bis 120 s lang alle 250 ms wiederholt, während die KI rechnet. Die Wiederholungen dürfen weder einen zweiten Auftrag auslösen noch eine leere Antwort erzeugen. → Test `test_repeated_get_quote_before_reply_is_delivered_once` in Task 8 (und `test_duplicate_before_reply_is_ignored` in Task 7).
+4. **Empfangspuffer des ESP:** Der Arduino-Core puffert 256 Bytes; eine Zeile hat mit `\n` bis 257. Schreibt der ESP gerade die Anzeige (I²C mit 10 kHz) oder liest das FRAM (0,4 s), läuft der Puffer über, und die Zeile kommt kaputt an. → Kein PC-Test möglich; Task 9 setzt `Serial.setRxBufferSize(1024)` vor `begin`, Task 11 Schritt 6 zählt kaputte Zeilen.
+5. **Thread auf dem Pi stirbt:** Ein Fehler am Port (Gerät weg) beendet den Thread; eine Anwendung, die auf eine Antwort wartet, darf nicht ewig hängen. → Test `test_port_error_ends_thread_and_open_request` in Task 8.
 
 ---
 
-### Task 1: Gemeinsame Testfälle und Codec im ESP
+### Task 1: Pi aufräumen – ein Paket, nichts beim Import, erster PC-Test
+
+Ändert die Struktur, nicht das Verhalten der Anwendungen (Ausnahme: Annahme 20, Datenbank beim Wählen des Modus).
+
+**Files:**
+- Create: `rpi/requirements.txt`
+- Create: `rpi/app/tests/__init__.py`, Test `rpi/app/tests/test_imports.py`
+- Create: leeres `__init__.py` in `rpi/app/applications/`, `applications/Animations/`, `applications/ReflectionAI/`, `applications/VoiseAssistant/`, `driver/display/animations/`, `driver/speech/`, `driver/speechRecognition/`, `driver/uart/` – **nicht** in `applications/Animations/videoframes/`: `Stickman` führt dort jede `.py`-Datei mit `exec` als Bild aus
+- Delete: `rpi/app/driver/uart/uart_esp.py`, `protocol.py`, `commands.py`, `test.py`
+- Modify (Importe auf `app.`): `rpi/app/main.py`, `applications/Animations/Radar.py`, `applications/Quiz/AIQuizGenerator.py`, `applications/Quiz/QuizGame.py`, `applications/ReflectionAI/Reflection.py`, `applications/VoiseAssistant/VoiceAssistant.py`, `driver/display/display.py`, `displayGraph.py`, `display_grid.py`, `ht16k33_driver.py`, `segment_chain.py`, `segment_module.py`, `driver/uart/uart_device.py`, `uart_hlk.py`, `uart_master.py`
+- Modify (nichts beim Import): `driver/display/ht16k33_driver.py`, `driver/uart/uart_switch.py`, `driver/chatbot/groqAPI.py`, `driver/speechRecognition/groqSpeechRecognition.py`, `applications/Quiz/QuizGame.py`, `applications/ReflectionAI/Reflection.py`, `main.py`
+- Modify: `rpi/README.md`
+
+**Interfaces:**
+- Produces: Paket `app` (Start `cd rpi && python -m app.main`); `app.driver.display.ht16k33_driver` mit unveränderten Funktionen, der Bus kommt aus einer internen Funktion `_bus()`, die beim ersten Aufruf `smbus2` importiert und `SMBus(1)` öffnet; `app.driver.chatbot.groqAPI.write_to_ai` unverändert, der Client kommt aus `_client()` (beim ersten Aufruf: Schlüssel prüfen, wie heute `ValueError("GROQ_API_KEY fehlt")`, dann `Groq(...)`).
+
+- [ ] **Step 1: Test schreiben**
+
+```python
+# rpi/app/tests/test_imports.py
+RPI = Path(__file__).resolve().parents[2]
+
+class ImportTest(unittest.TestCase):
+    def test_every_module_imports_without_hardware_or_network(self)
+        # In einem frischen Interpreter (subprocess, cwd=RPI, Umgebung ohne GROQ_API_KEY, timeout 120 s):
+        # mysql.connector.connect und groq.Groq per unittest.mock.patch durch side_effect=AssertionError ersetzen,
+        # dann jedes Modul aus pkgutil.walk_packages(app.__path__, "app.") importieren, ausser Namen mit ".tests";
+        # danach: "smbus2" not in sys.modules und "lgpio" not in sys.modules.
+        # Erwartet: Rueckgabecode 0 (bei Fehler stderr in der Meldung).
+    def test_imports_use_the_app_package(self)
+        # keine Zeile in RPI/app/**/*.py beginnt nach Leerraum mit
+        # "from rpi.", "import rpi.", "from driver.", "from applications.", "from ."
+```
+
+Der Import von `faster_whisper` dauert auf dem PC rund 10 s; der Test ist trotzdem einer.
+
+- [ ] **Step 2: Test laufen lassen, er muss scheitern**
+
+Run: `cd rpi && $PY -m unittest discover -s app -t . -v`
+Expected: FAIL in beiden Tests (alte Importe; `ModuleNotFoundError: No module named 'fcntl'` aus `smbus2` bzw. `No module named 'driver'`).
+
+- [ ] **Step 3: Alte Dateien löschen, `__init__.py` anlegen, Importe umstellen**
+
+Die vier alten Dateien in `driver/uart/` löschen. Jeden Import in den Dateien oben auf `from app.… import …` umstellen, auch die relativen im Ordner `driver/uart`.
+
+- [ ] **Step 4: Arbeit beim Import entfernen**
+
+- `ht16k33_driver.py`: `import smbus2` und `SMBus(1)` in `_bus()`; `init_module` und `write_buffer` holen den Bus dort.
+- `uart_switch.py`: `import lgpio` in `UARTSwitch.__init__` und in `close()` über das gemerkte Modul.
+- `groqAPI.py`: Schlüsselprüfung und `Groq(...)` in `_client()`; `logging.basicConfig(level=logging.INFO)` nach `main()` in `main.py`.
+- `groqSpeechRecognition.py`: `Groq(...)` erst in `record_and_transcribe()`.
+- `QuizGame.py`: die erste Fassung der Klasse (Zeilen 1–51) löschen; `setup_db("quiz")` in `__init__`.
+- `Reflection.py`: `setup_db("reflection")` in `__init__`.
+
+- [ ] **Step 5: `requirements.txt` und README**
+
+`rpi/requirements.txt`, eine Zeile pro Paket, mit einer Kopfzeile „Versionen nach Teil 0 mit pip freeze festhalten“: `smbus2`, `lgpio; sys_platform == "linux"`, `pyserial`, `groq`, `python-dotenv`, `mysql-connector-python`, `faster-whisper`, `sounddevice`, `numpy`, `pyphen`, `piper-tts; sys_platform == "linux"`.
+`rpi/README.md`: Start `cd rpi && python -m app.main` (die `PYTHONPATH`-Zeile und den Punkt „Importe sind gemischt“ unter „Bekannte Baustellen“ entfernen); Installation `pip install -r requirements.txt`; Abschnitt „Tests auf dem PC“ mit dem Aufruf aus den Global Constraints.
+
+- [ ] **Step 6: Tests bestehen**
+
+Run: `cd rpi && $PY -m unittest discover -s app -t . -v`
+Expected: `OK`.
+Run: `grep -rn "from rpi\.\|from driver\.\|from applications\." rpi/app`
+Expected: keine Treffer.
+
+- [ ] **Step 7: Commit** – „Pi: ein Paket app, nichts beim Import, erster PC-Test“
+
+---
+
+### Task 2: Pi aufräumen – Radar-Test auf den App-Treiber
+
+**Files:**
+- Delete: `rpi/tests/ld2410s/ascii_map.py`, `display.py`, `displayGraph.py`, `display_grid.py`, `ht16k33_driver.py`, `radarGraph.py`, `segment_chain.py`, `segment_module.py`
+- Create: `rpi/tests/__init__.py`, `rpi/tests/ld2410s/__init__.py` (leer)
+- Modify: `rpi/tests/ld2410s/test.py`
+- Create: `rpi/app/driver/display/tests/__init__.py`, Test `rpi/app/driver/display/tests/test_radar_graph.py`
+- Modify: `rpi/README.md`
+
+**Interfaces:**
+- Consumes: `app.driver.display.displayGraph.DisplayGraph(modules_per_row=3, simulation=False)`, `app.driver.display.radarGraph.RadarGraph(display, max_distance=6.0)` mit `update(distance)` (beide bestehend, nach Task 1 importierbar).
+- Produces: `cd rpi && python -m tests.ld2410s.test [--simulation] [--seconds N]` (`N` = 0: bis Ctrl+C; Rückgabe 0).
+
+- [ ] **Step 1: Test schreiben**
+
+```python
+class RadarGraphTest(unittest.TestCase):          # Ausgabe von refresh() mit contextlib.redirect_stdout schlucken
+    def test_full_distance_fills_newest_column(self)
+        # d = DisplayGraph(modules_per_row=3, simulation=True); r = RadarGraph(d, max_distance=6.0)
+        # r.update(6.0) → d.modules[2].buffer[7] == "█"; d.modules[0].buffer[0] == " "
+    def test_columns_move_left(self)
+        # r.update(6.0); r.update(0.0) → d.modules[2].buffer[6] == "█", d.modules[2].buffer[7] == " "
+```
+
+- [ ] **Step 2: Test laufen lassen** – Run wie in Task 1. Expected: PASS ist möglich (die App-Klassen gibt es); er sichert, dass die Simulation auf dem PC ohne `smbus2` läuft. Scheitert er, zuerst Task 1 prüfen.
+
+- [ ] **Step 3: Kopien löschen, Skript umstellen**
+
+`test.py` importiert `DisplayGraph` und `RadarGraph` aus `app.driver.display`, baut `DisplayGraph(modules_per_row=3, simulation=args.simulation)` und `RadarGraph(display, max_distance=MAX_DISTANCE)`, lässt `min_distance`, `smoothing` und `distance_to_x` weg (die Ausgabezeile zeigt Distanz, Geschwindigkeit und Richtung) und endet nach `--seconds`. Die Simulation der Distanzen bleibt, wie sie ist.
+
+- [ ] **Step 4: Prüfen ohne Pi**
+
+Run: `cd rpi && $PY -m unittest discover -s app -t . -v`
+Expected: `OK`.
+Run: `cd rpi && $PY -m tests.ld2410s.test --simulation --seconds 1`
+Expected: Rückgabe 0; die Konsole zeigt den Graphen (eine Zeile `█`/Leerzeichen, 24 Zeichen breit) und die Distanzzeile.
+
+- [ ] **Step 5: README** – in `rpi/README.md` bei `tests/`: `ld2410s` startet mit `cd rpi && python -m tests.ld2410s.test` und nutzt den App-Treiber; auf dem PC mit `--simulation`.
+
+- [ ] **Step 6: Commit** – „Pi: Radar-Test nutzt den App-Treiber, Kopien entfernt“
+
+---
+
+### Task 3: Gemeinsame Testfälle und Codec im ESP
 
 **Files:**
 - Create: `tests/protocol_vectors.json`
@@ -138,13 +278,13 @@ Was mit dem Ersetzen ausserdem verschwindet: `UARTMaster`/`UART` öffnen `/dev/s
       long num(const char* key) const;          // -1 wenn nicht vorhanden
       bool has(const char* key) const;
   };
-  constexpr char VECTOR_PATH[] = "../tests/protocol_vectors.json";   // pio test laeuft in esp/
+  constexpr char PROTOCOL_VECTORS[] = "../tests/protocol_vectors.json";   // pio test laeuft in esp/
   bool loadVectors(const char* path, std::vector<Vector>& out, std::string& error);
   ```
 
 - [ ] **Step 1: Testfall-Datei schreiben**
 
-Form: ein JSON-Objekt `{"vectors": [ … ]}`; `{` und `"vectors": [` stehen auf eigenen Zeilen, **jeder Testfall ist ein flaches Objekt auf genau einer Zeile**, Werte nur Zeichenketten oder ganze Zahlen. Die Datei selbst ist reines ASCII: Bytes über 0x7E und Steuerzeichen stehen nur als Escape, nie roh. Zeichenketten sind Bytes: `\u00XX` ist ein Byte (höchstens `\u00ff`). `kind`: `both` (Senden und Lesen), `decode` (nur Lesen), `error` (Lesen scheitert), `encode_error` (Senden scheitert), `command` (Rolle und Frist).
+Form wie in den Global Constraints. `kind`: `both` (Senden und Lesen), `decode` (nur Lesen), `error` (Lesen scheitert), `encode_error` (Senden scheitert), `command` (Rolle und Frist).
 
 ```json
 {"name": "ping_00", "kind": "both", "line": "$00:PING*2A", "seq": 0, "command": "PING", "data": ""},
@@ -211,7 +351,7 @@ Jede Prüfung meldet den Namen des Testfalls (`…_MESSAGE(…, v.str("name").c_
 
 ```cpp
 void test_vector_file_is_read()
-    // loadVectors(VECTOR_PATH, v, err) == true, v.size() >= 52;
+    // loadVectors(PROTOCOL_VECTORS, v, err) == true, v.size() >= 52;
     // "escape_backslash": str("line") == "$02:QUOTE|A\\\\B*1D" (C++-Literal: ein doppelter Backslash);
     // "garbage_before_start": str("line").size() == 13, [0] == '\0', (uint8_t)[1] == 0xFF
 void test_both_vectors_encode_and_decode()   // encode == Error::None und == line; decode == None und gleiche seq/command/data
@@ -241,18 +381,27 @@ Expected: alle Suiten PASSED, auch die bestehenden.
 
 ---
 
-### Task 2: Codec auf dem Pi
+### Task 4: Codec auf dem Pi
 
 **Files:**
 - Create: `rpi/app/link/__init__.py` (leer), `rpi/app/link/codec.py`
 - Create: `rpi/app/link/tests/__init__.py` (leer)
-- Test: `rpi/app/link/tests/test_codec.py`
+- Create: `rpi/app/tests/vectors.py`
+- Test: `rpi/app/link/tests/test_codec.py`, `rpi/app/tests/test_vectors.py`
 
 **Interfaces:**
-- Consumes: `tests/protocol_vectors.json` (Task 1).
+- Consumes: `tests/protocol_vectors.json` (Task 3).
 - Produces:
   ```python
-  # link/codec.py
+  # app/tests/vectors.py – Hilfe fuer Tests
+  REPO = Path(__file__).resolve().parents[3]
+  def load_vectors(file_name: str) -> list[dict]
+      # liest REPO/"tests"/file_name; AssertionError, wenn die Datei nicht reines ASCII ist, wenn die Zeilen,
+      # die nach Leerraum mit '{"' beginnen (ohne Komma am Ende per json.loads gelesen), nicht genau
+      # json.load(...)["vectors"] in derselben Reihenfolge sind, oder wenn eine Zeichenkette nicht in
+      # latin-1 passt (sonst saehe der ESP-Leser andere Faelle)
+
+  # app/link/codec.py
   MAX_LINE = 256                      # Bytes ohne b"\n"
 
   @dataclass(frozen=True)
@@ -275,17 +424,13 @@ Expected: alle Suiten PASSED, auch die bestehenden.
 - [ ] **Step 1: Tests schreiben**
 
 ```python
-VECTORS = Path(__file__).resolve().parents[4] / "tests" / "protocol_vectors.json"
-
+# app/tests/test_vectors.py
 class VectorFileTest(unittest.TestCase):
-    def test_every_vector_is_on_its_own_line(self)
-        # Zeilen, die nach Leerraum mit '{"' beginnen, ohne Komma am Ende per json.loads gelesen
-        # == json.load(...)["vectors"], gleiche Reihenfolge  (sonst sieht der ESP-Leser andere Fälle)
-    def test_strings_fit_in_one_byte(self)       # jede Zeichenkette: s.encode("latin-1") gelingt
-    def test_file_is_ascii(self)                 # VECTORS.read_bytes().decode("ascii") gelingt (der ESP-Leser kennt nur \u00XX)
+    def test_protocol_vectors_have_the_shared_form(self)   # load_vectors("protocol_vectors.json") wirft nicht, >= 52 Faelle
 
-class CodecVectorTest(unittest.TestCase):       # je Testfall self.subTest(name=v["name"])
-    def test_both(self)          # encode(Message(seq, command, data)) == line.encode("latin-1"); decode(...) == Message(...)
+# app/link/tests/test_codec.py – je Testfall self.subTest(name=v["name"]); Bytes = s.encode("latin-1")
+class CodecVectorTest(unittest.TestCase):
+    def test_both(self)          # encode(Message(seq, command, data)) == line; decode(line) == Message(...)
     def test_decode(self)
     def test_error(self)         # with assertRaises(DecodeError) as cm: ...; cm.exception.code == v["error"]
     def test_encode_error(self)  # with assertRaises(EncodeError) as cm: ...; cm.exception.code == v["error"]
@@ -297,23 +442,233 @@ class CodecTypeTest(unittest.TestCase):
 
 - [ ] **Step 2: Tests laufen lassen, sie müssen scheitern**
 
-Run: `cd rpi/app && $PY -m unittest discover -s link -t . -v`
-Expected: FAIL mit `ModuleNotFoundError: No module named 'link.codec'`.
+Run: `cd rpi && $PY -m unittest discover -s app -t . -v`
+Expected: FAIL mit `ModuleNotFoundError: No module named 'app.link.codec'` bzw. `'app.tests.vectors'`.
 
-- [ ] **Step 3: `codec.py` umsetzen**
+- [ ] **Step 3: `vectors.py` und `codec.py` umsetzen**
 
-Gleiche Prüfreihenfolge wie Task 1. Auf Bytes arbeiten; Text erst nach der `BAD_CHAR`-Prüfung mit `ascii` dekodieren.
+Gleiche Prüfreihenfolge wie Task 3. Auf Bytes arbeiten; Text erst nach der `BAD_CHAR`-Prüfung mit `ascii` dekodieren.
 
 - [ ] **Step 4: Tests bestehen**
 
-Run: `cd rpi/app && $PY -m unittest discover -s link -t . -v`
+Run: `cd rpi && $PY -m unittest discover -s app -t . -v`
 Expected: `OK`, keine übersprungenen Tests.
 
 - [ ] **Step 5: Commit** – „Codec der Verbindung auf dem Pi, gleiche Testfaelle wie der ESP“
 
 ---
 
-### Task 3: PiLink im ESP
+### Task 5: Umbruch und Schrift der Anzeige als gemeinsame Regel
+
+**Files:**
+- Create: `tests/display_vectors.json`
+- Create: `esp/lib/core/src/TextLayout.h`, `TextLayout.cpp`, `Glyphs.h`, `Glyphs.cpp`
+- Modify: `esp/test/support/VectorFile.h` (Konstante `DISPLAY_VECTORS`)
+- Test: `esp/test/test_text_layout/test_main.cpp`
+- Delete: `esp/lib/display/ASCII16Seg.h`, `ASCII16Seg.cpp`
+- Modify: `esp/lib/display/DisplayGrid.h/.cpp`, `esp/lib/drivers/HT16K33.cpp`, `esp/lib/display/display.h`, `esp/lib/app/application.cpp`
+- Modify: `rpi/app/driver/display/text_layout.py` (ersetzt), `rpi/app/driver/display/ascii_map.py`
+- Test: `rpi/app/driver/display/tests/test_display_rules.py`, `rpi/app/tests/test_vectors.py`
+
+**Interfaces:**
+- Consumes: `loadVectors`, `Vector` (Task 3); `load_vectors` (Task 4).
+- Produces:
+  ```cpp
+  // TextLayout.h
+  namespace TextLayout
+  {
+      constexpr std::size_t CHARS_PER_ROW = 24;
+      constexpr std::size_t ROWS = 4;
+      struct Layout
+      {
+          std::string rows[ROWS];   // je genau CHARS_PER_ROW Zeichen, rechts mit Leerzeichen aufgefuellt
+          bool fits = true;         // der ganze Text steht in den vier Zeilen
+      };
+      Layout wrap(const std::string& text);
+  }
+
+  // Glyphs.h
+  namespace Glyphs
+  {
+      uint16_t segments(char c);   // 16-Segment-Muster; a-z wie A-Z; nicht darstellbar -> 0
+      bool displayable(char c);    // Leerzeichen, - . / : + *, 0-9, A-Z, a-z
+  }
+
+  // VectorFile.h
+  constexpr char DISPLAY_VECTORS[] = "../tests/display_vectors.json";
+  ```
+  ```python
+  # app/driver/display/text_layout.py
+  CHARS_PER_ROW = 24
+  ROWS = 4
+  def wrap(text: str) -> tuple[list[str], bool]   # (vier Zeilen zu je 24 Zeichen, passt)
+  def displayable(ch: str) -> bool                # ch.upper() ist ein Schluessel von ASCII_16SEG
+  ```
+
+- [ ] **Step 1: Testfall-Datei schreiben**
+
+`kind` `wrap` (Felder `text`, `row1`–`row4` je 24 Zeichen, `fits` 1/0) und `glyph` (Felder `char`, `segments` als vier Hex-Ziffern gross, `displayable` 1/0).
+
+```json
+{"name": "empty", "kind": "wrap", "text": "", "row1": "                        ", "row2": "                        ", "row3": "                        ", "row4": "                        ", "fits": 1},
+{"name": "kein_text", "kind": "wrap", "text": "KEIN TEXT", "row1": "KEIN TEXT               ", "row2": "                        ", "row3": "                        ", "row4": "                        ", "fits": 1},
+{"name": "one_full_row", "kind": "wrap", "text": "ABCDEFGHIJKLMNOPQRSTUVWX", "row1": "ABCDEFGHIJKLMNOPQRSTUVWX", "row2": "                        ", "row3": "                        ", "row4": "                        ", "fits": 1},
+{"name": "break_at_word", "kind": "wrap", "text": "DER SINN DES LEBENS LIEGT NICHT AM ZIEL.", "row1": "DER SINN DES LEBENS     ", "row2": "LIEGT NICHT AM ZIEL.    ", "row3": "                        ", "row4": "                        ", "fits": 1},
+{"name": "space_exactly_after_24", "kind": "wrap", "text": "ABCDEFGHIJKLMNOPQRSTUVWX YZ", "row1": "ABCDEFGHIJKLMNOPQRSTUVWX", "row2": "YZ                      ", "row3": "                        ", "row4": "                        ", "fits": 1},
+{"name": "leading_spaces_skipped", "kind": "wrap", "text": "   HALLO", "row1": "HALLO                   ", "row2": "                        ", "row3": "                        ", "row4": "                        ", "fits": 1},
+{"name": "inner_spaces_kept", "kind": "wrap", "text": "A  B", "row1": "A  B                    ", "row2": "                        ", "row3": "                        ", "row4": "                        ", "fits": 1},
+{"name": "long_word_hard_split", "kind": "wrap", "text": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "row1": "AAAAAAAAAAAAAAAAAAAAAAAA", "row2": "AAAAAA                  ", "row3": "                        ", "row4": "                        ", "fits": 1},
+{"name": "short_text_does_not_fit", "kind": "wrap", "text": "ABCDEFGHIJKLM ABCDEFGHIJKLM ABCDEFGHIJKLM ABCDEFGHIJKLM ABCDEFGHIJKLM", "row1": "ABCDEFGHIJKLM           ", "row2": "ABCDEFGHIJKLM           ", "row3": "ABCDEFGHIJKLM           ", "row4": "ABCDEFGHIJKLM           ", "fits": 0},
+{"name": "dot_takes_a_cell", "kind": "wrap", "text": "ENDE. NEU.", "row1": "ENDE. NEU.              ", "row2": "                        ", "row3": "                        ", "row4": "                        ", "fits": 1},
+{"name": "sample_quote", "kind": "wrap", "text": "Wer nach innen schaut erwacht. Wer nach aussen schaut traeumt. Finde heute deinen neuen Weg.", "row1": "Wer nach innen schaut   ", "row2": "erwacht. Wer nach aussen", "row3": "schaut traeumt. Finde   ", "row4": "heute deinen neuen Weg. ", "fits": 1},
+{"name": "sample_quote_2", "kind": "wrap", "text": "Im Innehalten wird es still. In der Stille hoerst du was dein Herz dir lange sagen wollte.", "row1": "Im Innehalten wird es   ", "row2": "still. In der Stille    ", "row3": "hoerst du was dein Herz ", "row4": "dir lange sagen wollte. ", "fits": 1},
+{"name": "glyph_lower_a", "kind": "glyph", "char": "a", "segments": "83A3", "displayable": 1},
+{"name": "glyph_seven", "kind": "glyph", "char": "7", "segments": "8022", "displayable": 1},
+{"name": "glyph_excl", "kind": "glyph", "char": "!", "segments": "0000", "displayable": 0},
+{"name": "glyph_umlaut", "kind": "glyph", "char": "\u00e4", "segments": "0000", "displayable": 0},
+{"name": "glyph_newline", "kind": "glyph", "char": "\n", "segments": "0000", "displayable": 0}
+```
+
+Dazu ausgeschrieben:
+- `ninety_six_fit`: `text` 96 × `A` → vier Zeilen zu 24 × `A`, `fits` 1.
+- `ninety_seven_do_not_fit`: 97 × `A` → vier Zeilen zu 24 × `A`, `fits` 0.
+- `trailing_spaces_fit`: 96 × `A` + 3 Leerzeichen → wie `ninety_six_fit`, `fits` 1.
+- je ein `glyph` für Leerzeichen, `- . / : + *`, `0`–`9` ohne die `7` (steht oben), `A`–`Z` (Name `glyph_` + Zeichen bzw. `space`, `minus`, `dot`, `slash`, `colon`, `plus`, `star`), `displayable` 1, `segments` aus `esp/lib/display/ASCII16Seg.cpp`.
+
+Die Umbruch-Ergebnisse sind mit der heutigen ESP-Regel nachgerechnet.
+
+- [ ] **Step 2: Tests schreiben**
+
+```cpp
+// esp/test/test_text_layout/test_main.cpp
+void test_wrap_vectors()            // wrap(text): rows[0..3] == row1..row4, fits == (num("fits") == 1)
+void test_glyph_vectors()           // segments(char[0]) == strtoul(segments, 16); displayable == (num == 1)
+void test_seven_differs_from_one()  // segments('7') != segments('1')
+```
+```python
+# app/driver/display/tests/test_display_rules.py – je Testfall subTest
+class DisplayRulesTest(unittest.TestCase):
+    def test_wrap_vectors(self)          # wrap(text) == ([row1, row2, row3, row4], fits == 1)
+    def test_font_matches_glyphs(self)   # ASCII_16SEG.get(char.upper(), 0) == int(segments, 16)
+    def test_displayable(self)           # displayable(char) == (v["displayable"] == 1)
+
+# app/tests/test_vectors.py, dazu:
+    def test_display_vectors_have_the_shared_form(self)
+```
+
+- [ ] **Step 3: Tests laufen lassen, sie müssen scheitern**
+
+Run: `cd esp && pio test -e native -f test_text_layout` → FAIL beim Übersetzen (`TextLayout.h` fehlt).
+Run: `cd rpi && $PY -m unittest discover -s app -t . -v` → FAIL (`wrap` fehlt; '7' falsch).
+
+- [ ] **Step 4: ESP umsetzen**
+
+`TextLayout::wrap` ist `DisplayGrid::splitText` mit `std::string` (Annahme 24); `fits`: nach der vierten Zeile Leerzeichen überspringen, dann muss der Text zu Ende sein. `Glyphs::segments` ist die Tabelle aus `ASCII16Seg.cpp` mit '7' = `0x8022`, ohne `toupper` aus `<cctype>` mit Gebietsschema (selbst `'a'`–`'z'` abbilden).
+Danach: `ASCII16Seg.*` löschen, `HT16K33.cpp` ruft `Glyphs::segments`; `DisplayGrid::setText` nutzt `TextLayout::wrap` und gibt die Zeilen als `String` weiter, `splitText` entfällt; `display.h` nimmt `ROWS = TextLayout::ROWS`. In `application.cpp` ersetzt `if (!TextLayout::wrap(text).fits)` die Prüfung gegen `DISPLAY_CHARS`, Log `[TEXT] Warnung: passt nicht auf die Anzeige (4 x 24, Umbruch an Wortgrenzen): "%s"`; `DISPLAY_CHARS` entfällt.
+
+- [ ] **Step 5: Pi umsetzen**
+
+`text_layout.py` neu schreiben (alter Inhalt wird nirgends importiert). In `ascii_map.py` die '7' auf `0x8022` setzen und den doppelten Eintrag `'-'` entfernen.
+
+- [ ] **Step 6: Tests bestehen**
+
+Run: `cd esp && pio test -e native` → alle Suiten PASSED. `cd esp && pio run` → SUCCESS ohne neue Warnungen.
+Run: `cd rpi && $PY -m unittest discover -s app -t . -v` → `OK`.
+
+- [ ] **Step 7: Commit** – „Umbruch und Schrift der Anzeige als gemeinsame Regel fuer ESP und Pi, 7 berichtigt“
+
+---
+
+### Task 6: Pi-Speisung als eigene Klasse `PiPower`
+
+Hält `application.cpp` schlank, bevor die Verbindung dazukommt, und gibt der PiSession aus Teil 2 einen festen Platz.
+
+**Files:**
+- Create: `esp/lib/core/src/PiPower.h`, `esp/lib/core/src/PiPower.cpp`
+- Create: `esp/lib/system/PowerSwitchPin.h`, `esp/lib/system/PowerSwitchPin.cpp`
+- Create: `esp/test/support/RecordingPin.h`
+- Test: `esp/test/test_pi_power/test_main.cpp`
+- Modify: `esp/lib/app/application.h`, `esp/lib/app/application.cpp`
+
+**Interfaces:**
+- Produces:
+  ```cpp
+  // PiPower.h
+  class IPowerPin                               // GPIO12 zum Flipflop der Pi-Speisung (F5)
+  {
+  public:
+      virtual ~IPowerPin() = default;
+      virtual bool readIdle() = 0;              // Pin als Eingang, Pegel lesen
+      virtual void drive(bool high) = 0;        // Pegel setzen, Pin ist danach Ausgang
+      virtual void waitMs(unsigned long ms) = 0;
+  };
+
+  class PiPower
+  {
+  public:
+      static constexpr unsigned long PULSE_MS = 50;
+      explicit PiPower(IPowerPin& pin);
+      void toggle();                  // ein Puls gegen den gemessenen Ruhepegel; kippt isOn()
+      bool switchTo(bool on);         // pulst nur, wenn isOn() != on; true, wenn gepulst
+      bool isOn() const;              // was der ESP zuletzt geschaltet hat; anfangs false
+      void restore(bool on);          // Teil 2: Wert aus dem RTC-Speicher, ohne Puls
+  };
+
+  // PowerSwitchPin.h (Arduino)
+  class PowerSwitchPin : public IPowerPin   // Pins::ESP_GPIO12_PS
+  {
+  public:
+      bool readIdle() override;             // pinMode(INPUT), digitalRead
+      void drive(bool high) override;       // erst digitalWrite, dann pinMode(OUTPUT)
+      void waitMs(unsigned long ms) override;   // delay
+  };
+
+  // test/support/RecordingPin.h
+  class RecordingPin : public IPowerPin
+  {
+  public:
+      bool idle = true;          // Pegel, den readIdle() liefert
+      std::string log;           // "R" lesen, "H"/"L" ausgeben, "W50" warten, durch Leerzeichen getrennt
+  };
+  ```
+
+- [ ] **Step 1: Tests schreiben**
+
+```cpp
+void test_toggle_with_idle_high_pulses_low()   // idle = true; toggle() → log == "R H L W50 H"
+void test_toggle_with_idle_low_pulses_high()   // idle = false; toggle() → log == "R L H W50 L"
+void test_toggle_flips_is_on()                 // isOn() false; toggle → true; toggle → false
+void test_switch_to_same_state_does_not_pulse()   // switchTo(false) == false, log leer
+void test_switch_to_other_state_pulses_once()     // switchTo(true) == true, log == "R H L W50 H", isOn() true
+void test_restore_sets_state_without_pulse()      // restore(true) → isOn() true, log leer; switchTo(false) pulst
+```
+
+Das erste `H`/`L` nach `R` ist derselbe Pegel wie der gelesene: Der Pin wird Ausgang, ohne eine Flanke zu erzeugen.
+
+- [ ] **Step 2: Tests laufen lassen, sie müssen scheitern**
+
+Run: `cd esp && pio test -e native -f test_pi_power`
+Expected: FAIL beim Übersetzen (`PiPower.h` fehlt).
+
+- [ ] **Step 3: `PiPower`, `RecordingPin` und `PowerSwitchPin` umsetzen**
+
+Die Kommentare aus `configurePowerSwitchPin` und `togglePowerSwitch` (Ruhepegel messen, keine Flanke, Pin sonst Eingang, Reihenfolge `digitalWrite` vor `pinMode`) wandern zu `PowerSwitchPin` und `PiPower`.
+
+- [ ] **Step 4: Anwendung umstellen**
+
+In `Application`: `configurePowerSwitchPin`, `togglePowerSwitch`, `_pulseIdle` und `PULSE_MS` entfernen; neue Mitglieder `PowerSwitchPin _powerPin; PiPower _piPower;` (in dieser Reihenfolge). BT2 ruft `_piPower.toggle()`; Log wie heute.
+
+- [ ] **Step 5: Prüfen**
+
+Run: `cd esp && pio test -e native` → alle Suiten PASSED.
+Run: `cd esp && pio run` → SUCCESS ohne neue Warnungen.
+Run: `grep -n "ESP_GPIO12_PS\|_pulseIdle" esp/lib/app/application.*` → keine Treffer.
+
+- [ ] **Step 6: Commit** – „Pi-Speisung als eigene Klasse PiPower mit PC-Tests“
+
+---
+
+### Task 7: PiLink im ESP
 
 **Files:**
 - Create: `esp/lib/core/src/ISerialPort.h`
@@ -322,7 +677,7 @@ Expected: `OK`, keine übersprungenen Tests.
 - Test: `esp/test/test_pi_link/test_main.cpp`
 
 **Interfaces:**
-- Consumes: `LinkCodec::Message`, `Error`, `Role`, `encode`, `decode`, `roleOf`, `deadlineMs` (Task 1).
+- Consumes: `LinkCodec::Message`, `Error`, `Role`, `encode`, `decode`, `roleOf`, `deadlineMs` (Task 3).
 - Produces:
   ```cpp
   // ISerialPort.h
@@ -380,7 +735,7 @@ Expected: `OK`, keine übersprungenen Tests.
 void test_send_writes_newline_and_one_frame()
     // send("PING","",0) == true → takeTx() == "\n$00:PING*2A\n"  (kein "\r", keine Leerzeile danach; Fehler 4)
 void test_repeats_every_250ms_until_answer()
-    // send PING bei 0; poll(249) → tx leer; poll(250) → "\n$00:PING*2A\n";
+    // send PING bei 0, takeTx(); poll(249) → tx leer; poll(250) → "\n$00:PING*2A\n";
     // rx = "$00:PONG*2C\n"; poll(300) → Response, seq 0, "PONG"; busy() == false; poll(600) → tx leer
 void test_expires_after_deadline_with_12_frames()
     // send PING bei 0, poll alle 10 ms bis 2990 → keine Ereignisse; poll(3000) → Expired, message.command "PING";
@@ -438,7 +793,7 @@ Expected: alle Suiten PASSED.
 
 ---
 
-### Task 4: PiLink auf dem Pi mit eigenem Thread
+### Task 8: PiLink auf dem Pi mit eigenem Thread
 
 **Files:**
 - Create: `rpi/app/link/pi_link.py`, `rpi/app/link/serial_port.py`
@@ -446,10 +801,10 @@ Expected: alle Suiten PASSED.
 - Test: `rpi/app/link/tests/test_pi_link.py`, `rpi/app/link/tests/test_serial_port.py`
 
 **Interfaces:**
-- Consumes: `Message`, `encode`, `decode`, `DecodeError`, `EncodeError`, `role_of`, `deadline_ms`, `MAX_LINE` (Task 2).
+- Consumes: `Message`, `encode`, `decode`, `DecodeError`, `EncodeError`, `role_of`, `deadline_ms`, `MAX_LINE` (Task 4).
 - Produces:
   ```python
-  # link/pi_link.py
+  # app/link/pi_link.py
   REPEAT_S = 0.25
 
   class LinkBusy(RuntimeError): ...
@@ -472,9 +827,9 @@ Expected: alle Suiten PASSED.
       def start(self) -> None                 # Thread "pi-link": while not stopped: poll()
       def stop(self, timeout: float = 2.0) -> None
 
-  # link/serial_port.py
+  # app/link/serial_port.py
   ESP_DEVICE = "/dev/ttyAMA0"
-  ESP_BAUD = 74880           # E2-a; Z12: sonst 115200 auf beiden Seiten
+  ESP_BAUD = 74880           # E2-a; Z12: sonst 115200 auf beiden Seiten (ESP: Features::LINK_BAUD)
   UART_SELECT_GPIO = 23      # LOW = ESP (F1)
   GPIO_CHIP = 0              # wie driver/uart/uart_switch.py
   READ_TIMEOUT_S = 0.05
@@ -490,7 +845,7 @@ Expected: alle Suiten PASSED.
       # select_gpio: lgpio erst hier importieren, GPIO23 als Ausgang LOW beanspruchen und den
       # Handle offen halten; dann serial.serial_for_url(device, baudrate=baud, timeout=READ_TIMEOUT_S)
 
-  # link/tests/fakes.py
+  # app/link/tests/fakes.py
   class FakeClock:            # now: float; __call__() -> float; advance(seconds) -> None
   class FakePort:             # feed(data); read_available() (leer: 1 ms schlafen, b""); write(data);
                               # take_tx() -> bytes; fail: Exception | None (read_available wirft sie); thread-sicher
@@ -537,7 +892,7 @@ class PiLinkTest(unittest.TestCase):
     def test_partial_line_waits_for_newline(self)  # b"$03:PI" → tx leer; b"NG*29\n" → PONG
     def test_garbage_bytes_do_not_raise(self)      # feed b"\xff\xfe\x00\n$03:PING*29\n" → PONG (Fehler 1)
 
-class PiLinkThreadTest(unittest.TestCase):         # echte Uhr, Fristen hoechstens 1 s warten
+class PiLinkThreadTest(unittest.TestCase):         # echte Uhr, hoechstens 1 s warten
     def test_thread_round_trip(self)
         # start(); feed PING → b"$03:PONG*2F\n" erscheint in tx; fut = request("READY");
         # feed b"$00:OK*3E\n" → fut.result(timeout=1) == Message(0, "OK"); stop() → alive is False
@@ -555,35 +910,37 @@ class SerialPortTest(unittest.TestCase):
 
 - [ ] **Step 2: Tests laufen lassen, sie müssen scheitern**
 
-Run: `cd rpi/app && $PY -m unittest discover -s link -t . -v`
-Expected: FAIL mit `ModuleNotFoundError: No module named 'link.pi_link'`.
+Run: `cd rpi && $PY -m unittest discover -s app -t . -v`
+Expected: FAIL mit `ModuleNotFoundError: No module named 'app.link.pi_link'`.
 
 - [ ] **Step 3: `fakes.py`, `pi_link.py` und `serial_port.py` umsetzen**
 
-Ablauf von `poll()` und die Regeln für Antwort, Doppeltes und Unbekanntes wie Task 3 Step 3, mit drei Unterschieden: kein `\n` vor der Nachricht; bekannte Anfragen sind die mit Rolle `esp_request`; `PING` wird sofort mit `PONG` beantwortet statt in `incoming` gelegt. Wirft `poll()` im Thread, wird der Fehler mit `log.exception` gemeldet, ein offenes `Future` mit `None` beendet und der Thread verlassen.
+Ablauf von `poll()` und die Regeln für Antwort, Doppeltes und Unbekanntes wie Task 7 Step 3, mit drei Unterschieden: kein `\n` vor der Nachricht; bekannte Anfragen sind die mit Rolle `esp_request`; `PING` wird sofort mit `PONG` beantwortet statt in `incoming` gelegt. Wirft `poll()` im Thread, wird der Fehler mit `log.exception` gemeldet, ein offenes `Future` mit `None` beendet und der Thread verlassen.
 
 - [ ] **Step 4: Tests bestehen**
 
-Run: `cd rpi/app && $PY -m unittest discover -s link -t . -v`
+Run: `cd rpi && $PY -m unittest discover -s app -t . -v`
 Expected: `OK`.
 
 - [ ] **Step 5: Commit** – „PiLink auf dem Pi mit eigenem Thread und Port fuer ttyAMA0“
 
 ---
 
-### Task 5: Firmware anbinden, alten Code im ESP entfernen
+### Task 9: Firmware anbinden – `UartPort` und Verbindungstest auf BT3
+
+Baut auf dem Stand nach der Aufräumrunde auf: `esp/lib/communication/` ist leer, `Application` hat keine Mitglieder `_uart`, `_storage`, `_pi`, `_wifi` mehr, Schalter stehen in `Features`, `displayState` ist `DisplayState`.
 
 **Files:**
 - Create: `esp/lib/communication/UartPort.h`, `esp/lib/communication/UartPort.cpp`
-- Delete: `esp/lib/communication/commands.h`, `protocol.h`, `protocol.cpp`, `uartHandler.h`, `uartHandler.cpp`, `piCommunication.h`, `piCommunication.cpp`
-- Delete: `esp/lib/storage/textStorage.*`, `espTextStorage.*`, `framTextStorage.*`, `ITextStorage.h`
-- Modify: `esp/lib/app/application.h`, `esp/lib/app/application.cpp`
+- Create: `esp/lib/app/LinkTest.h`, `esp/lib/app/LinkTest.cpp`
+- Modify: `esp/lib/config/features.h`, `esp/lib/app/application.h`, `esp/lib/app/application.cpp`
 - Modify: `esp/README.md`, `esp/test/README`
 
 **Interfaces:**
-- Consumes: `ISerialPort`, `PiLink`, `LinkEvent`, `LinkCodec::errorName` (Task 1, 3).
+- Consumes: `ISerialPort`, `PiLink`, `LinkEvent`, `LinkCodec::errorName` (Task 3, 7).
 - Produces:
   ```cpp
+  // UartPort.h
   class UartPort : public ISerialPort
   {
   public:
@@ -591,60 +948,60 @@ Expected: `OK`.
       int read() override;                              // serial.read(), -1 wenn leer
       void write(const std::string& bytes) override;    // serial.write(data, size), ohne flush
   };
+
+  // LinkTest.h – BT3 ohne Sitzung, bis Teil 2 (Annahme 13)
+  void runLinkTest(PiLink& link, unsigned long durationMs);
+
+  // features.h
+  constexpr unsigned long LINK_BAUD = 74880;   // E2-a, wie das Boot-ROM; Z12: sonst 115200 hier und in rpi/app/link/serial_port.py
   ```
 
-- [ ] **Step 1: Alten Code löschen**
+- [ ] **Step 1: `UartPort` und `LinkTest` umsetzen**
 
-Die Dateien oben löschen. Danach darf `grep -rni "piCommunication\|UartHandler\|TextStorage\|Protocol::" esp/lib esp/src` nur noch `application.*` treffen.
+`runLinkTest`: `send("PING", "", millis())`; dann `poll(millis())` mit `yield()` dazwischen, bis `durationMs` vergangen **und** keine eigene Anfrage mehr offen ist (das `Expired` kommt genau bei 3000 ms). Ereignisse loggen und beantworten:
+- Start: `[LINK] Verbindungstest: PING #%02X`
+- `Response`: `[LINK] PING -> %s nach %lu ms`
+- `Expired`: `[LINK] keine Antwort auf PING nach %lu ms`
+- `Request`: `reply("OK")`, Log `[LINK] Anfrage #%02X %s -> OK`
+- am Ende, wenn `discarded() > 0`: `[LINK] %lu Zeilen verworfen, zuletzt %s` (mit `errorName(lastError())`)
 
-- [ ] **Step 2: `UartPort` umsetzen**
+- [ ] **Step 2: Anwendung umstellen**
 
-- [ ] **Step 3: Anwendung umstellen**
-
-- `application.h`: Includes `UartHandler.h`, `TextStorage.h`, `PiCommunication.h` und die Mitglieder `_uart`, `_storage`, `_pi` entfernen. Neu `#include "UartPort.h"`, `#include "PiLink.h"`, Mitglieder `UartPort _port; PiLink _link;` (in dieser Reihenfolge), `bool _linkTestRequested;` und `void runLinkTest();` mit Kommentar: BT3 ohne Sitzung, bis Teil 2.
-- `application.cpp`, im unbenannten Namespace: `constexpr unsigned long LINK_BAUD = 74880;` (Kommentar: E2-a, dieselbe Baudrate wie das Boot-ROM; Z12: sonst 115200 hier und in `rpi/app/link/serial_port.py`) und `constexpr unsigned long LINK_TEST_MS = 3000;`.
-- In `run()` vor dem Start der Konsole: `Serial.setRxBufferSize(1024);` (eine Zeile hat bis 257 Bytes, Review Focus 4), dann `DebugSerial.begin(LINK_BAUD);`.
+- `features.h`: `LINK_BAUD` wie oben.
+- `application.h`: `#include "UartPort.h"`, `#include "PiLink.h"`; Mitglieder `UartPort _port; PiLink _link;` (in dieser Reihenfolge) und `bool _linkTestRequested;`.
+- `run()`: vor dem Start der Konsole `Serial.setRxBufferSize(1024);` (eine Zeile hat bis 257 Bytes, Review Focus 4), dann `DebugSerial.begin(Features::LINK_BAUD);` statt der Zahl.
 - `_inputs.setTrigger(InputEvent::BT3, InputTrigger::ANY_EDGE);` – BT3 hat ein Flipflop wie BT1/BT2; den Kommentar darüber nachziehen.
 - `handleInput`, Fall BT3: `DebugSerial.println("Verbindungstest zum Pi");` und `_linkTestRequested = true;`.
-- Nach dem ersten `PersistentState::save(_state);` (Tastenstand gesichert, ein Reset im Test wiederholt ihn nicht): `if (_linkTestRequested) runLinkTest();`.
-- `runLinkTest()`: `send("PING", "", millis())`; dann `poll(millis())` mit `yield()` dazwischen, bis `LINK_TEST_MS` vergangen **und** keine eigene Anfrage mehr offen ist (das `Expired` kommt genau bei 3000 ms). Ereignisse loggen und beantworten:
-  - Start: `[LINK] Verbindungstest: PING #%02X`
-  - `Response`: `[LINK] PING -> %s nach %lu ms`
-  - `Expired`: `[LINK] keine Antwort auf PING nach %lu ms`
-  - `Request`: `reply("OK")`, Log `[LINK] Anfrage #%02X %s -> OK`
-  - am Ende, wenn `discarded() > 0`: `[LINK] %lu Zeilen verworfen, zuletzt %s` (mit `errorName(lastError())`)
+- Nach dem ersten `PersistentState::save(_state);` (Tastenstand gesichert, ein Reset im Test wiederholt ihn nicht): `if (_linkTestRequested) runLinkTest(_link, 3000);`.
 
-- [ ] **Step 4: Doku nachziehen**
+- [ ] **Step 3: Doku nachziehen**
 
-- `esp/README.md`: Tasten-Tabelle BT3 = „Verbindungstest zum Pi (bis Teil 2): `PING` senden, 3 s lang Anfragen des Pi beantworten, Ergebnis im Log“; BT4–BT6 „noch nicht belegt“. Ordnerliste: `lib/core/` nennt Codec und PiLink der Verbindung; `lib/storage/` ohne die alten Textspeicher; `lib/communication/` = „`UartPort`: `Serial` für die Verbindung zum Pi“. Kurzer Abschnitt „Verbindung zum Pi“: Format, 74 880 Baud auf derselben Leitung wie das Log, gemeinsame Testfälle `tests/protocol_vectors.json`, Verweis auf Spezifikation Abschnitt 6.
-- `esp/test/README`: Suiten `test_link_codec` (Codec gegen `../tests/protocol_vectors.json`) und `test_pi_link` (Wiederholung, Frist, doppelte Nummer); Hilfen `VectorFile` und `MemorySerial`.
+- `esp/README.md`: Tasten-Tabelle BT3 = „Verbindungstest zum Pi (bis Teil 2): `PING` senden, 3 s lang Anfragen des Pi beantworten, Ergebnis im Log“. Ordnerliste: `lib/core/` nennt Codec, PiLink, PiPower, Umbruch und Schrift; `lib/communication/` = „`UartPort`: `Serial` für die Verbindung zum Pi“. Kurzer Abschnitt „Verbindung zum Pi“: Format, 74 880 Baud auf derselben Leitung wie das Log, gemeinsame Testfälle in `tests/`, Verweis auf Spezifikation Abschnitt 6.
+- `esp/test/README`: Suiten `test_link_codec`, `test_text_layout`, `test_pi_power`, `test_pi_link`; Hilfen `VectorFile`, `RecordingPin`, `MemorySerial`.
 
-- [ ] **Step 5: Prüfen**
+- [ ] **Step 4: Prüfen**
 
 Run: `cd esp && pio run`
 Expected: SUCCESS ohne neue Warnungen.
 Run: `cd esp && pio test -e native`
 Expected: alle Suiten PASSED.
-Run: `grep -rni "piCommunication\|UartHandler\|TextStorage\|COMMAND|DATA" esp/lib esp/src esp/README.md`
-Expected: keine Treffer.
 
-- [ ] **Step 6: Commit** – „ESP: Verbindung zum Pi ueber PiLink, BT3 als Verbindungstest, alter Code entfernt“
+- [ ] **Step 5: Commit** – „ESP: Verbindung zum Pi ueber PiLink, BT3 als Verbindungstest“
 
 ---
 
-### Task 6: Pi: Prüfwerkzeug, alten Code entfernen, Doku
+### Task 10: Pi – Prüfwerkzeug und Doku
 
 **Files:**
 - Create: `rpi/app/link/probe.py`
 - Test: `rpi/app/link/tests/test_probe.py`
-- Delete: `rpi/app/driver/uart/uart_esp.py`, `protocol.py`, `commands.py`, `test.py`
 - Modify: `rpi/README.md`, `README.md`
 
 **Interfaces:**
-- Consumes: `PiLink`, `open_esp_port`, `ESP_DEVICE`, `ESP_BAUD`, `Message` (Task 2, 4).
+- Consumes: `PiLink`, `open_esp_port`, `ESP_DEVICE`, `ESP_BAUD`, `Message` (Task 4, 8).
 - Produces:
   ```python
-  # link/probe.py – Aufruf auf dem Pi: cd rpi/app && python -m link.probe
+  # app/link/probe.py – Aufruf auf dem Pi: cd rpi && python -m app.link.probe
   def answer_for(request: Message) -> tuple[str, str]
       # BUTTON -> ("OK", ""); SHUTDOWN -> ("BUSY", "") (das Werkzeug faehrt den Pi nie herunter);
       # alles andere -> ("ERROR", "PROBE")
@@ -665,51 +1022,63 @@ class ProbeTest(unittest.TestCase):
 
 - [ ] **Step 2: Tests laufen lassen, sie müssen scheitern**
 
-Run: `cd rpi/app && $PY -m unittest discover -s link -t . -v`
-Expected: FAIL mit `ModuleNotFoundError: No module named 'link.probe'`.
+Run: `cd rpi && $PY -m unittest discover -s app -t . -v`
+Expected: FAIL mit `ModuleNotFoundError: No module named 'app.link.probe'`.
 
 - [ ] **Step 3: `probe.py` umsetzen**
 
-- [ ] **Step 4: Alten Code löschen**
+- [ ] **Step 4: Doku nachziehen**
 
-Die vier Dateien löschen. `uart.py`, `uart_device.py`, `uart_master.py`, `uart_switch.py`, `uart_hlk.py` bleiben (die Radar-Anwendung nutzt sie). Die alte Kopie `rpi/tests/uart/` (Z13) ist schon entfernt (Commit 251f2cf).
-Run: `grep -rn "uart_esp\|driver.uart.protocol\|driver.uart.commands\|from .protocol\|from .commands" rpi`
-Expected: keine Treffer.
+- `rpi/README.md`: Treiber-Tabelle `uart/` = „UART zum Radar LD2410S und Umschaltung per GPIO23 (HIGH = Radar, LOW = ESP); die Verbindung zum ESP liegt in `app/link/`“. Neuer Abschnitt „Verbindung zum ESP (`app/link`)“: Codec, PiLink mit eigenem Thread, `/dev/ttyAMA0` mit 74 880 Baud, GPIO23 LOW; Prüfwerkzeug `python -m app.link.probe`; Hinweis, dass die Radar-Anwendung (Taste 4 in `main.py`) dieselbe UART öffnet und nicht gleichzeitig laufen darf. Den Satz „wird in Teil 1 der Umsetzung ersetzt“ entfernen.
+- `README.md`: in der Repository-Struktur `tests/    gemeinsame Testfälle für ESP und Pi (Verbindung, Anzeige)`.
 
-- [ ] **Step 5: Doku nachziehen**
+- [ ] **Step 5: Prüfen**
 
-- `rpi/README.md`: Treiber-Tabelle `uart/` = „UART zum Radar LD2410S und Umschaltung per GPIO23 (HIGH = Radar, LOW = ESP); die Verbindung zum ESP liegt in `app/link/`“. Neuer Abschnitt „Verbindung zum ESP (`app/link`)“: Codec, PiLink mit eigenem Thread, `/dev/ttyAMA0` mit 74 880 Baud, GPIO23 LOW; Tests mit `cd app && python -m unittest discover -s link -t . -v`; Prüfwerkzeug `python -m link.probe`; Hinweis, dass die Radar-Anwendung (Taste 4 in `main.py`) dieselbe UART öffnet und nicht gleichzeitig laufen darf. In der Installationszeile `pyserial` ergänzen. Den Satz „wird in Teil 1 der Umsetzung ersetzt“ entfernen.
-- `README.md`: in der Repository-Struktur `tests/    gemeinsame Testfälle der Verbindung ESP–Pi (protocol_vectors.json)`.
+Run: `cd rpi && $PY -m unittest discover -s app -t . -v` → `OK`.
+Run: `cd esp && pio test -e native` → alle Suiten PASSED.
 
-- [ ] **Step 6: Prüfen**
-
-Run: `cd rpi/app && $PY -m unittest discover -s link -t . -v`
-Expected: `OK`.
-Run: `cd esp && pio test -e native`
-Expected: alle Suiten PASSED (die gemeinsame Datei ist unverändert).
-
-- [ ] **Step 7: Commit** – „Pi: Pruefwerkzeug fuer die Verbindung, alter ESP-Code im uart-Treiber entfernt“
+- [ ] **Step 6: Commit** – „Pi: Pruefwerkzeug fuer die Verbindung, Doku“
 
 ---
 
-### Task 7: Abnahme am Gerät (erst nach Teil 0)
+### Task 11: Abnahme am Gerät (erst nach Teil 0)
 
-**Zurückgestellt**, bis Teil 0 erledigt ist: Pi mit SSH, `dtparam=uart0=on`, `/dev/ttyAMA0` vorhanden und **ohne** Anmeldekonsole darauf, venv mit `pyserial` und `lgpio`, Repo auf dem Pi auf dem Stand dieses Zweigs. Firmware aus Task 5 mit dem Flasher aufspielen, danach den **Flasher abziehen** – solange er steckt, gibt es keine Verbindung (F2). Das Log des ESP liest man dann über den Pi.
+**Zurückgestellt**, bis Teil 0 erledigt ist: Pi mit SSH, `dtparam=uart0=on`, I²C an, `/dev/ttyAMA0` vorhanden und **ohne** Anmeldekonsole darauf, venv aus `rpi/requirements.txt`, Repo auf dem Pi auf dem Stand dieses Zweigs. Firmware aus Task 9 mit dem Flasher aufspielen, danach den **Flasher abziehen** – solange er steckt, gibt es keine Verbindung (F2). Das Log des ESP liest man dann über den Pi. Für Schritte am I²C-Bus muss der ESP schlafen (Wand dunkel), dann hat der Pi den Bus (F7).
 
-- [ ] **Step 1: 74 880 Baud am Pi 5** – BT2 (Pi ein), warten bis SSH geht, `cd rpi/app && python -m link.probe`. BT1 drücken. Erwartet: lesbare Zeilen `ESP| === REFLECTION WALL (Wakeup #…) ===` und folgende. Unlesbar oder Müll: Z12 – `LINK_BAUD`, `ESP_BAUD` und `monitor_speed` auf 115 200, neu flashen, wiederholen.
-- [ ] **Step 2: GPIO23** – in einer zweiten SSH-Sitzung `pinctrl get 23`. Erwartet: Ausgang, LOW.
-- [ ] **Step 3: ESP → Pi** – BT3. Erwartet im Prüfwerkzeug: `<- $NN:PING*hh`, `-> $NN:PONG*hh` und `ESP| [LINK] PING -> PONG nach … ms`.
-- [ ] **Step 4: Pi → ESP** – im selben Durchlauf: `READY -> OK (#NN)` im Prüfwerkzeug und `ESP| [LINK] Anfrage #NN READY -> OK`.
-- [ ] **Step 5: Zuverlässigkeit** – 20 × BT3 im Abstand von einigen Sekunden, zwischendurch BT1 (Anzeige schreiben), dann Ctrl+C. Erwartet: 20 × `PONG`; in `verworfen:` nur `NO_START` (Debug-Zeilen), kein `BAD_CHECKSUM`, `BAD_FORMAT`, `BAD_CHAR` oder `TOO_LONG`; keine Zeile `[LINK] … verworfen` vom ESP.
-- [ ] **Step 6: Pi antwortet nicht** – Prüfwerkzeug beenden (es gibt GPIO23 dabei frei), `pinctrl set 23 op dl`, dann `python -m serial.tools.miniterm /dev/ttyAMA0 74880` starten, BT3. Erwartet: zwölfmal `$NN:PING*hh` im Abstand von etwa 250 ms, dann `[LINK] keine Antwort auf PING nach 3000 ms`.
-- [ ] **Step 7: Reset mitten im Test** – Prüfwerkzeug wieder starten, BT3 und innerhalb von 3 s BT1. Erwartet: Der ESP startet neu (F4) und zeigt das Zitat; der nächste BT3 bekommt wieder `PONG`.
-- [ ] **Step 8: Abschluss** – Ergebnis von Step 1 in Spezifikation Abschnitt 15 eintragen (Zeile „74 880 Baud am Pi 5“ schliessen bzw. auf 115 200 umstellen), den Stand oben in diesem Plan nachführen, committen – „Teil 1 am Geraet abgenommen“.
+- [ ] **Step 1: Pi-Code auf dem Pi** – `cd rpi && python -m unittest discover -s app -t . -v` → `OK`. `python -m app.main` → das Menü erscheint im Terminal und auf der Anzeige; Ctrl+C.
+- [ ] **Step 2: Schrift, die '7'** – `cd rpi && python -c "from app.driver.display.display import Display; Display().set_text('0123456789 1 7')"`. Erwartet: die 7 mit oberem Balken und rechter Seite, die 1 nur mit rechter Seite. Stimmt es nicht: den Wert in `ascii_map.py`, `Glyphs.cpp` und `tests/display_vectors.json` anpassen und erneut prüfen.
+- [ ] **Step 3: Radar-Graph** – `cd rpi && python -m tests.ld2410s.test --seconds 10`. Erwartet: In der obersten Modulreihe läuft der Graph von rechts nach links.
+- [ ] **Step 4: 74 880 Baud am Pi 5** – BT2 (Pi ein), `cd rpi && python -m app.link.probe`. BT1 drücken. Erwartet: lesbare Zeilen `ESP| === REFLECTION WALL (Wakeup #…) ===` und folgende. Unlesbar oder Müll: Z12 – `Features::LINK_BAUD`, `ESP_BAUD` und `monitor_speed` auf 115 200, neu flashen, wiederholen. In einer zweiten SSH-Sitzung `pinctrl get 23` → Ausgang, LOW.
+- [ ] **Step 5: Beide Richtungen** – BT3. Erwartet im Prüfwerkzeug: `<- $NN:PING*hh`, `-> $NN:PONG*hh`, `ESP| [LINK] PING -> PONG nach … ms`, `READY -> OK (#NN)` und `ESP| [LINK] Anfrage #NN READY -> OK`.
+- [ ] **Step 6: Zuverlässigkeit** – 20 × BT3 im Abstand von einigen Sekunden, zwischendurch BT1 (Anzeige schreiben), dann Ctrl+C. Erwartet: 20 × `PONG`; in `verworfen:` nur `NO_START` (Debug-Zeilen), kein `BAD_CHECKSUM`, `BAD_FORMAT`, `BAD_CHAR` oder `TOO_LONG`; keine Zeile `[LINK] … verworfen` vom ESP.
+- [ ] **Step 7: Pi antwortet nicht** – Prüfwerkzeug beenden (es gibt GPIO23 dabei frei), `pinctrl set 23 op dl`, dann `python -m serial.tools.miniterm /dev/ttyAMA0 74880`, BT3. Erwartet: zwölfmal `$NN:PING*hh` im Abstand von etwa 250 ms, dann `[LINK] keine Antwort auf PING nach 3000 ms`.
+- [ ] **Step 8: Reset mitten im Test** – Prüfwerkzeug wieder starten, BT3 und innerhalb von 3 s BT1. Erwartet: Der ESP startet neu (F4) und zeigt das Zitat; der nächste BT3 bekommt wieder `PONG`.
+- [ ] **Step 9: Pi-Speisung** – BT2 zweimal mit Pause: Pi fährt hoch bzw. verliert die Speisung wie vor Task 6.
+- [ ] **Step 10: Abschluss** – Ergebnis von Step 4 in Spezifikation Abschnitt 15 eintragen (Zeile „74 880 Baud am Pi 5“ schliessen bzw. auf 115 200 umstellen), mit `pip freeze` die Versionen in `rpi/requirements.txt` eintragen, den Stand oben in diesem Plan nachführen, committen – „Teil 1 am Geraet abgenommen“.
 
 ---
 
 ## Nicht in diesem Plan
 
-- Sitzung des ESP (Abschnitt 7): `PING` alle 10 s, drei Aussetzer, `READY`/`DONE`/`SHUTDOWN`/`BUSY` als Zustände, Speisung schalten, Dienst mit systemd, `txSeq`/`rxSeq` im RTC-Speicher – Teil 2.
+- Sitzung des ESP (Abschnitt 7): `PING` alle 10 s, drei Aussetzer, `READY`/`DONE`/`SHUTDOWN`/`BUSY` als Zustände, Speisung nach gespeichertem Zustand, Dienst mit systemd, `txSeq`/`rxSeq` und `piPowered` im RTC-Speicher – Teil 2.
 - Radar-Debug mit `MODE`, Baudwechsel auf 115 200 und GPIO23 HIGH (6.4) – Teil 2.
-- `GET|QUOTE` mit KI, Thema und Prüfung des Zitats – Teil 3b.
+- `GET|QUOTE` mit KI, Thema und Prüfung des Zitats (nutzt `wrap`/`displayable` aus Task 5) – Teil 3b.
 - `BUTTON|n` an die Pi-Anwendungen – Teil 2 und 4.
+- Aus der Durchsicht, nicht freigegeben: Adressliste und vier Zeilen im Pi-Treiber, eine Bus-Sitzung für alle I²C-Geräte, doppelte CRC, CI unter Linux, `CLAUDE.md`, Tabelle der Logmeldungen.
+
+## Bekannte Mängel, die dieser Plan nicht behebt
+
+- **Radar-Modus (Taste 4 in `main.py`) läuft heute nicht:** `Radar` zeichnet mit `driver/display/animations/stickman.py`, das `display.WIDTH`, `set_segments` und `refresh` braucht; die `Display`-Klasse hat keines davon. Die Radar-Einrichtung (eigener Entwurf, §11) verlangt, dass `Radar.py` weiter läuft – das muss sie erst herstellen.
+- `VoiceAssistant` ignoriert die übergebene Anzeige und baut eine eigene.
+- `rpi/tests/lichtsensor/test.py` importiert `bh1750`, die Datei heisst `BH1750.py` (scheitert unter Linux).
+
+## Lücken und Widersprüche in der Spezifikation (für Teil 1)
+
+- **Fehler 1–5** (und Z13: „Fehler 1–3“) sind nirgends aufgeschrieben; dieser Plan benennt sie aus dem alten Code.
+- **Antwort oder Anfrage:** Das Format trägt kein Merkmal, und die Antwort hat dieselbe Nummer wie die Anfrage. Annahme 1 entscheidet am Befehl.
+- **„Letzte Antwort noch einmal“** ist nicht festgelegt, solange die Antwort noch nicht existiert (`GET|QUOTE` wird bis 120 s alle 250 ms wiederholt, bis zu 480 Mal) oder nach einem ESP-Reset (Abschnitt 11 sichert `rxSeq`, aber keine Antwort). Annahme 7.
+- **`READY`:** Abschnitt 12 gibt 3 s Frist, Tabelle 6.2 sagt „weiter senden, bis `OK` kommt“. Der Plan meldet den Ablauf; das Neusenden entscheidet Teil 2.
+- **`PING` während `GET|QUOTE`:** Pro Richtung ist höchstens eine Anfrage offen, also kann der ESP bis 120 s lang kein `PING` senden – gegen E3 (alle 10 s). Teil 2 muss das klären.
+- **„`DATEN` – beliebiger Text“** passt nicht zur Anzeige, die nur ASCII zeigt. Annahme 3.
+- **Python-Tests:** Abschnitt 14 verlangt `unittest`; der Auftrag zu diesem Plan nannte pytest. Der Plan folgt der Spezifikation.
+- **Zeichen für das Zitat:** Abschnitt 9, Schritt 4 lässt nur `A–Z` zu, die Beispielzitate sind gemischt geschrieben und die Anzeige zeigt Kleinbuchstaben als Grossbuchstaben. Annahme 25 lässt `a–z` als darstellbar gelten.
