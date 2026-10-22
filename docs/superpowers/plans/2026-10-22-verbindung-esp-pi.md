@@ -1,6 +1,6 @@
 # Teil 1: Verbindung zwischen ESP und Pi – Umsetzungsplan
 
-**Stand 2026-10-22:** Entwurf, überarbeitet nach der Wartbarkeits-Durchsicht vom selben Tag (Top-10, Punkte 5–8). Noch nicht umgesetzt.
+**Stand 2026-10-22:** Entwurf, überarbeitet nach der Wartbarkeits-Durchsicht vom selben Tag (Top-10, Punkte 5–8). Tasks 1–10 umgesetzt und geprüft (Branch `feature/verbindung-esp-pi`, Stand 2026-10-22). Task 11 (Abnahme am Gerät) ist offen bis Teil 0.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -1043,13 +1043,14 @@ Run: `cd esp && pio test -e native` → alle Suiten PASSED.
 
 ### Task 11: Abnahme am Gerät (erst nach Teil 0)
 
-**Zurückgestellt**, bis Teil 0 erledigt ist: Pi mit SSH, `dtparam=uart0=on`, I²C an, `/dev/ttyAMA0` vorhanden und **ohne** Anmeldekonsole darauf, venv aus `rpi/requirements.txt`, Repo auf dem Pi auf dem Stand dieses Zweigs. Firmware aus Task 9 mit dem Flasher aufspielen, danach den **Flasher abziehen** – solange er steckt, gibt es keine Verbindung (F2). Das Log des ESP liest man dann über den Pi. Für Schritte am I²C-Bus muss der ESP schlafen (Wand dunkel), dann hat der Pi den Bus (F7).
+**Zurückgestellt**, bis Teil 0 erledigt ist: Pi mit SSH, `dtparam=uart0=on`, I²C an, `/dev/ttyAMA0` vorhanden und **ohne** Anmeldekonsole darauf, venv aus `rpi/requirements.txt`, `libportaudio2` auf dem Pi (der Mikrofontest braucht es), Repo auf dem Pi auf dem Stand dieses Zweigs. Firmware aus Task 9 mit dem Flasher aufspielen, danach den **Flasher abziehen** – solange er steckt, gibt es keine Verbindung (F2). Das Log des ESP liest man dann über den Pi. Für Schritte am I²C-Bus muss der ESP schlafen (Wand dunkel), dann hat der Pi den Bus (F7).
 
 - [ ] **Step 1: Pi-Code auf dem Pi** – `cd rpi && python -m unittest discover -s app -t . -v` → `OK`. `python -m app.main` → das Menü erscheint im Terminal und auf der Anzeige; Ctrl+C.
+- [ ] **Step 1b: Kurzer Probelauf der Pi-Anwendung** – `cd rpi && python -m app.main`. Modus 4 und Modus 5 wählen, einmal die Anzeige beschreiben, GPIO23 auf den ESP und wieder zurück schalten. Das prüft den Hardware-Code, der erst beim Gebrauch geladen wird und den kein PC-Test erreicht.
 - [ ] **Step 2: Schrift, die '7'** – `cd rpi && python -c "from app.driver.display.display import Display; Display().set_text('0123456789 1 7')"`. Erwartet: die 7 mit oberem Balken und rechter Seite, die 1 nur mit rechter Seite. Stimmt es nicht: den Wert in `ascii_map.py`, `Glyphs.cpp` und `tests/display_vectors.json` anpassen und erneut prüfen.
 - [ ] **Step 3: Radar-Graph** – `cd rpi && python -m tests.ld2410s.test --seconds 10`. Erwartet: In der obersten Modulreihe läuft der Graph von rechts nach links.
 - [ ] **Step 4: 74 880 Baud am Pi 5** – BT2 (Pi ein), `cd rpi && python -m app.link.probe`. BT1 drücken. Erwartet: lesbare Zeilen `ESP| === REFLECTION WALL (Wakeup #…) ===` und folgende. Unlesbar oder Müll: Z12 – `Features::LINK_BAUD`, `ESP_BAUD` und `monitor_speed` auf 115 200, neu flashen, wiederholen. In einer zweiten SSH-Sitzung `pinctrl get 23` → Ausgang, LOW.
-- [ ] **Step 5: Beide Richtungen** – BT3. Erwartet im Prüfwerkzeug: `<- $NN:PING*hh`, `-> $NN:PONG*hh`, `ESP| [LINK] PING -> PONG nach … ms`, `READY -> OK (#NN)` und `ESP| [LINK] Anfrage #NN READY -> OK`.
+- [ ] **Step 5: Beide Richtungen** – BT3. Erwartet im Prüfwerkzeug: `<- $NN:PING*hh`, `-> $NN:PONG*hh`, `ESP| [LINK] PING -> PONG nach … ms`, `READY -> OK (#NN)` und `ESP| [LINK] Anfrage #NN READY -> OK`. Eine Zeile `[LINK] Zeile verworfen … NO_START` kurz nach dem Reset des ESP ist zu erwarten: Der UART des ESP kann mitten in einem Rahmen starten, während das Prüfwerkzeug `READY` wiederholt. Das ist kein Fehler.
 - [ ] **Step 6: Zuverlässigkeit** – 20 × BT3 im Abstand von einigen Sekunden, zwischendurch BT1 (Anzeige schreiben), dann Ctrl+C. Erwartet: 20 × `PONG`; in `verworfen:` nur `NO_START` (Debug-Zeilen), kein `BAD_CHECKSUM`, `BAD_FORMAT`, `BAD_CHAR` oder `TOO_LONG`; keine Zeile `[LINK] … verworfen` vom ESP.
 - [ ] **Step 7: Pi antwortet nicht** – Prüfwerkzeug beenden (es gibt GPIO23 dabei frei), `pinctrl set 23 op dl`, dann `python -m serial.tools.miniterm /dev/ttyAMA0 74880`, BT3. Erwartet: zwölfmal `$NN:PING*hh` im Abstand von etwa 250 ms, dann `[LINK] keine Antwort auf PING nach 3000 ms`.
 - [ ] **Step 8: Reset mitten im Test** – Prüfwerkzeug wieder starten, BT3 und innerhalb von 3 s BT1. Erwartet: Der ESP startet neu (F4) und zeigt das Zitat; der nächste BT3 bekommt wieder `PONG`.
