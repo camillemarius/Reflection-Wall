@@ -1,10 +1,10 @@
 #pragma once
 
-#include "UartHandler.h"
-#include "TextStorage.h"
-#include "Display.h"
-#include "PiCommunication.h"
-#include "WakeupReason.h"
+#include "uartHandler.h"
+#include "textStorage.h"
+#include "display.h"
+#include "piCommunication.h"
+#include "wakeupReason.h"
 #include "PersistentState.h"
 #include "LittleFsAdapter.h"
 #include "QuoteStore.h"

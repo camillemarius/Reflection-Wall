@@ -1,4 +1,4 @@
-#include "Application.h"
+#include "application.h"
 #include "I2CMasterControl.h"
 #include "pinMapping.h"
 

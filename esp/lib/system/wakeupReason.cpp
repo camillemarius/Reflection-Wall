@@ -1,4 +1,4 @@
-#include "WakeupReason.h"
+#include "wakeupReason.h"
 
 #include <user_interface.h>
 #include "pinMapping.h"
