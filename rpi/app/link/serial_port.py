@@ -26,8 +26,11 @@ class SerialPort:
         try:
             self._serial.close()
         finally:
-            if self._gpio_handle is not None and self._lgpio is not None:
+            if self._gpio_handle is not None:
                 handle, self._gpio_handle = self._gpio_handle, None
+                if self._lgpio is None:
+                    import lgpio as lgpio_module  # erst hier: auf dem PC nicht installiert
+                    self._lgpio = lgpio_module
                 self._lgpio.gpiochip_close(handle)
 
 
@@ -40,7 +43,11 @@ def open_esp_port(device: str = ESP_DEVICE, baud: int = ESP_BAUD,
             import lgpio as lgpio_module  # erst hier: auf dem PC nicht installiert
         lgpio = lgpio_module
         handle = lgpio.gpiochip_open(GPIO_CHIP)
-        lgpio.gpio_claim_output(handle, UART_SELECT_GPIO, 0)
+        try:
+            lgpio.gpio_claim_output(handle, UART_SELECT_GPIO, 0)
+        except Exception:
+            lgpio.gpiochip_close(handle)
+            raise
     try:
         ser = serial.serial_for_url(device, baudrate=baud, timeout=READ_TIMEOUT_S)
     except Exception:

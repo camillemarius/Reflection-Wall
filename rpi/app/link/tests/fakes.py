@@ -20,6 +20,7 @@ class FakePort:
         self._rx = bytearray()
         self._tx = bytearray()
         self.fail: Exception | None = None
+        self.write_error: Exception | None = None
 
     def feed(self, data: bytes) -> None:
         with self._lock:
@@ -36,6 +37,8 @@ class FakePort:
         return data
 
     def write(self, data: bytes) -> None:
+        if self.write_error is not None:
+            raise self.write_error
         with self._lock:
             self._tx += data
 

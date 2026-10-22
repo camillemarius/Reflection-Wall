@@ -81,6 +81,7 @@ class PiLink:
             self._pending = msg
             self._pending_frame = frame
             self._future = concurrent.futures.Future()
+            self._future.set_running_or_notify_cancel()  # cancel() wirkt danach nicht mehr
             self._start_t = now
             self._last_sent = now
             fut = self._future
@@ -105,11 +106,13 @@ class PiLink:
     def poll(self) -> None:
         chunk = self._port.read_available()  # ausserhalb der Sperre
         done: list[tuple[concurrent.futures.Future, Message | None]] = []
-        with self._lock:
-            self._feed(chunk, done)
-            self._timers(done)
-        for fut, result in done:  # ausserhalb der Sperre, damit Rueckrufe nicht blockieren
-            fut.set_result(result)
+        try:
+            with self._lock:
+                self._feed(chunk, done)
+                self._timers(done)
+        finally:
+            for fut, result in done:  # ausserhalb der Sperre, damit Rueckrufe nicht blockieren
+                fut.set_result(result)
 
     def _feed(self, chunk: bytes, done: list) -> None:
         for b in chunk:
@@ -200,6 +203,8 @@ class PiLink:
 
     def start(self) -> None:
         self._stop.clear()
+        with self._lock:
+            self._dead = False
         self._thread = threading.Thread(target=self._run, name="pi-link", daemon=True)
         self._thread.start()
 
@@ -207,3 +212,8 @@ class PiLink:
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout)
+        with self._lock:
+            self._dead = True
+            fut, self._future, self._pending = self._future, None, None
+        if fut is not None:
+            fut.set_result(None)

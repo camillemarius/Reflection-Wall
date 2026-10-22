@@ -1,8 +1,12 @@
+import sys
 import unittest
+from unittest import mock
+
+import serial
 
 from app.link.codec import Message
 from app.link.pi_link import PiLink
-from app.link.serial_port import ESP_BAUD, UART_SELECT_GPIO, open_esp_port
+from app.link.serial_port import ESP_BAUD, SerialPort, UART_SELECT_GPIO, open_esp_port
 
 
 class FakeLgpio:
@@ -38,6 +42,23 @@ class SerialPortTest(unittest.TestCase):
         self.assertIn(("claim", 7, UART_SELECT_GPIO, 0), gpio.calls)
         self.assertEqual(ESP_BAUD, 74880)
         port.close()
+        self.assertIn(("close", 7), gpio.calls)
+
+    def test_chip_handle_is_closed_if_claim_fails(self):
+        gpio = FakeLgpio()
+
+        def busy(*a):
+            raise OSError("GPIO busy")
+        gpio.gpio_claim_output = busy
+        with self.assertRaises(OSError):
+            open_esp_port("loop://", select_gpio=True, lgpio_module=gpio)
+        self.assertIn(("close", 7), gpio.calls)
+
+    def test_close_imports_lgpio_lazily_to_release_handle(self):
+        gpio = FakeLgpio()
+        with mock.patch.dict(sys.modules, {"lgpio": gpio}):
+            port = SerialPort(serial.serial_for_url("loop://"), 7)
+            port.close()
         self.assertIn(("close", 7), gpio.calls)
 
 

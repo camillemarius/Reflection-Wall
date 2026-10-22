@@ -169,6 +169,36 @@ class PiLinkTest(unittest.TestCase):
         self.feed_poll(b"\xff\xfe\x00\n$03:PING*29\n")
         self.assertEqual(self.port.take_tx(), b"$03:PONG*2F\n")
 
+    def test_cancel_does_not_kill_the_link(self):
+        fut = self.link.request("READY")
+        self.assertFalse(fut.cancel())
+        self.feed_poll(b"$00:OK*3E\n")
+        self.assertEqual(fut.result(timeout=0), Message(0, "OK"))
+        self.link.request("READY")
+
+    def test_stop_ends_open_request(self):
+        fut = self.link.request("READY")
+        self.link.stop()
+        self.assertIsNone(fut.result(timeout=0))
+        self.assertTrue(self.link.request("READY").done())
+        self.assertEqual(self.port.take_tx(), READY0)
+
+    def test_start_after_stop_allows_requests_again(self):
+        self.link.stop()
+        self.assertTrue(self.link.request("READY").done())
+        self.link.start()
+        self.addCleanup(self.link.stop)
+        self.assertFalse(self.link.request("READY").done())
+
+    def test_response_is_resolved_even_if_handling_a_later_line_raises(self):
+        fut = self.link.request("READY")
+        self.port.take_tx()
+        self.port.write_error = OSError("weg")
+        self.port.feed(b"$00:OK*3E\n$03:PING*29\n")
+        with self.assertRaises(OSError):
+            self.link.poll()
+        self.assertEqual(fut.result(timeout=0), Message(0, "OK"))
+
 
 class PiLinkThreadTest(unittest.TestCase):
     def setUp(self):
