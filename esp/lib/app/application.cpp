@@ -7,10 +7,7 @@
 #include <ESP8266WiFi.h>
 
 Application::Application()
-    : _uart(Serial),
-      _storage(),
-      _display(),
-      _pi(_uart, _storage, _display),
+    : _display(),
       _fs(),
       _framBus(),
       _flashQuotes(_fs),
@@ -18,7 +15,6 @@ Application::Application()
       _gpioExpander(0x20),
       _inputs(_gpioExpander),
       _wakeupReason(WakeupReason::Reason::UNKNOWN),
-      _wifi(),
       _state(),
       _coldBoot(false),
       _displayReady(false),

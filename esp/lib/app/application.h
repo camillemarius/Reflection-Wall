@@ -1,9 +1,6 @@
 #pragma once
 
-#include "uartHandler.h"
-#include "textStorage.h"
 #include "display.h"
-#include "piCommunication.h"
 #include "wakeupReason.h"
 #include "PersistentState.h"
 #include "LittleFsAdapter.h"
@@ -14,7 +11,6 @@
 
 #include "PCF8575.h"
 #include "InputManager.h"
-#include "WifiController.h"
 
 // ---------------------------------------------------------
 // Ablauf
@@ -76,10 +72,7 @@ private:
     // eingebaut ist (RADAR_INSTALLED in application.cpp)
     bool radarHigh();
 
-    UartHandler _uart;
-    TextStorage _storage;
     Display _display;
-    piCommunication _pi;
 
     // Der aktive Zitatspeicher: FRAM oder Flash, je nach FRAM_INSTALLED
     IQuoteStore& quotes();
@@ -94,8 +87,6 @@ private:
     InputManager _inputs;
 
     WakeupReason::Reason _wakeupReason;
-
-    WifiController _wifi;
 
     // Ueberlebt den Reset im RTC-Speicher
     PersistentState::Data _state;
