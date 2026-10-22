@@ -2,7 +2,7 @@ Datenbank starten:
 sudo mariadb
 
 Datenbank auswählen: 
-USE reflection_ai;
+USE reflection_db;
 
 Inhalte anziegen: 
 SELECT * FROM reflections;

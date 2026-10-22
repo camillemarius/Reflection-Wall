@@ -16,6 +16,10 @@ class QuoteList
 public:
     static constexpr std::size_t MAX_QUOTES = 30;
 
+    // Laenge von "JJJJ-MM-TT"; PersistentState::shownDate muss mindestens
+    // so viel plus die abschliessende Null fassen (static_assert dort)
+    static constexpr std::size_t MAX_DATE_LENGTH = 10;
+
     static QuoteList parse(const std::string& content);
     std::string serialize() const;
 

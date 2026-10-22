@@ -40,7 +40,10 @@ QuoteList FramQuoteStore::load()
     {
         const std::string serialized = list.serialize();
         info_.bytes = serialized.size();
-        if (!slots_.write(serialized))
+        // Erst schreiben, dann aus dem FRAM zurueckgelesen vergleichen; erst danach darf der Briefkasten weg
+        std::string back;
+        if (!slots_.write(serialized) ||
+            slots_.read(back) != SlotStore::ReadResult::Ok || back != serialized)
         {
             info_.importFailed = true;
             refuseSave_ = true;
@@ -63,6 +66,10 @@ QuoteList FramQuoteStore::load()
         info_.bytes = content.size();
         return QuoteList::parse(content);
     case SlotStore::ReadResult::Empty:
+        return QuoteList();
+    case SlotStore::ReadResult::Damaged:
+        info_.damaged = true;
+        refuseSave_ = true;
         return QuoteList();
     case SlotStore::ReadResult::BusError:
     default:

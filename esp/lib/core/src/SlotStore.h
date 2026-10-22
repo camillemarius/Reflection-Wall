@@ -28,7 +28,8 @@ namespace SlotLayout
 class SlotStore
 {
 public:
-    enum class ReadResult { Ok, Empty, BusError };
+    enum class ReadResult { Ok, Empty, BusError,
+                      Damaged };   // Kennung da, aber kein Platz gueltig (auch nach zweitem Lesen)
 
     explicit SlotStore(IByteStore& bytes);
     ReadResult read(std::string& content);       // Inhalt des massgeblichen Platzes
@@ -37,10 +38,16 @@ public:
 private:
     static constexpr int NO_SLOT = -1;
 
+    enum class SlotCheck { Valid, Invalid, BusError };
+
     uint16_t slotAddress(int slot) const;
+    bool readHeaders(uint8_t head[2][SlotLayout::HEADER_SIZE]);
+    SlotCheck checkSlot(int slot, const uint8_t* head, std::string& text);
 
     IByteStore& bytes_;
     bool known_ = false;     // Stand schon gelesen oder selbst geschrieben
     int slot_ = NO_SLOT;     // 0 = A, 1 = B, NO_SLOT = keiner gueltig
     uint32_t number_ = 0;    // laufende Nummer des massgeblichen Platzes
+    uint32_t highest_ = 0;   // hoechste Nummer in einem Kopf mit Kennung, gueltig oder nicht
+    uint32_t headNumber_[2] = {0, 0};   // Nummer je Kopf, 0 ohne Kennung
 };

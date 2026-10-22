@@ -1,16 +1,14 @@
-#include "Application.h"
+#include "application.h"
 #include "I2CMasterControl.h"
 #include "pinMapping.h"
+#include "features.h"
 
 #include "DebugLogger.h"
 
 #include <ESP8266WiFi.h>
 
 Application::Application()
-    : _uart(Serial),
-      _storage(),
-      _display(),
-      _pi(_uart, _storage, _display),
+    : _display(),
       _fs(),
       _framBus(),
       _flashQuotes(_fs),
@@ -18,7 +16,6 @@ Application::Application()
       _gpioExpander(0x20),
       _inputs(_gpioExpander),
       _wakeupReason(WakeupReason::Reason::UNKNOWN),
-      _wifi(),
       _state(),
       _coldBoot(false),
       _displayReady(false),
@@ -28,7 +25,7 @@ Application::Application()
 
 namespace
 {
-    // Die Zitatliste steht im FRAM (FramQuoteStore). Mit FRAM_INSTALLED = false
+    // Die Zitatliste steht im FRAM (FramQuoteStore). Mit Features::FRAM_INSTALLED = false
     // steht sie in /quotes.txt im LittleFS (QuoteStore). Ist die Liste leer
     // oder nicht lesbar, zeigt die Wand diesen Hinweis statt dunkel zu bleiben.
     constexpr char NO_TEXT[] = "KEIN TEXT";
@@ -68,22 +65,9 @@ namespace
     // Breite des Clock-Pulses fuer das Flipflop am Relais
     constexpr unsigned long PULSE_MS = 50;
 
-    // Beim Aufwachen bleibt das Funkteil aus: es kostet rund
-    // 70 mA und etwa 200 ms Bootzeit, die hier niemand braucht.
-    // Fuer OTA muss dieser Wert auf WAKE_RF_DEFAULT stehen -
-    // die Einstellung wird im RTC-Speicher hinterlegt und gilt
-    // erst ab dem naechsten Start.
-    constexpr RFMode WAKE_RF_MODE = WAKE_RF_DISABLED;
-
-    // Radar (HLK-LD2410S) angeschlossen? Ohne Radar liest GPIO13 wegen des
-    // Pull-ups dauerhaft HIGH ("jemand steht davor"). Auf false ignoriert die
-    // Firmware INT_HLK: die Wand geht nur mit BT1 an und nach 60 s wieder aus.
-    constexpr bool RADAR_INSTALLED = false;
-
-    // FRAM (MB85RC256V auf 0x50) eingebaut? Dann liegt die Zitatliste dort,
-    // und eine /quotes.txt im Flash wird einmal ins FRAM uebernommen. Auf false
-    // liegt die Liste wie frueher in /quotes.txt im Flash.
-    constexpr bool FRAM_INSTALLED = true;
+    // Beim Aufwachen bleibt das Funkteil aus (Features::WAKE_RF_ENABLED = false):
+    // es kostet rund 70 mA und etwa 200 ms Bootzeit, die hier niemand braucht.
+    constexpr RFMode WAKE_RF_MODE = Features::WAKE_RF_ENABLED ? WAKE_RF_DEFAULT : WAKE_RF_DISABLED;
 }
 
 // ---------------------------------------------------------
@@ -103,7 +87,7 @@ void Application::run()
     // -----------------------------------------------------
     // 1. Funk
     // -----------------------------------------------------
-    // WAKE_RF_MODE haelt das Funkteil beim Aufwachen schon aus.
+    // Features::WAKE_RF_ENABLED = false haelt das Funkteil beim Aufwachen schon aus.
     // Beim Kaltstart greift das nicht - die Einstellung liegt
     // im RTC-Speicher und ist mit der Spannung weg. Dann zieht
     // der ESP die Betriebsart aus dem Flash und faehrt WLAN
@@ -197,8 +181,8 @@ void Application::run()
                        state,
                        count);
 
-    if (!RADAR_INSTALLED)
-        DebugSerial.println("[WALL] Radar nicht eingebaut (RADAR_INSTALLED = false), INT_HLK wird ignoriert");
+    if (!Features::RADAR_INSTALLED)
+        DebugSerial.println("[WALL] Radar nicht eingebaut (Features::RADAR_INSTALLED = false), INT_HLK wird ignoriert");
 
     // Nach dem Einschalten bleibt die Wand dunkel, bis der
     // Radar oder BT1 sie einschaltet.
@@ -227,13 +211,13 @@ void Application::run()
     if (_coldBoot)
     {
         _display.setPower(false);
-        _state.displayState = 0;
+        _state.displayState = DisplayState::Off;
         _state.button1Active = 0;
     }
 
     WallBoot boot;
-    boot.displayOn = _state.displayState != 0;
-    boot.displayWriting = _state.displayState == 2;
+    boot.displayOn = _state.displayState != DisplayState::Off;
+    boot.displayWriting = _state.displayState == DisplayState::Writing;
     boot.radarHigh = radarNow;
     boot.button1 = button1;
 
@@ -245,7 +229,7 @@ void Application::run()
     if (action != WallAction::None)
         showQuote(action);
 
-    if (_state.displayState == 1)
+    if (_state.displayState == DisplayState::On)
         runWallLoop();
 
     // -----------------------------------------------------
@@ -267,7 +251,7 @@ void Application::run()
 // das Relais bleibt unberuehrt.
 //
 // Aufgerufen wird das nur aus togglePowerSwitch(), also nur
-// dann, wenn BT5 tatsaechlich gedrueckt wurde. In jedem
+// dann, wenn BT2 tatsaechlich gedrueckt wurde. In jedem
 // anderen Durchlauf bleibt GPIO12 Eingang und damit hochohmig:
 // der ESP haengt sich nicht bei jedem Boot an die Taktleitung
 // des Flipflops.
@@ -337,7 +321,7 @@ uint16_t Application::readExpander()
 // ---------------------------------------------------------
 // begin() kostet ueber ein Dutzend Buszugriffe. Sie lohnen
 // sich nur, wenn tatsaechlich etwas geschrieben wird - ein
-// Druck auf BT5 laesst die Anzeige unberuehrt.
+// Druck auf BT2 laesst die Anzeige unberuehrt.
 
 void Application::ensureDisplayReady()
 {
@@ -356,13 +340,13 @@ void Application::ensureDisplayReady()
 // Das Dateisystem wird erst hier eingebunden, also nur in
 // Durchlaeufen, die tatsaechlich etwas anzeigen.
 //
-// displayState = 2 steht samt dem gewaehlten Zitat (Index, Datum)
+// displayState = Writing steht samt dem gewaehlten Zitat (Index, Datum)
 // im RTC-Speicher, bevor die Module beschrieben werden: bricht
 // der Durchlauf dabei ab, schreibt der naechste dieses Zitat neu.
 
 IQuoteStore& Application::quotes()
 {
-    if (FRAM_INSTALLED)
+    if (Features::FRAM_INSTALLED)
         return _framQuotes;
     return _flashQuotes;
 }
@@ -373,20 +357,22 @@ void Application::showQuote(WallAction action)
         DebugSerial.println("[WALL] FEHLER: Dateisystem laesst sich nicht einbinden");
 
     // Zeit nur messen, wenn das FRAM die Liste liefert.
-    const uint32_t loadStart = FRAM_INSTALLED ? millis() : 0;
+    const uint32_t loadStart = Features::FRAM_INSTALLED ? millis() : 0;
     const QuoteList list = quotes().load();
 
-    if (FRAM_INSTALLED)
+    if (Features::FRAM_INSTALLED)
     {
         const uint32_t loadMs = millis() - loadStart;
         const FramLoadInfo& info = _framQuotes.lastLoad();
         if (info.busError)
             DebugSerial.println("[QUOTES] FEHLER: FRAM 0x50 nicht lesbar");
+        else if (info.damaged)
+            DebugSerial.println("[QUOTES] FEHLER: Liste im FRAM beschaedigt (Pruefsumme falsch), nichts gespeichert");
         else if (info.imported)
             DebugSerial.printf("[QUOTES] Liste aus dem Flash ins FRAM uebernommen: %u Bytes in %u ms\n",
                                (unsigned)info.bytes, (unsigned)loadMs);
         else if (info.importFailed)
-            DebugSerial.println("[QUOTES] FEHLER: Uebernahme ins FRAM gescheitert (FRAM 0x50 nicht beschreibbar oder Liste zu lang), Liste aus dem Flash angezeigt, Datei bleibt");
+            DebugSerial.println("[QUOTES] FEHLER: Uebernahme ins FRAM gescheitert (FRAM 0x50 nicht beschreibbar, Kontrolle fehlgeschlagen oder Liste zu lang), Liste aus dem Flash angezeigt, Datei bleibt");
         else
             DebugSerial.printf("[QUOTES] FRAM: %u Bytes in %u ms gelesen\n",
                                (unsigned)info.bytes, (unsigned)loadMs);
@@ -420,11 +406,11 @@ void Application::showQuote(WallAction action)
                        date.c_str(),
                        text.c_str());
 
-    // Das Ziel wird zusammen mit displayState = 2 gesichert, bevor
+    // Das Ziel wird zusammen mit displayState = Writing gesichert, bevor
     // die Module beschrieben werden: bricht der Durchlauf ab,
     // schreibt der naechste genau dieses Zitat neu. Index und
     // Datum finden den Eintrag auch nach einer verschobenen Liste.
-    _state.displayState = 2;
+    _state.displayState = DisplayState::Writing;
     _state.shownIndex = static_cast<uint8_t>(index);
     memset(_state.shownDate, 0, sizeof(_state.shownDate));
     strncpy(_state.shownDate, date.c_str(), sizeof(_state.shownDate) - 1);
@@ -438,7 +424,7 @@ void Application::showQuote(WallAction action)
     // aus, damit kein alter Inhalt aufblitzt
     _display.setPower(true);
 
-    _state.displayState = 1;
+    _state.displayState = DisplayState::On;
     PersistentState::save(_state);
 }
 
@@ -446,12 +432,12 @@ void Application::showQuote(WallAction action)
 // Radar
 // ---------------------------------------------------------
 // Einzige Stelle, die INT_HLK liest. Ohne eingebauten Radar
-// (RADAR_INSTALLED = false) meldet sie nie "jemand da", sonst
+// (Features::RADAR_INSTALLED = false) meldet sie nie "jemand da", sonst
 // wuerde der Pull-up die Wand dauerhaft an halten.
 
 bool Application::radarHigh()
 {
-    return RADAR_INSTALLED && digitalRead(Pins::INT_HLK) == HIGH;
+    return Features::RADAR_INSTALLED && digitalRead(Pins::INT_HLK) == HIGH;
 }
 
 // ---------------------------------------------------------
@@ -481,7 +467,7 @@ void Application::turnWallOff()
 {
     // Zustand zuerst sichern: bricht das Abschalten ab, wird die
     // Wand beim naechsten Aufwachen nicht als an behandelt.
-    _state.displayState = 0;
+    _state.displayState = DisplayState::Off;
     _state.button1Active = 0;
 
     PersistentState::save(_state);

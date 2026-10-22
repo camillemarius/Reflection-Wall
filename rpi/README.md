@@ -4,7 +4,7 @@ Python-Anwendung für die interaktiven Funktionen der Reflection Wall. Der Raspb
 
 ## Funktionen
 
-Start mit `python main.py` im Ordner `app/`, dann Modus wählen:
+Start im Ordner `rpi/app/`: `PYTHONPATH=../.. python main.py` (ungeprüft, ohne Pi nicht getestet). Ein einfaches `python main.py` scheitert, weil `display.py` mit `rpi.app…` beginnt und `main.py` mit `driver…`. Der Pfad `../..` ist die Wurzel des Repositorys. Dort findet Python beide Importformen, `rpi.app.…` und `driver.…`. Dann Modus wählen:
 
 | Taste | Modus | Ordner |
 |---|---|---|
@@ -34,8 +34,10 @@ cd rpi
 python -m venv .venv
 source .venv/bin/activate
 pip install smbus2 lgpio groq python-dotenv mysql-connector-python \
-            faster-whisper sounddevice numpy pyphen
+            faster-whisper sounddevice numpy pyphen pyserial piper-tts
 ```
+
+`pyserial` braucht die UART-Verbindung. Das Paket `piper-tts` liefert den Befehl `piper`, den die Sprachausgabe aufruft (Paketname ungeprüft). Zum Abspielen braucht es außerdem `aplay` (`sudo apt install alsa-utils`).
 
 Die einzelnen Komponenten lassen sich in `tests/<Komponente>/` getrennt testen (`chatbot_groq`, `ht16k33`, `ioExpander`, `ld2410s`, `lichtsensor`, `microphone`, `mysql`, `speechrecognition`, `wakeWord`); dort steht jeweils eine `installation.txt`. `tests/microphone` nimmt auf und legt die Aufnahmen in `tests/microphone/recordings/` ab (nicht im Repository).
 
@@ -54,7 +56,7 @@ DB_PASSWORD=...
 
 ```
 sudo mariadb
-USE reflection_ai;
+USE reflection_db;
 SELECT * FROM reflections;
 ```
 
@@ -62,5 +64,5 @@ Weitere Befehle in `doc/commands.txt`.
 
 ## Bekannte Baustellen
 
-- Die Importe sind gemischt (`driver.…` und `rpi.app.driver.…`). `main.py` erwartet, aus `app/` gestartet zu werden; einzelne Module importieren mit dem vollen Paketpfad.
+- Die Importe sind gemischt (`driver.…` und `rpi.app.driver.…`). `main.py` startet darum nur mit dem Pfad aus dem Abschnitt „Funktionen“ (ungeprüft); einzelne Module importieren mit dem vollen Paketpfad.
 - Der Python-Treiber adressiert die Module als `0x70 + Index` und nutzt standardmässig nur 2 Zeilen (6 Module). Die Adressen hinter den LTC4316 (0x7F, 0x79, 0x7B, 0x7D) fehlen noch.

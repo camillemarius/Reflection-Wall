@@ -1,4 +1,14 @@
 #include "PersistentState.h"
+#include "QuoteList.h"
+
+// Das Datum steckt samt abschliessender Null in shownDate. Waere es kuerzer als
+// ein Datum der Zitatliste, kuerzte strncpy es still und die Wand faende das
+// gezeigte Zitat nicht mehr.
+static_assert(sizeof(PersistentState::Data::shownDate) >= QuoteList::MAX_DATE_LENGTH + 1,
+              "shownDate fasst das laengste Datum der Zitatliste nicht");
+
+// Das Byte im RTC-Speicher bleibt ein Byte (MAGIC aendert sich nicht).
+static_assert(sizeof(DisplayState) == 1, "DisplayState muss ein Byte bleiben");
 
 static_assert(sizeof(PersistentState::Data) % 4 == 0,
               "RTC-Speicher wird in 4-Byte-Bloecken gelesen und geschrieben");
@@ -10,7 +20,7 @@ void PersistentState::setDefaults(Data& data)
     // Kaltstart ohnehin durch den tatsaechlich gelesenen
     // Registerwert ersetzt, bevor Flanken ausgewertet werden.
     data.lastExpanderState = 0xFFFF;
-    data.displayState = 0;
+    data.displayState = DisplayState::Off;
     data.button1Active = 0;
     data.wakeCount = 0;
     data.shownIndex = 0;

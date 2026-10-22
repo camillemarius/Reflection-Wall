@@ -1,10 +1,8 @@
 #pragma once
 
-#include "UartHandler.h"
-#include "TextStorage.h"
-#include "Display.h"
-#include "PiCommunication.h"
-#include "WakeupReason.h"
+#include "display.h"
+#include "wakeupReason.h"
+#include "features.h"
 #include "PersistentState.h"
 #include "LittleFsAdapter.h"
 #include "QuoteStore.h"
@@ -14,7 +12,6 @@
 
 #include "PCF8575.h"
 #include "InputManager.h"
-#include "WifiController.h"
 
 // ---------------------------------------------------------
 // Ablauf
@@ -59,7 +56,7 @@ private:
     // Zentrale Zuweisung Taster -> Aktion
     void handleInput(InputEvent button);
 
-    // Zeigt ein Zitat aus der Liste im Flash; welches, bestimmt
+    // Zeigt ein Zitat aus der Liste im FRAM; welches, bestimmt
     // die Aktion (neuestes, aktuelles, naechstes)
     void showQuote(WallAction action);
 
@@ -73,15 +70,12 @@ private:
     void enterDeepSleep();
 
     // Radar meldet "jemand da"? Liest INT_HLK nur, wenn der Radar
-    // eingebaut ist (RADAR_INSTALLED in application.cpp)
+    // eingebaut ist (Features::RADAR_INSTALLED)
     bool radarHigh();
 
-    UartHandler _uart;
-    TextStorage _storage;
     Display _display;
-    piCommunication _pi;
 
-    // Der aktive Zitatspeicher: FRAM oder Flash, je nach FRAM_INSTALLED
+    // Der aktive Zitatspeicher: FRAM oder Flash, je nach Features::FRAM_INSTALLED
     IQuoteStore& quotes();
 
     // Reihenfolge: die Speicher halten Referenzen auf _fs bzw. _framBus
@@ -94,8 +88,6 @@ private:
     InputManager _inputs;
 
     WakeupReason::Reason _wakeupReason;
-
-    WifiController _wifi;
 
     // Ueberlebt den Reset im RTC-Speicher
     PersistentState::Data _state;

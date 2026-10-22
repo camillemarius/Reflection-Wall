@@ -1,5 +1,5 @@
 # Pfad wählen
-cd 01_Code/tests/chatbot_groq/
+cd rpi/tests/chatbot_groq/
 
 #Virtuelle Umgebung erstellen
 python -m venv env

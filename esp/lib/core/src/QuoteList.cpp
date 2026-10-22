@@ -20,9 +20,6 @@ std::string trim(const std::string& s)
     const std::size_t last = s.find_last_not_of(" \t");
     return s.substr(first, last - first + 1);
 }
-
-// Laenge von "JJJJ-MM-TT"; so viel fasst PersistentState::shownDate
-constexpr std::size_t MAX_DATE_LENGTH = 10;
 }
 
 QuoteList QuoteList::parse(const std::string& content)
@@ -56,7 +53,7 @@ QuoteList QuoteList::parse(const std::string& content)
         // Ein zu langes Datum liesse sich nicht im RTC-Speicher merken;
         // der Eintrag bleibt, aber ohne Datum
         std::string date = trim(line.substr(0, sep));
-        if (date.size() > MAX_DATE_LENGTH)
+        if (date.size() > QuoteList::MAX_DATE_LENGTH)
         {
             date.clear();
         }

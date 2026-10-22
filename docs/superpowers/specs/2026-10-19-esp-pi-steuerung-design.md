@@ -67,6 +67,7 @@ Pi nimmt keinen Schaden, und keine Nachricht geht unbemerkt verloren.
 | F1-a | Das FRAM ist noch nicht bestückt. Der FRAM-Speicher wird trotzdem jetzt gebaut, mit dem Schalter `FRAM_INSTALLED = false`; bis zur Bestückung läuft alles aus dem Flash | 6 |
 | — | Das FRAM ist bestückt (2026-10-20). `FRAM_INSTALLED` steht auf `true`; die Abnahme mit FRAM gehört zu Teil 3a-2 | nach Runde 6 |
 | — | Für FRAM-Zugriffe schaltet der ESP den Bus auf 100 kHz und danach zurück auf 10 kHz | nach Runde 6 |
+| B | I²C in einer Sitzung: Der Pi pausiert den Bus bei jedem Tastendruck und jeder Radar-Flanke, bis der ESP den Expander gelesen hat. Niemand fragt vorher. Gilt, sofern die Messung genug Reserve zeigt; sonst kommt die Frage zurück zum Owner (Abschnitt 10) | 2026-10-22 |
 
 A1–A6 waren in Runde 1 als Annahmen formuliert; du hast sie bestätigt. Die
 Begründungen und Gegenprüfungen standen in den Rundendateien der
@@ -404,9 +405,24 @@ Sitzungszustand aus dem RTC-Speicher, liest den Expander und schickt `BUTTON|n`.
 BT4–BT6 werten dabei die fallende Flanke aus, BT1–BT3 jeden Wechsel.
 
 Jeder Pegelwechsel an BT1–BT3 ist ein Druck (`InputTrigger::ANY_EDGE`).
-Während einer Sitzung holt sich der ESP für das Lesen kurz den I²C-Bus (GPIO15
-HIGH, etwa 3 ms) und gibt ihn danach zurück. Der Pi wiederholt einen
-I²C-Schreibvorgang, den diese Umschaltung abgeschnitten hat.
+**I²C während einer Sitzung (Entscheid B, 2026-10-22).** Ein Tastendruck oder
+eine Radar-Flanke setzt den ESP zurück. Danach holt er sich sofort den I²C-Bus
+(GPIO15 HIGH), liest den Expander und gibt den Bus zurück. Der Pi sieht dieselben
+Leitungen (F6) und hält sich deshalb an diese Regel:
+
+1. Sieht der Pi eine fallende Flanke an INT_GPIO_EXP (GPIO4) oder eine steigende
+   an INT_HLK (GPIO22), schreibt er die laufende Übertragung an ein Modul zu Ende.
+2. Danach beginnt er keine neue Übertragung.
+3. Er macht weiter, wenn INT_GPIO_EXP wieder HIGH ist und danach `T_bus_frei`
+   vergangen ist.
+4. Wird eine Übertragung trotzdem abgeschnitten, wiederholt er sie (Rückfall).
+
+Niemand fragt vorher, und der ESP wartet nie. Die Regel trägt nur, wenn der Pi
+seine Übertragung beenden kann, bevor der ESP den Bus nimmt. Gerechnet: Der ESP
+braucht vom Tastendruck bis zum Bus etwa 60–100 ms (Reset-Impuls, Start, Funk).
+Der Pi braucht unter 20 ms (Flanke bemerken, höchstens 17 Bytes zu Ende schreiben).
+Gemessen wird beides bei der Inbetriebnahme (Abschnitt 15). Reicht die Reserve
+nicht, kommt die Frage zurück zum Owner.
 
 ---
 
@@ -452,12 +468,24 @@ Liste liegt, entscheidet der Schalter `FRAM_INSTALLED` in der Firmware (F1-a).
   Liste. Danach folgt die Liste im Textformat oben.
 - **Lesen:** Gültig ist ein Platz mit richtiger Kennung, erlaubter Länge und
   passender Prüfsumme. Massgeblich ist der gültige Platz mit der höheren Nummer.
-  Ist keiner gültig, ist die Liste leer.
-- **Schreiben:** immer in den anderen Platz, mit der nächsten Nummer, die Liste
-  zuerst und den Kopf zuletzt. Bricht ein Reset das Schreiben ab, bleibt der
-  alte Platz gültig. Das ersetzt das Umbenennen von `/quotes.new`.
+  Der ESP liest beide Köpfe zweimal. Ein Kopf zählt erst, wenn beide Lesungen
+  gleich sind; sonst entscheidet eine dritte, und passt auch die nicht, gilt der
+  Durchlauf als Lesefehler am Bus.
+  Passt die Prüfsumme eines Platzes nicht, liest der ESP die Liste noch einmal.
+  Erst wenn auch das zweite Lesen scheitert, gilt der Platz als ungültig.
+  Trägt kein Kopf eine Kennung, ist das FRAM leer und die Liste ebenfalls.
+- **Beschädigt:** Trägt mindestens ein Kopf die Kennung, aber kein Platz ist gültig,
+  gilt das FRAM als beschädigt. Die Wand zeigt `KEIN TEXT`. Der ESP speichert in
+  diesem Durchlauf nichts. Nur eine Liste aus dem Briefkasten repariert das FRAM.
+- **Schreiben:** immer in den anderen Platz als den gültigen. Ist keiner gültig,
+  nimmt der ESP den Platz mit der niedrigeren Nummer. Die Nummer ist die höchste
+  gefundene Nummer plus 1. So bekommt ein Schreiben nie eine niedrigere Nummer
+  als ein Platz, der schon da ist. Die Liste kommt zuerst und der Kopf zuletzt.
+  Bricht ein Reset das Schreiben ab, bleibt der alte Platz gültig. Das ersetzt das Umbenennen von `/quotes.new`.
 - **Briefkasten:** Liegt beim Start `/quotes.txt` im Flash, übernimmt der ESP
-  die Liste ins FRAM und löscht danach die Datei. Fällt der Strom dazwischen
+  die Liste ins FRAM. Danach liest er die Liste aus dem FRAM zurück. Nur wenn sie
+  übereinstimmt, löscht er die Datei. Stimmt sie nicht, bleibt die Datei, und der
+  ESP speichert in diesem Durchlauf nichts. Fällt der Strom dazwischen
   aus, übernimmt er dieselbe Datei beim nächsten Start noch einmal. Dasselbe gilt
   für `/text.txt` (Umstieg wie unten). `esp/data/` im Repo bleibt leer; eine
   Liste zum Hochladen liegt als Beispiel in `esp/data-beispiel/quotes.txt`.
@@ -499,6 +527,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | Radar-Debug höchstens | 60 min | | Entscheid (S3-a) |
 | BT1-Anzeige | 60 s | | Entscheid (M1-d) |
 | INT_HLK abfragen | alle 200 ms | | Entwurf |
+| `T_bus_frei` | 5 ms | Pi wartet nach INT_GPIO_EXP HIGH, bevor er den Bus wieder nutzt (Abschnitt 10) | Entwurf |
 | WLAN + NTP höchstens | 15 s | | Entscheid (M3-a) |
 | Einrichtungsportal | 3 min | nur Kaltstart ohne Zugangsdaten | Entscheid (M3-a) |
 | Längster Deep Sleep | 3 h | | Entscheid (M3-a) |
@@ -578,6 +607,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | Pi per Taste bedienen | Bis Teil 4 warten die Pi-Anwendungen auf ENTER; ein per BT2 gestarteter Pi lässt sich nur über SSH bedienen (S2-a) | Teil 4 |
 | Nachlaufzeit des Radars | Werkseinstellung etwa 60 s, nicht gemessen; bestimmt, wie lange die Wand nach dem Gehen an bleibt | im Radar-Debug messen und einstellen |
 | Boot-Modus 7 nach dem Bestücken | Nach dem Bestücken des FRAM (2026-10-20) antworteten die Anzeigen nicht, und der ESP startete bei jedem Reset mit `boot mode:(7,7)` (GPIO15 HIGH). Ein vollständiger Stromunterbruch hat beides behoben; die Ursache ist unbekannt | tritt es wieder auf: Spannung an GPIO15 im Reset messen, Speisung des Pi und der Anzeigen prüfen |
+| Zeit für die I²C-Pause (Entscheid B) | gerechnet: ESP braucht 60–100 ms bis zum Bus, Pi unter 20 ms bis zur Pause; nicht gemessen | Mit dem Logikanalysator den Abstand von der INT_GPIO_EXP-Flanke bis zur ersten SCL-Flanke des ESP messen; in Teil 2 die Reaktionszeit des Pi messen. Reicht die Reserve nicht: zurück zum Owner |
 | Flipflops ohne Strom, ESP mit Strom | Speist der Flasher den ESP weiter, während die Platine keinen Strom hat, laufen die Flipflops von BT1–BT3 in einem anderen Zustand an. Der ESP liest das als Tastendruck (beobachtet: BT2 schaltete die Speisung des Pi um) | nur in der Entwicklung mit Flasher; beobachten |
 
 ---

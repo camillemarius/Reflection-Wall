@@ -11,11 +11,11 @@ pio run -t upload       # flashen über USB (esptool)
 pio device monitor      # serielle Konsole, 74880 Baud
 ```
 
-**OTA:** In `platformio.ini` die Zeilen unter `#OTA` aktivieren (`upload_protocol = espota`, `upload_port = reflectionwall.local`). Dafür muss `WAKE_RF_MODE` in `application.cpp` auf `WAKE_RF_DEFAULT` stehen, sonst bleibt das WLAN aus.
+**OTA:** Zurzeit nicht nutzbar. Kein Code startet WLAN oder OTA: `WifiController::begin` und `OtaManager::begin` hat keine Stelle aufgerufen. Darum haben die Zeilen unter `#OTA` in `platformio.ini` und die VS-Code-Aufgabe „Upload ESP + Telnet“ heute keine Wirkung. Geflasht wird nur über USB. Teil 3b der Umsetzung (Mitternacht, siehe Spezifikation Abschnitt 16) bringt WLAN zurück. Er holt außerdem die Uhrzeit aus dem Internet (NTP).
 
 ## Ablauf im Normalbetrieb
 
-Es gibt keine Hauptschleife. Der ESP liegt im Deep Sleep; ein Tastendruck am PCF8575 löst über dessen INT-Ausgang einen Reset aus, ebenso der Radar (INT_HLK). `Application::run()` läuft dann durch und legt den ESP wieder schlafen. Solange die Wand mit dem Radar an ist, bleibt der ESP in `run()` wach und liest den Radar (siehe unten). Ohne Radar legt er sich nach dem Durchlauf schlafen und wacht mit dem nächsten Reset auf:
+Es gibt keine Hauptschleife. Der ESP liegt im Deep Sleep; ein Tastendruck am PCF8575 löst über dessen INT-Ausgang einen Reset aus, ebenso der Radar (INT_HLK). `Application::run()` läuft dann durch und legt den ESP wieder schlafen. Solange die Wand mit dem Radar an ist, bleibt der ESP in `run()` wach und liest den Radar (siehe unten). Auch ohne Radar bleibt der ESP nach BT1 etwa 60 s wach. So lange bleibt die Wand an. Danach legt er sich schlafen und wacht mit dem nächsten Reset auf:
 
 1. WLAN aus (spart Strom und Bootzeit)
 2. Weckgrund lesen
@@ -38,12 +38,12 @@ Nach dem Einschalten (Kaltstart, auch nach dem ersten Flashen) schaltet der ESP 
 
 - **Radar:** zeigt das neueste Zitat. Bleibt der Radar HIGH, bleibt die Wand an; der ESP bleibt dann wach und liest den Radar alle 200 ms. Fällt der Radar auf LOW, geht die Wand aus (die Regeln stehen in `lib/core/src/WallLogic.cpp`).
 - **BT1:** schaltet die Wand ein und zeigt das neueste Zitat; jeder weitere Druck zeigt das nächste in der Liste. Die Wand bleibt dann mindestens 60 s an (`BUTTON1_ON_MS`), unabhängig vom Radar.
-- **Radar-Schalter:** `RADAR_INSTALLED` in `lib/app/application.cpp` steht auf `false`, solange kein Radar angeschlossen ist. Ohne Radar liest GPIO13 durch den Pull-up dauerhaft HIGH; die Firmware ignoriert INT_HLK dann, und die Wand geht nur mit BT1 an und nach 60 s wieder aus. Nach dem Anschliessen des Radars muss der Schalter auf `true` gesetzt werden.
+- **Radar-Schalter:** `Features::RADAR_INSTALLED` in `lib/config/features.h` steht auf `false`, solange kein Radar angeschlossen ist. Ohne Radar liest GPIO13 durch den Pull-up dauerhaft HIGH. Die Firmware ignoriert INT_HLK dann. Die Wand geht nur mit BT1 an. Nach 60 s geht sie wieder aus. Ist der Radar angeschlossen, setzt man den Schalter auf `true`.
 - **Ausschalten:** die Anzeige wird dunkel geschaltet (HT16K33 Display-off), der Inhalt bleibt in den Modulen erhalten. Der Zustand (aus / an / wird geschrieben) liegt im RTC-Speicher; bricht ein Durchlauf beim Schreiben ab, schreibt der nächste genau dasjenige Zitat neu, das beim abgebrochenen Durchlauf gewählt war (Index und Datum werden vor dem Schreiben im RTC-Speicher abgelegt).
 
 ## Zitate im FRAM
 
-Die Zitatliste liegt im FRAM MB85RC256V auf 0x50. Dafür muss `FRAM_INSTALLED = true` in `lib/app/application.cpp` stehen. Das FRAM ist seit 2026-10-20 bestückt. Der Code dazu steht in `FramBus`, `FramQuoteStore`, `SlotStore` und `Crc32`.
+Die Zitatliste liegt im FRAM MB85RC256V auf 0x50. Dafür muss `Features::FRAM_INSTALLED = true` in `lib/config/features.h` stehen. Das FRAM ist seit 2026-10-20 bestückt. Der Code dazu steht in `FramBus`, `FramQuoteStore`, `SlotStore` und `Crc32`.
 
 Die Liste steht doppelt im FRAM, in zwei Plätzen. Ein Platz ist ein Bereich von 4 KB: Platz A beginnt bei 0x0000, Platz B bei 0x1000. Jeder Platz beginnt mit einem Kopf von 16 Byte. Der Kopf enthält Kennung, laufende Nummer, Länge und CRC-32. Die CRC-32 ist eine Prüfsumme; sie zeigt, ob der Platz vollständig geschrieben wurde. Geschrieben wird immer in den älteren Platz. Zuerst kommt die Liste, zuletzt der Kopf. Bricht ein Reset mitten im Schreiben ab, gilt die alte Liste weiter. Der Entwurf steht in `docs/superpowers/specs/2026-10-19-esp-pi-steuerung-design.md` (Abschnitt 11).
 
@@ -61,7 +61,7 @@ Höchstens 30 Zitate, das neueste zuerst. Pro Zeile ein Zitat im Format `JJJJ-MM
 
 Die Anzeige fasst 96 Zeichen (12 Module × 8). Umlaute müssen umschrieben sein. Die Segmentschrift kennt nur `A–Z`, `0–9` und `- . / : + *`. Ist ein Text länger, meldet das Log die Länge. Ist die Liste leer oder nicht lesbar, zeigt die Wand „KEIN TEXT“.
 
-## Ohne FRAM (`FRAM_INSTALLED = false`)
+## Ohne FRAM (`Features::FRAM_INSTALLED = false`)
 
 Dann liegt die Liste in `/quotes.txt` im LittleFS des ESP (`QuoteStore`). Die erste Liste legt man in `data/quotes.txt` ab und lädt sie einmal hoch:
 
@@ -114,13 +114,14 @@ lib/Wire/                 eigene Software-I²C (ersetzt die Core-Bibliothek, sie
 lib/gpioExpander/         Taster-Auswertung (Flanken, Pegel)
 lib/system/               Weckgrund, Zustand im RTC-Speicher
 lib/core/                 Zitatliste, Zitatspeicher, Wand-Regeln (ohne Arduino, Tests auf dem PC)
-lib/storage/              LittleFS-Anbindung (LittleFsAdapter), FRAM-Bus (FramBus);
-                          textStorage, espTextStorage, framTextStorage: alter Code, ersetzt in Teil 1 der Umsetzung (neue Verbindung zwischen ESP und Pi, siehe Spezifikation Abschnitt 16)
+lib/storage/              LittleFS-Anbindung (LittleFsAdapter), FRAM-Bus (FramBus)
 data/                     Briefkasten für pio run -t uploadfs (normalerweise leer)
 data-beispiel/quotes.txt  Startliste als Beispiel zum Hochladen
-lib/communication/        UART-Protokoll zum Raspberry Pi (COMMAND|DATA); alter Code, ersetzt in Teil 1
-lib/ota/                  WLAN, OTA, Debug-Logger (Telnet)
+lib/ota/                  WLAN, OTA, Debug-Logger (Telnet); WLAN und OTA hat zurzeit niemand aufgerufen, Teil 3b braucht sie
+                          Der alte Code für die Verbindung zum Pi (lib/communication) und der alte Textspeicher sind entfernt.
+                          Teil 1 der Umsetzung bringt die neue Verbindung zwischen ESP und Pi (Spezifikation Abschnitt 16).
 lib/config/pinMapping.h   Pinbelegung
+lib/config/features.h     alle Bauschalter (FRAM, Radar, Funkteil beim Aufwachen)
 ```
 
 ### Eigene Wire-Bibliothek (`lib/Wire`)

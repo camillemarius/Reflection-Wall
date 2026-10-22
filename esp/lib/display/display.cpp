@@ -1,4 +1,4 @@
-#include "Display.h"
+#include "display.h"
 #include "I2CMasterControl.h"
 #include "DebugLogger.h"
 #include <Wire.h>

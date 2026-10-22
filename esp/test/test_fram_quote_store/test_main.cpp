@@ -190,6 +190,116 @@ void test_save_then_load_round_trip()
     TEST_ASSERT_EQUAL(2, r.size());
 }
 
+void test_import_is_verified_before_mailbox_is_deleted()
+{
+    MemoryBytes fram;
+    MemoryFs fs;
+    fs.files["/quotes.txt"] = "2026-10-21|Neu mit einem laengeren Text\n";
+    fram.corruptWrites = true;
+    FramQuoteStore store(fram, fs);
+    QuoteList l = store.load();
+    TEST_ASSERT_TRUE(store.lastLoad().importFailed);
+    TEST_ASSERT_FALSE(store.lastLoad().imported);
+    TEST_ASSERT_TRUE(fs.exists("/quotes.txt"));
+    TEST_ASSERT_EQUAL(1, l.size());
+    TEST_ASSERT_EQUAL_STRING("Neu mit einem laengeren Text", l.at(0).text.c_str());
+    TEST_ASSERT_FALSE(store.save(l));
+}
+
+void test_damaged_fram_refuses_save_and_mailbox_repairs_it()
+{
+    MemoryBytes fram;
+    MemoryFs fs;
+    putList(fram, "Eins");
+    putList(fram, "Zwei");
+    fram.data[SlotLayout::SLOT_A + SlotLayout::HEADER_SIZE] ^= 0x01;
+    fram.data[SlotLayout::SLOT_B + SlotLayout::HEADER_SIZE] ^= 0x01;
+    FramQuoteStore store(fram, fs);
+    QuoteList l = store.load();
+    TEST_ASSERT_EQUAL(0, l.size());
+    TEST_ASSERT_TRUE(store.lastLoad().damaged);
+    TEST_ASSERT_FALSE(store.save(l));
+
+    fs.files["/quotes.txt"] = "2026-10-21|Repariert\n";
+    FramQuoteStore again(fram, fs);
+    QuoteList r = again.load();
+    TEST_ASSERT_TRUE(again.lastLoad().imported);
+    TEST_ASSERT_FALSE(again.lastLoad().damaged);
+    TEST_ASSERT_EQUAL(1, r.size());
+    TEST_ASSERT_EQUAL_STRING("Repariert", FramQuoteStore(fram, fs).load().at(0).text.c_str());
+}
+
+void test_oversized_import_fails()
+{
+    MemoryBytes fram;
+    MemoryFs fs;
+    std::string file;
+    for (int i = 0; i < 30; ++i)
+    {
+        file += "2026-10-21|" + std::string(150, static_cast<char>('a' + i % 26)) + "\n";
+    }
+    fs.files["/quotes.txt"] = file;
+    FramQuoteStore store(fram, fs);
+    store.load();
+    TEST_ASSERT_TRUE(store.lastLoad().importFailed);
+    TEST_ASSERT_FALSE(store.lastLoad().imported);
+    TEST_ASSERT_TRUE(fs.exists("/quotes.txt"));
+}
+
+void test_import_failed_on_legacy_path()
+{
+    MemoryBytes fram;
+    MemoryFs fs;
+    fs.files["/text.txt"] = "Alter Text\n";
+    fram.failWrite = true;
+    FramQuoteStore store(fram, fs);
+    store.load();
+    TEST_ASSERT_TRUE(store.lastLoad().importFailed);
+    TEST_ASSERT_TRUE(fs.exists("/text.txt"));
+}
+
+void test_bytes_reported_after_import()
+{
+    MemoryBytes fram;
+    MemoryFs fs;
+    fs.files["/quotes.txt"] = "2026-10-21|Neu\n2026-10-20|Alt\n";
+    FramQuoteStore store(fram, fs);
+    QuoteList l = store.load();
+    TEST_ASSERT_TRUE(store.lastLoad().imported);
+    TEST_ASSERT_EQUAL(l.serialize().size(), store.lastLoad().bytes);
+}
+
+// Schreiben kommt an, wird aber nicht gespeichert (alter Stand bleibt): Rueckleseprobe liefert Ok mit anderem Inhalt
+class DropsSlotBWrites : public IByteStore
+{
+public:
+    explicit DropsSlotBWrites(MemoryBytes& inner) : inner_(inner) {}
+    bool read(uint16_t address, uint8_t* out, std::size_t length) override { return inner_.read(address, out, length); }
+    bool write(uint16_t address, const uint8_t* data, std::size_t length) override
+    {
+        return address >= SlotLayout::SLOT_B ? true : inner_.write(address, data, length);
+    }
+
+private:
+    MemoryBytes& inner_;
+};
+
+void test_import_with_readback_of_other_content_fails()
+{
+    MemoryBytes fram;
+    MemoryFs fs;
+    putList(fram, "Alter Stand");   // gueltig in A, Import wuerde nach B schreiben
+    DropsSlotBWrites dropping(fram);
+    fs.files["/quotes.txt"] = "2026-10-21|Neu\n";
+    FramQuoteStore store(dropping, fs);
+    QuoteList l = store.load();
+    TEST_ASSERT_TRUE(store.lastLoad().importFailed);
+    TEST_ASSERT_FALSE(store.lastLoad().imported);
+    TEST_ASSERT_TRUE(fs.exists("/quotes.txt"));
+    TEST_ASSERT_EQUAL_STRING("Neu", l.at(0).text.c_str());
+    TEST_ASSERT_FALSE(store.save(l));
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -205,5 +315,11 @@ int main(int, char**)
     RUN_TEST(test_failed_import_keeps_file_shows_list_and_refuses_save);
     RUN_TEST(test_unreadable_mailbox_is_kept_and_fram_is_read);
     RUN_TEST(test_save_then_load_round_trip);
+    RUN_TEST(test_import_is_verified_before_mailbox_is_deleted);
+    RUN_TEST(test_damaged_fram_refuses_save_and_mailbox_repairs_it);
+    RUN_TEST(test_oversized_import_fails);
+    RUN_TEST(test_import_failed_on_legacy_path);
+    RUN_TEST(test_bytes_reported_after_import);
+    RUN_TEST(test_import_with_readback_of_other_content_fails);
     return UNITY_END();
 }
