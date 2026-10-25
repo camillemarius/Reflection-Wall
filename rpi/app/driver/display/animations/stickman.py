@@ -239,10 +239,11 @@ class Stickman:
         x = self.current_x
 
         # --------------------------------------------------------
-        # Display löschen
+        # Zeichenfläche leeren (nur Puffer; refresh() schreibt
+        # unten einmal das ganze Bild, also kein Flackern)
         # --------------------------------------------------------
 
-        self.display.clear()
+        self.display.clear_canvas()
 
         # --------------------------------------------------------
         # Zeile 1
