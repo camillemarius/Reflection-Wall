@@ -114,6 +114,20 @@ class BusGuardTest(unittest.TestCase):
         self.assertGreaterEqual(waited, 1.0)
         self.assertLess(waited, 1.1)
 
+    def test_warning_at_most_every_10_s_with_count_of_skipped(self):
+        # T8: haengt INT_GPIO_EXP, wartet jede Uebertragung 1 s. Ohne Grenze stuende jede im
+        # Log; ein ganzes Bild sind 12 Uebertragungen.
+        self.assertEqual(bus_rule.WARN_EVERY_S, 10.0)
+        self.lg.edge(4, 0)
+        with self.assertLogs(bus_rule.log, level="WARNING") as logs:
+            for _ in range(12):
+                self._enter()        # endet je etwa 1 s spaeter
+                self.clk.now += 0.5  # bis zur naechsten Uebertragung
+        # Warnung bei 101 s, die naechste erst bei 111,5 s (Uebertragung 8), dazwischen 6
+        self.assertEqual(len(logs.output), 2)
+        self.assertNotIn("weitere", logs.output[0])
+        self.assertIn("6 weitere", logs.output[1])
+
     def test_without_lgpio_never_waits(self):
         guard = BusGuard(lgpio_module=None, clock=self.clk,
                          sleep=self.clk.sleep)

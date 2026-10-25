@@ -7,8 +7,9 @@ INT_HLK auf GPIO22. Der BusGuard laesst eine laufende Uebertragung in Ruhe,
 beginnt aber keine neue, solange GPIO4 LOW ist, bis free_s nach dessen
 steigender Flanke, und bis radar_pause_s nach einer steigenden Flanke auf
 GPIO22 (R3: GPIO4 bleibt nach einer Radar-Flanke HIGH). Nach max_wait_s geht
-es mit Warnung weiter. lgpio wird erst in start() geladen (R13: GPIO22 gehoert
-dem Guard, radar_high() liefert ihn weiter).
+es mit Warnung weiter, hoechstens einer je WARN_EVERY_S. lgpio wird erst in
+start() geladen (R13: GPIO22 gehoert dem Guard, radar_high() liefert ihn
+weiter).
 """
 import logging
 import threading
@@ -24,6 +25,7 @@ FREE_S = 0.005          # T_bus_frei
 RADAR_PAUSE_S = 0.25
 MAX_WAIT_S = 1.0
 POLL_S = 0.001
+WARN_EVERY_S = 10.0     # hoechstens eine Warnung "nicht frei" in dieser Zeit
 
 
 class BusGuard:
@@ -43,6 +45,8 @@ class BusGuard:
         self._handle = None
         self._callbacks = []
         self._claimed = []
+        self._last_warning = None  # Uhrzeit der letzten Warnung "nicht frei"
+        self._skipped = 0          # seither nicht geloggte
 
     def _load(self):
         if self._lgpio is not None:
@@ -101,10 +105,25 @@ class BusGuard:
         start = self._clock()
         while self._must_wait(self._clock()):
             if self._clock() - start >= self._max_wait_s:
-                log.warning("I2C-Bus nach %.1f s nicht frei, Uebertragung "
-                            "beginnt trotzdem", self._max_wait_s)
+                self._warn_not_free(self._clock())
                 return
             self._sleep(POLL_S)
+
+    def _warn_not_free(self, now: float) -> None:
+        # Haengt INT_GPIO_EXP, trifft es jede Uebertragung: hoechstens eine Warnung je
+        # WARN_EVERY_S, mit der Zahl der dazwischen nicht geloggten
+        with self._lock:
+            if self._last_warning is not None and now - self._last_warning < WARN_EVERY_S:
+                self._skipped += 1
+                return
+            skipped, self._skipped = self._skipped, 0
+            self._last_warning = now
+        if skipped:
+            log.warning("I2C-Bus nach %.1f s nicht frei, Uebertragung beginnt trotzdem "
+                        "(seit der letzten Warnung %d weitere)", self._max_wait_s, skipped)
+        else:
+            log.warning("I2C-Bus nach %.1f s nicht frei, Uebertragung "
+                        "beginnt trotzdem", self._max_wait_s)
 
     @contextmanager
     def _transfer(self):
