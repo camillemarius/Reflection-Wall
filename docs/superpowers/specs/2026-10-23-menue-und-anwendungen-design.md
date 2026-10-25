@@ -1,6 +1,6 @@
 # Menü und Pi-Anwendungen an der Wand (Teil 4) – Entwurf
 
-Stand: 2026-10-23 · Status: **Entwurf, wartet auf Freigabe durch den Owner**
+Stand: 2026-10-25 · Status: **vom Owner angenommen** (2026-10-25, in drei Runden: A, B, C)
 
 Baut auf `docs/superpowers/specs/2026-10-19-esp-pi-steuerung-design.md` auf (im
 Folgenden „Hauptentwurf“). Abschnittsnummern wie §10 beziehen sich auf ihn. Die
@@ -155,8 +155,11 @@ brauchen aber deine Unterschrift.
 | F3 | **Tasten am ESP je Zustand:** siehe Tabelle 5.2. In jedem Zustand speichert der ESP den neuen Stand des Expanders. |
 | F4 | **Radar-Umschaltung.** Ein Baustein im Pi-Dienst schaltet auf das Radar und zurück: `MODE\|RADAR`, Baudrate, GPIO23, und zurück bis `MODE\|NORMAL`. Er nutzt die UART und GPIO23, die der Dienst schon offen hat. Die Anwendung Radar und die Radar-Einrichtung nutzen ihn beide. Keine Anwendung öffnet die UART oder GPIO23 selbst. |
 | F5 | **Eine Wandanzeige.** Der Pi hat genau ein Anzeige-Objekt für alle 12 Module, mit der Adresstabelle aus Abschnitt 3. Text geht durch `text_layout.wrap`, nicht mehr durch die Silbentrennung. Zusätzlich kann es für jede der 96 Stellen ein Segmentmuster zeigen. |
-| F6 | **Automatisch aus (D2)** zählt jeden Tastendruck, auch die Tasten, die der Pi im Radar-Modus selbst liest, und jedes Speichern auf der Webseite. Läuft gerade der Radar-Modus, schaltet der Pi zuerst zurück und schickt dann `DONE`. |
+| F6 | **Automatisch aus (D2)** schaltet erst aus, wenn keine Aktivität mehr da ist (Owner, 2026-10-25). Aktivität ist: (1) ein Tastendruck, auch die Tasten, die der Pi im Radar-Modus selbst liest; (2) ein Speichern auf der Webseite; (3) der Pi arbeitet noch, er wartet auf die KI, nimmt auf oder spricht; (4) das Radar sieht jemanden (INT_HLK HIGH, Pi-GPIO22). Die 15 min laufen erst, wenn nichts davon zutrifft, und jede neue Aktivität setzt sie auf null. Ohne angeschlossenes Radar zählen nur (1) bis (3). Eine laufende Animation allein zählt nicht. Läuft gerade der Radar-Modus, schaltet der Pi zuerst zurück und schickt dann `DONE`. |
 | F7 | **Ende der Radar-Einrichtung.** Sie endet in den Einstellungen; der Pi bleibt an und schickt kein `DONE`. Drückt jemand BT2 während der Einrichtung, bricht der Pi ab wie mit BT4 (alte Werte zurück, Bericht) und schaltet zurück. Danach fährt der ESP ihn herunter, denn er hat sich BT2 gemerkt (`pendingShutdown`, §7). |
+
+**Stand der Runde C (Owner, 2026-10-25):** F2 bis F7 sind angenommen; F6 in der vom
+Owner verlangten Fassung oben.
 
 ## 5. Bildschirme und Tasten
 
@@ -194,8 +197,8 @@ und die Anzeige gehört ihm.*
 Was die Zeichnung nicht zeigt:
 - BT2 beendet die Sitzung aus jedem Bildschirm darin, auch mitten in einer
   Anwendung (F2).
-- Ist D2 eingeschaltet, endet die Sitzung auch nach 15 min ohne Tastendruck. Der Pi
-  meldet dann `DONE`.
+- Ist D2 eingeschaltet, endet die Sitzung auch nach 15 min ohne Aktivität (F6). Der
+  Pi meldet dann `DONE`.
 - Kommt `READY` nicht, gilt §13 („Pi bootet nicht“).
 - Der Start um Mitternacht läuft ganz ohne diese Bildschirme (F1).
 
@@ -331,7 +334,7 @@ Tastendruck (F6).
 | Auf das Radar umschalten und zurück | Radar-Umschaltung (F4) | Pi |
 | Zeiger, Rollen, Auswahl | Menü | Pi |
 | Eine Anwendung starten, ihr die Tasten geben, sie mit BT4 oder `SHUTDOWN` beenden, Fehler auffangen | Anwendungsrahmen | Pi |
-| Nach 15 min ohne Taste `DONE` senden, wenn D2 eingeschaltet ist | Anwendungsrahmen | Pi |
+| Nach 15 min ohne Aktivität `DONE` senden, wenn D2 eingeschaltet ist (F6) | Anwendungsrahmen | Pi |
 | Text, Seiten und Segmentmuster auf alle 12 Module schreiben | Wandanzeige (F5) | Pi |
 | Chat, Quiz, Reflection, Radar, Strichmännchen | je eine Anwendung | Pi |
 | Themen ändern | Webseite und Themendateien | Pi |
@@ -413,7 +416,8 @@ entfällt.
 - **Adressen:** Modul-Nummer → Adresse nach der Tabelle in Abschnitt 3.
 - **Webseite:** Speichern, Länge, leeres Feld, Ende nach 15 min mit eingespeister Uhr.
 - **Automatisch aus (D2, F6):** ausgeschaltet kein `DONE`; eingeschaltet `DONE` nach
-  15 min ohne Taste; ein Speichern auf der Webseite setzt die Zeit zurück.
+  15 min ohne Aktivität. Jede der vier Arten von Aktivität setzt die Zeit zurück, auch
+  ein Radar, das jemanden sieht; eine laufende Animation allein nicht.
 
 **Am Gerät (mit Owner):**
 1. BT2: `PI STARTET`, dann das Menü auf allen vier Zeilen.
