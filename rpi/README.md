@@ -45,7 +45,7 @@ Läuft gerade das Radar, beendet das Programm zuerst das Radar. Danach schickt e
 
 ## Thema und Webseite
 
-Das Thema für Reflection steht in `app/config/thema.txt`, das Thema für den Handbetrieb in `app/config/thema_hand.txt`. Ein Thema ist eine Zeile mit höchstens 120 Zeichen. Ohne Datei gilt „Was ist der Sinn des Lebens“.
+Das Thema für Reflection steht in `app/config/thema.txt`, das Thema für den Handbetrieb in `app/config/thema_hand.txt`. Ein Thema ist eine Zeile mit höchstens 120 Zeichen. Fehlt `thema.txt`, gilt „Was ist der Sinn des Lebens“. Fehlt `thema_hand.txt`, gilt das Thema aus `thema.txt`.
 
 Unter EINSTELLUNGEN, THEMA AENDERN startet eine kleine Webseite. Dort änderst du die Themen. Die Seite schliesst sich nach 15 Minuten ohne Speichern.
 
