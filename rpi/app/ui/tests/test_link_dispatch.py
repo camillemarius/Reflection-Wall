@@ -3,10 +3,12 @@ import queue
 import threading
 import time
 import unittest
+from unittest import mock
 
 from app.link.codec import Message, decode, encode
 from app.link.pi_link import LinkBusy, PiLink
 from app.link.tests.fakes import FakePort
+from app.ui import link_dispatch
 from app.ui.activity import Activity
 from app.ui.app_host import StopSignal
 from app.ui.buttons import QueueButtons
@@ -19,10 +21,11 @@ class FakeLink:
         self.replies = []
         self.requests = []
         self.script = []  # je Aufruf: "busy", None oder Message
+        self.stale_seqs = set()  # Nummern, die eine neuere Anfrage ersetzt hat: reply gibt False
 
     def reply(self, request, command, data=""):
         self.replies.append((request.seq, command, data))
-        return True
+        return request.seq not in self.stale_seqs
 
     def request(self, command, data=""):
         self.requests.append((command, data))
@@ -41,6 +44,41 @@ def wait_for(cond, timeout=2.0):
             return True
         time.sleep(0.005)
     return False
+
+
+class FakeTimer:
+    def __init__(self):
+        self.cancelled = False
+
+    def cancel(self):
+        self.cancelled = True
+
+
+class FakeTimers:
+    """Statt threading.Timer: merkt sich jeden Zeitgeber; der Test loest ihn selbst aus."""
+
+    def __init__(self):
+        self.started = []  # (Frist in s, Aktion, Zeitgeber)
+
+    def __call__(self, delay_s, action):
+        timer = FakeTimer()
+        self.started.append((delay_s, action, timer))
+        return timer
+
+
+class RecordingPort(FakePort):
+    """FakePort, der jede gesendete Zeile als ("tx", Nummer, Befehl) in events eintraegt."""
+
+    def __init__(self, events):
+        super().__init__()
+        self.events = events
+
+    def write(self, data):
+        super().write(data)
+        for line in data.split(b"\n"):
+            if line:
+                msg = decode(line)
+                self.events.append(("tx", msg.seq, msg.command))
 
 
 class DispatchTest(unittest.TestCase):
@@ -185,28 +223,26 @@ class RealLinkShutdownTest(unittest.TestCase):
     """Mit dem echten PiLink: Nummern und offene Anfragen wie auf der Leitung."""
 
     def setUp(self):
-        self.port = FakePort()
+        self.events = []
+        self.port = RecordingPort(self.events)
         self.link = PiLink(self.port)
         self.link.start()
         self.addCleanup(self.link.stop)
-        self.stop, self.released, self.shutdowns = StopSignal(), threading.Event(), []
+        self.stop, self.released, self.timers = StopSignal(), threading.Event(), FakeTimers()
         self.d = LinkDispatcher(self.link, QueueButtons(), Activity(), self.stop, self.released,
-                                on_shutdown=lambda: self.shutdowns.append(1), release_wait_s=2.0)
+                                on_shutdown=lambda: self.events.append(("power_off",)),
+                                release_wait_s=2.0, start_timer=self.timers)
         self.d.start()
         self.addCleanup(self.d.stop)
-        self._tx = b""
-
-    def answers(self):
-        self._tx += self.port.take_tx()
-        return [(m.seq, m.command) for m in (decode(line) for line in self._tx.split(b"\n") if line)]
 
     def feed(self, seq, command):
         self.port.feed(encode(Message(seq, command, "")) + b"\n")
 
-    def test_second_shutdown_while_the_first_waits_gets_ok(self):
+    def test_second_shutdown_while_the_first_waits_gets_ok_before_power_off(self):
         # Waehrend das erste SHUTDOWN auf die Anzeige wartet, kommt ein neues (Reset des ESP).
         # PiLink kennt nur noch die neue Nummer: das OK auf das erste geht nicht raus (mit
-        # Log), das neue bekommt seins, und on_shutdown laeuft einmal.
+        # Log). Das neue bekommt sein OK, und erst danach laeuft on_shutdown, genau einmal.
+        # Andersherum beendete systemd den Dienst, bevor dieses OK rausgeht.
         self.feed(0x20, "SHUTDOWN")
         self.assertTrue(wait_for(self.stop.is_set))
         self.feed(0x21, "SHUTDOWN")
@@ -214,10 +250,97 @@ class RealLinkShutdownTest(unittest.TestCase):
         time.sleep(0.05)  # PiLink hat die Zeile gelesen und gemeldet
         with self.assertLogs("app.ui.link_dispatch", "INFO") as logs:
             self.released.set()
-            self.assertTrue(wait_for(lambda: (0x21, "OK") in self.answers()))
-        self.assertNotIn((0x20, "OK"), self.answers())
+            self.assertTrue(wait_for(lambda: ("tx", 0x21, "OK") in self.events
+                                     and self.d.shutdown_done.is_set()))
+        self.assertNotIn(("tx", 0x20, "OK"), self.events)
+        self.assertLess(self.events.index(("tx", 0x21, "OK")), self.events.index(("power_off",)))
+        self.assertEqual(self.events.count(("power_off",)), 1)
         self.assertIn("#20", "\n".join(logs.output))
+        for _, fire, _ in self.timers.started:  # der Rueckfall kommt danach und tut nichts
+            fire()
+        self.assertEqual(self.events.count(("power_off",)), 1)
+
+
+class ReplacedShutdownFallbackTest(unittest.TestCase):
+    """Das OK auf ein SHUTDOWN geht nicht raus, weil eine neuere Anfrage es ersetzt hat. Dann
+    faehrt das neuere SHUTDOWN herunter. Kommt keins, faehrt der Pi nach der Frist trotzdem
+    herunter."""
+
+    def setUp(self):
+        self.link = FakeLink()
+        self.link.stale_seqs = {9}
+        self.released = threading.Event()
+        self.released.set()
+        self.shutdowns = []
+        self.timers = FakeTimers()
+        self.d = LinkDispatcher(self.link, QueueButtons(), Activity(), StopSignal(), self.released,
+                                on_shutdown=lambda: self.shutdowns.append(1),
+                                start_timer=self.timers)
+        self.d.start()
+        self.addCleanup(self.d.stop)
+
+    def handle(self, *messages):
+        """Gibt die Anfragen dem Dispatcher und wartet, bis er alle bearbeitet hat: Er arbeitet
+        der Reihe nach, das OK auf ein BUTTON am Schluss kommt also zuletzt."""
+        for msg in messages:
+            self.link.incoming.put(msg)
+        self.link.incoming.put(Message(0x7F, "BUTTON", "1"))
+        self.assertTrue(wait_for(lambda: (0x7F, "OK", "") in self.link.replies))
+
+    def test_powers_off_after_the_fallback_time_without_a_newer_shutdown(self):
+        self.handle(Message(9, "SHUTDOWN", ""))
+        self.assertEqual(self.shutdowns, [])  # nicht sofort: ein neueres SHUTDOWN soll es tun
+        self.assertFalse(self.d.shutdown_done.is_set())
+        self.assertEqual(len(self.timers.started), 1)
+        delay_s, fire, _ = self.timers.started[0]
+        self.assertEqual(link_dispatch.REPLACED_SHUTDOWN_FALLBACK_S, 3.0)
+        self.assertEqual(delay_s, link_dispatch.REPLACED_SHUTDOWN_FALLBACK_S)
+        with self.assertLogs("app.ui.link_dispatch", "WARNING"):
+            fire()  # die Frist ist um
         self.assertEqual(self.shutdowns, [1])
+        self.assertTrue(self.d.shutdown_done.is_set())
+
+    def test_newer_shutdown_powers_off_and_the_fallback_does_nothing(self):
+        self.handle(Message(9, "SHUTDOWN", ""), Message(10, "SHUTDOWN", ""))
+        self.assertEqual(self.link.replies[:2], [(9, "OK", ""), (10, "OK", "")])
+        self.assertEqual(self.shutdowns, [1])
+        self.assertTrue(self.d.shutdown_done.is_set())
+        _, fire, _ = self.timers.started[0]
+        with self.assertNoLogs("app.ui.link_dispatch", "WARNING"):
+            fire()
+        self.assertEqual(self.shutdowns, [1])
+
+    def test_fallback_fires_only_once(self):
+        self.link.stale_seqs = {9, 10}  # auch das zweite OK geht nicht raus
+        self.handle(Message(9, "SHUTDOWN", ""), Message(10, "SHUTDOWN", ""))
+        self.assertEqual(len(self.timers.started), 1)
+        _, fire, _ = self.timers.started[0]
+        with self.assertLogs("app.ui.link_dispatch", "WARNING"):
+            fire()
+        fire()
+        self.assertEqual(self.shutdowns, [1])
+
+    def test_fallback_does_nothing_after_stop(self):
+        self.handle(Message(9, "SHUTDOWN", ""))
+        _, fire, timer = self.timers.started[0]
+        self.d.stop()
+        self.assertTrue(timer.cancelled)
+        fire()  # als haette der Zeitgeber trotz cancel() schon ausgeloest
+        self.assertEqual(self.shutdowns, [])
+        self.assertFalse(self.d.shutdown_done.is_set())
+
+    def test_default_timer_powers_off_after_the_fallback_time(self):
+        # Ohne eingespeisten Zeitgeber laeuft threading.Timer mit der Frist aus der Konstante
+        self.d.stop()
+        d = LinkDispatcher(self.link, QueueButtons(), Activity(), StopSignal(), self.released,
+                           on_shutdown=lambda: self.shutdowns.append(1))
+        d.start()
+        self.addCleanup(d.stop)
+        with mock.patch.object(link_dispatch, "REPLACED_SHUTDOWN_FALLBACK_S", 0.05), \
+                self.assertLogs("app.ui.link_dispatch", "WARNING"):
+            self.link.incoming.put(Message(9, "SHUTDOWN", ""))
+            self.assertTrue(wait_for(lambda: self.shutdowns == [1]))
+        self.assertTrue(d.shutdown_done.is_set())
 
 
 class SendDoneTest(unittest.TestCase):

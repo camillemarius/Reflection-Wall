@@ -14,6 +14,9 @@ User=pi
 WorkingDirectory=/home/pi/Reflection-Wall/rpi
 # anpassen: Pfad zum Python des venv
 ExecStart=/home/pi/.venvs/reflection-wall-rpi/bin/python -m app.main
+# Stoppt systemd den Dienst beim Herunterfahren, bedient er noch 3 s weiter: Ein SHUTDOWN, das
+# der ESP nach einem Reset noch einmal sendet (R8), bekommt so sein OK. Erst danach kommt SIGTERM.
+ExecStop=/bin/sleep 3
 Restart=on-failure
 RestartSec=2
 Environment=PYTHONUNBUFFERED=1

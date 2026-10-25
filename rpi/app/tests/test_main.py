@@ -179,12 +179,20 @@ def frame(seq, command, data=""):
 
 
 class LinePort(FakePort):
-    """Port fuer den echten PiLink: der Test spielt den ESP und liest mit, was der Pi sendet."""
+    """Port fuer den echten PiLink: der Test spielt den ESP und liest mit, was der Pi sendet.
+    Jede gesendete Zeile steht ausserdem als ("sent", Nummer, Befehl) in events."""
 
     def __init__(self, events):
         super().__init__()
         self.events = events
         self._sent = b""
+
+    def write(self, data):
+        super().write(data)
+        for line in data.split(b"\n"):
+            if line:
+                msg = decode(line)
+                self.events.append(("sent", msg.seq, msg.command))
 
     def close(self):
         self.events.append(("port", "close"))
@@ -816,7 +824,8 @@ class MainTest(unittest.TestCase):
     def test_second_shutdown_while_the_first_waits_gets_ok_real_link(self):
         # Mit dem echten PiLink: das zweite SHUTDOWN kommt, waehrend das erste noch auf die
         # Anzeige wartet. PiLink kennt dann nur noch die neue Nummer, das OK auf das erste
-        # geht nicht mehr raus (pi_link.py reply). Das neue SHUTDOWN bekommt sein OK.
+        # geht nicht mehr raus (pi_link.py reply). Das neue SHUTDOWN bekommt sein OK, und erst
+        # danach laeuft power_off: Das beendet den Dienst (systemd), ein OK danach kaeme nie an.
         entered, leaving, finish = threading.Event(), threading.Event(), threading.Event()
 
         def slow_leave(ctx):
@@ -845,6 +854,7 @@ class MainTest(unittest.TestCase):
         self.assertNotIn((first, "OK"), wall.answers())
         self.assertTrue(wall.wait_serving())
         wall.power_off.assert_called_once_with()
+        self.assertLess(wall.position(("sent", second, "OK")), wall.position(("power_off",)))
         third = wall.put("SHUTDOWN")      # noch ein Reset
         self.assertTrue(wait_for(lambda: (third, "OK") in wall.answers()))
         wall.power_off.assert_called_once_with()

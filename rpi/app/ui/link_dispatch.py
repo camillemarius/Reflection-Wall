@@ -15,6 +15,17 @@ RELEASE_WAIT_S = 2.0
 POLL_S = 0.1
 BUSY_RETRY_S = 0.25
 DONE_RESEND_S = 10.0
+# Ging das OK auf ein SHUTDOWN nicht raus, weil eine neuere Anfrage es ersetzt hat, faehrt das
+# neuere SHUTDOWN herunter. Hat nach dieser Frist keins heruntergefahren, tut es der Pi trotzdem.
+REPLACED_SHUTDOWN_FALLBACK_S = 3.0
+
+
+def _start_timer(delay_s, action):
+    """Ruft action nach delay_s einmal auf, in einem eigenen Thread; cancel() verhindert es."""
+    timer = threading.Timer(delay_s, action)
+    timer.daemon = True
+    timer.start()
+    return timer
 
 
 class LinkDispatcher:
@@ -22,7 +33,8 @@ class LinkDispatcher:
                  on_shutdown: Callable[[], None] = lambda: None,
                  release_wait_s: float = RELEASE_WAIT_S,
                  clock: Callable[[], float] = time.monotonic,
-                 sleep: Callable[[float], None] = time.sleep):
+                 sleep: Callable[[float], None] = time.sleep,
+                 start_timer=_start_timer):
         self._link = link
         self._buttons = buttons
         self._activity = activity
@@ -32,6 +44,9 @@ class LinkDispatcher:
         self._release_wait_s = release_wait_s
         self._clock = clock
         self._sleep = sleep
+        self._start_timer = start_timer
+        self._fallback_lock = threading.Lock()  # vor _shutdown_lock, nie umgekehrt
+        self._fallback = None  # hoechstens ein Zeitgeber je Dispatcher
         self._end = threading.Event()
         self._thread = None
         self.radar_writing = threading.Event()
@@ -49,7 +64,11 @@ class LinkDispatcher:
         self._thread.start()
 
     def stop(self) -> None:
-        self._end.set()
+        with self._fallback_lock:  # wartet auf einen laufenden Rueckfall; danach kommt keiner mehr
+            self._end.set()
+            fallback = self._fallback
+        if fallback is not None:
+            fallback.cancel()
         thread = self._thread
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=0.5)
@@ -101,11 +120,35 @@ class LinkDispatcher:
             log.warning("Anzeige nach %.1f s nicht freigegeben", self._release_wait_s)
         if not self._link.reply(msg, "OK"):
             # Waehrend des Wartens kam eine neuere Anfrage (der ESP sendet SHUTDOWN nach einem
-            # Reset neu, R8). PiLink kennt nur noch deren Nummer; sie bekommt ihr OK gleich danach.
-            log.info("OK auf SHUTDOWN #%02X nicht gesendet, die Anfrage ist nicht mehr offen",
-                     msg.seq)
+            # Reset neu, R8). PiLink kennt nur noch deren Nummer. Das neuere SHUTDOWN steht schon
+            # in der Warteschlange: Es bekommt sein OK und faehrt erst danach herunter. Kaeme
+            # power_off schon hier, beendete systemd den Dienst vor diesem OK. War die neuere
+            # Anfrage kein SHUTDOWN, faehrt der Rueckfall nach der Frist herunter.
+            log.info("OK auf SHUTDOWN #%02X nicht gesendet, die Anfrage ist nicht mehr offen; "
+                     "herunterfahren wird das neuere SHUTDOWN", msg.seq)
+            self._arm_fallback()
+            return
         if not self.shut_down_once():
             log.info("SHUTDOWN noch einmal beantwortet, das Herunterfahren laeuft schon")
+
+    def _arm_fallback(self) -> None:
+        """Stellt den Zeitgeber auf REPLACED_SHUTDOWN_FALLBACK_S: hoechstens einmal, nie nach
+        stop() und nicht, wenn der Pi schon herunterfaehrt."""
+        with self._fallback_lock:
+            if self._end.is_set() or self._fallback is not None or self.shutdown_done.is_set():
+                return
+            self._fallback = self._start_timer(REPLACED_SHUTDOWN_FALLBACK_S,
+                                               self._fallback_shutdown)
+
+    def _fallback_shutdown(self) -> None:
+        """Die Frist ist um. Hat kein neueres SHUTDOWN heruntergefahren, faehrt der Pi jetzt
+        herunter. Unter dem Lock, damit nach stop() nichts mehr anlaeuft."""
+        with self._fallback_lock:
+            if self._end.is_set() or self.shutdown_done.is_set():
+                return
+            log.warning("Nach %.1f s hat kein neueres SHUTDOWN heruntergefahren; der Pi faehrt "
+                        "trotzdem herunter", REPLACED_SHUTDOWN_FALLBACK_S)
+            self.shut_down_once()
 
     def shut_down_once(self) -> bool:
         """Ruft on_shutdown hoechstens einmal auf und setzt danach shutdown_done, auch wenn
