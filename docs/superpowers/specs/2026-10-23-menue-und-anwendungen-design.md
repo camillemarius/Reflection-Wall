@@ -486,6 +486,8 @@ Entwurf angenommen hat.
 - §11: Der Pi wertet BT5 und BT4 aus, nicht BT3 und BT2.
 - §12: „BT5 wird nicht gebraucht“ ist überholt; BT5 bestätigt.
 
+**Nachtrag 2026-10-25 (L4 im Hauptentwurf):** Die ESP-Seite dieses Entwurfs (Abschnitt 9.4, Tabelle 5.2, V1, D18, F1, F3) heisst nicht mehr Teil 4b. Sie kommt mit Teil 2 in einen gemeinsamen Plan.
+
 ## 13. Ausblick auf Teil 5
 
 Teil 5 bringt die Tanz-Show, die Animationen, das Spiel „Läufer“ und vielleicht

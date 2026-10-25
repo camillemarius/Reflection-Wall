@@ -68,7 +68,11 @@ Pi nimmt keinen Schaden, und keine Nachricht geht unbemerkt verloren.
 | — | Das FRAM ist bestückt (2026-10-20). `FRAM_INSTALLED` steht auf `true`; die Abnahme mit FRAM gehört zu Teil 3a-2 | nach Runde 6 |
 | — | Für FRAM-Zugriffe schaltet der ESP den Bus auf 100 kHz und danach zurück auf 10 kHz | nach Runde 6 |
 | B | I²C in einer Sitzung: Der Pi pausiert den Bus bei jedem Tastendruck und jeder Radar-Flanke, bis der ESP den Expander gelesen hat. Niemand fragt vorher. Gilt, sofern die Messung genug Reserve zeigt; sonst kommt die Frage zurück zum Owner (Abschnitt 10) | 2026-10-22 |
-| Teil 4 | Menü und Pi-Anwendungen an der Wand: Entscheide D1–D17, Vorschläge V1–V7 und Festlegungen F1–F7 in `2026-10-23-menue-und-anwendungen-design.md` | 2026-10-25 |
+| Teil 4 | Menü und Pi-Anwendungen an der Wand: Entscheide D1–D18, Vorschläge V1–V7 und Festlegungen F1–F7 in `2026-10-23-menue-und-anwendungen-design.md` | 2026-10-25 |
+| L1 | `READY` ohne Antwort bis zur Frist (3 s): Der Pi schickt ein neues `READY` mit neuer Nummer, so lange, bis `OK` kommt; jede Runde ins Log | 2026-10-25 |
+| L2 | Solange `GET\|QUOTE` offen ist, pausiert das `PING`. Die Frist von 120 s ersetzt es; ohne Antwort gilt die Nacht als Fehlversuch, und der ESP fährt den Pi herunter | 2026-10-25 |
+| L3 | Der ESP behandelt `READY` nie als Wiederholung (gleiche Nummer nach einem Neustart des Pi-Dienstes). Kommt `READY` in einer Sitzung, antwortet er `OK` und schickt das `SESSION\|…` noch einmal | 2026-10-25 |
+| L4 | Teil 4b (die ESP-Seite von Teil 4: `SESSION`, BT4–BT6, Tasten je Zustand, Anzeigen beim Start und Ausschalten, `MODE`) wird Teil von Teil 2, mit einem gemeinsamen Plan | 2026-10-25 |
 
 A1–A6 waren in Runde 1 als Annahmen formuliert; du hast sie bestätigt. Die
 Begründungen und Gegenprüfungen standen in den Rundendateien der
@@ -199,10 +203,10 @@ Was passiert, wenn die Frist ohne Antwort abläuft:
 | Nachricht | Absender | Frist abgelaufen |
 |---|---|---|
 | `PING` | ESP | zählt als ein Aussetzer (drei hintereinander → hart aus) |
-| `GET\|QUOTE` | ESP | Fehlversuch der Nacht (M4-a) |
+| `GET\|QUOTE` | ESP | Fehlversuch der Nacht (M4-a); solange er offen ist, pausiert `PING` (L2) |
 | `BUTTON` | ESP | Taste verworfen, Eintrag im Log |
 | `SHUTDOWN` | ESP | nach `T_shutdown` hart aus |
-| `READY` | Pi | weiter senden, bis `OK` kommt (der ESP bootet vielleicht gerade) |
+| `READY` | Pi | weiter senden, bis `OK` kommt (der ESP bootet vielleicht gerade); jede Runde mit neuer Nummer (L1). Der ESP wertet `READY` nie als Wiederholung (L3) |
 | `DONE` | Pi | alle 10 s erneut senden |
 | `MODE\|RADAR` | Pi | nicht umschalten, Radar-Debug startet nicht |
 | `MODE\|NORMAL` | Pi | weiter senden, bis `OK` kommt |
@@ -629,7 +633,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 |---|---|---|
 | 0 | Pi einrichten: `dtparam=uart0=on`, I²C, venv mit `lgpio` und `pyserial`, `piper` (Sprachausgabe, ruft die README schon auf), `.env`, sudoers-Regel | laufenden Pi mit SSH |
 | 1 | Verbindung: Codec und PiLink auf beiden Seiten, gemeinsame Testfälle, Fehler 1–5 | – |
-| 2 | Ein- und Ausschalten: PiSession, Dienst auf dem Pi, BT2 | 0, 1 |
+| 2 | Ein- und Ausschalten: PiSession, Dienst auf dem Pi, BT2, Regel B; dazu die ESP-Seite von Teil 4 (L4) | 0, 1 |
 | 3a | Anzeige, Radar und Zitatliste (Abschnitte 8 und 11): Anzeige aus/an, Zitatliste `/quotes.txt` mit Umstieg, BT1 weiterschalten, wach bleiben solange INT_HLK HIGH | – |
 | 3a-2 | Zitate im FRAM (Abschnitt 11): FRAM-Speicher mit zwei Plätzen, Briefkasten im Flash, Schalter `FRAM_INSTALLED` | – |
 | 3b | Mitternacht: WakePlan, Clock, Zitat, QuoteStore | 1, 2 |
