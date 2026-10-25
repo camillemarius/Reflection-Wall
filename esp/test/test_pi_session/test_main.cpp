@@ -829,6 +829,93 @@ void test_answer_without_own_request_is_only_logged()
     TEST_ASSERT_EQUAL_MEMORY(&before, &d, sizeof d);
 }
 
+// Daten aus dem RTC-Speicher: MAGIC und CRC stimmen, die Werte trotzdem nicht
+void test_valid_rejects_values_outside_the_enums()
+{
+    TEST_ASSERT_TRUE(PiSession::valid(d));         // nach reset
+    PiSession s(d); toRunning(s);
+    s.onButton(3, out);
+    TEST_ASSERT_TRUE(PiSession::valid(d));
+
+    SessionData edge = SessionData();              // jeweils der groesste gueltige Wert
+    edge.state = SessionState::Halting;
+    edge.reason = StartReason::Night;
+    edge.awaiting = Awaiting::Button;
+    edge.buttonCount = 6;
+    TEST_ASSERT_TRUE(PiSession::valid(edge));
+
+    SessionData bad = edge; bad.state = static_cast<SessionState>(6);
+    TEST_ASSERT_FALSE(PiSession::valid(bad));
+    bad = edge; bad.reason = static_cast<StartReason>(2);
+    TEST_ASSERT_FALSE(PiSession::valid(bad));
+    bad = edge; bad.awaiting = static_cast<Awaiting>(5);
+    TEST_ASSERT_FALSE(PiSession::valid(bad));
+    bad = edge; bad.buttonCount = 7;
+    TEST_ASSERT_FALSE(PiSession::valid(bad));
+    std::memset(&bad, 0xA5, sizeof bad);           // Muster, wie es nach dem Einschalten stehen kann
+    TEST_ASSERT_FALSE(PiSession::valid(bad));
+}
+
+static const unsigned long HUGE_MS = 0xFFFFFFFFUL;
+
+void test_huge_tick_while_starting_still_hard_off()
+{
+    PiSession s(d); s.startHand(out);
+    s.onTick(1, false, out);
+    out.clear(); s.onTick(HUGE_MS, false, out);    // 1 + HUGE_MS liefe auf 0 um
+    TEST_ASSERT_TRUE(has(A::PowerOff));
+    TEST_ASSERT_TRUE(has(A::Show, "PI ANTWORTET NICHT"));
+    TEST_ASSERT_STATE(Off);
+
+    s.onTick(1, false, out);                       // die 10 s Text ebenso
+    out.clear(); s.onTick(HUGE_MS, false, out);
+    TEST_ASSERT_TRUE(has(A::DisplayOff));
+    TEST_ASSERT_FALSE(s.active());
+
+    SessionData before = d;                        // ein weiterer grosser Takt aendert nichts
+    out.clear(); s.onTick(HUGE_MS, false, out);
+    TEST_ASSERT_TRUE(out.empty());
+    TEST_ASSERT_EQUAL_MEMORY(&before, &d, sizeof d);
+}
+
+void test_huge_ticks_saturate_in_every_state()
+{
+    PiSession s(d); toRunning(s);                  // BETRIEB: PING-Abstand
+    s.onTick(1, true, out);
+    for (int i = 0; i < 2; ++i)                    // auch ein zweiter grosser Takt laeuft nicht um
+    {
+        s.onTick(HUGE_MS, true, out);
+        TEST_ASSERT_EQUAL_UINT32(0xFFFFFFFFu, d.sincePingMs);
+        TEST_ASSERT_EQUAL_UINT32(0xFFFFFFFFu, d.inStateMs);
+        TEST_ASSERT_EQUAL_UINT32(0xFFFFFFFFu, d.sessionMs);
+    }
+    out.clear(); s.onTick(0, false, out);
+    TEST_ASSERT_TRUE(has(A::Send, "PING"));
+
+    PiSession::reset(d); out.clear();              // RADAR-DEBUG: 60 min
+    toRunning(s);
+    s.onLink(ev(K::Request, "MODE", "RADAR"), out);
+    s.onTick(1, false, out);
+    s.onTick(HUGE_MS, false, out);
+    TEST_ASSERT_STATE(ShuttingDown);
+
+    PiSession::reset(d); out.clear();              // HERUNTERFAHREN: 10 min BUSY
+    toShuttingDown(s);
+    s.onLink(ev(K::Response, "BUSY"), out);
+    s.onTick(1, false, out);
+    out.clear(); s.onTick(HUGE_MS, false, out);
+    TEST_ASSERT_TRUE(has(A::PowerOff));
+    TEST_ASSERT_STATE(Off);
+
+    PiSession::reset(d); out.clear();              // HALT-WARTEN: T_halt
+    toShuttingDown(s);
+    s.onLink(ev(K::Response, "OK"), out);
+    s.onTick(1, false, out);
+    out.clear(); s.onTick(HUGE_MS, false, out);
+    TEST_ASSERT_TRUE(has(A::PowerOff));
+    TEST_ASSERT_STATE(Off);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -880,5 +967,8 @@ int main(int, char**)
     RUN_TEST(test_any_answer_to_ping_resets_missed_pings);
     RUN_TEST(test_expired_ping_outside_running_is_not_a_miss);
     RUN_TEST(test_answer_without_own_request_is_only_logged);
+    RUN_TEST(test_valid_rejects_values_outside_the_enums);
+    RUN_TEST(test_huge_tick_while_starting_still_hard_off);
+    RUN_TEST(test_huge_ticks_saturate_in_every_state);
     return UNITY_END();
 }

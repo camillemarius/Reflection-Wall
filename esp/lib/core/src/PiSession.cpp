@@ -34,6 +34,21 @@ std::string number(uint32_t v)
 
 bool isSet(const SessionData& d, uint8_t flag) { return (d.flags & flag) != 0; }
 
+// Die Zeitzaehler bleiben beim groessten Wert stehen, statt unter eine Frist
+// zurueckzulaufen. Ein unsigned long mit 64 Bit wird ebenso begrenzt.
+constexpr uint32_t MS_MAX = 0xFFFFFFFFu;
+
+uint32_t toMs(unsigned long ms)
+{
+    const uint32_t v = static_cast<uint32_t>(ms);
+    return static_cast<unsigned long>(v) == ms ? v : MS_MAX;
+}
+
+void addMs(uint32_t& counter, uint32_t dt)
+{
+    counter = counter > MS_MAX - dt ? MS_MAX : counter + dt;
+}
+
 void start(SessionData& d, StartReason reason, Out& out)
 {
     PiSession::reset(d);
@@ -259,6 +274,16 @@ void PiSession::reset(SessionData& data)
     data = SessionData();
 }
 
+// Ein Zustand ausserhalb der Liste schliefe nie ein, ein zu grosses
+// buttonCount schriebe neben die Warteschlange.
+bool PiSession::valid(const SessionData& data)
+{
+    return static_cast<uint8_t>(data.state) <= static_cast<uint8_t>(SessionState::Halting) &&
+           static_cast<uint8_t>(data.reason) <= static_cast<uint8_t>(StartReason::Night) &&
+           static_cast<uint8_t>(data.awaiting) <= static_cast<uint8_t>(Awaiting::Button) &&
+           data.buttonCount <= sizeof(data.buttons);
+}
+
 bool PiSession::active() const
 {
     return m_d.state != SessionState::Off || isSet(m_d, ShowingNoAnswer);
@@ -327,11 +352,11 @@ void PiSession::onLink(const LinkEvent& event, Out& out)
 void PiSession::onTick(unsigned long elapsedMs, bool linkBusy, Out& out)
 {
     SessionData& d = m_d;
-    const uint32_t dt = static_cast<uint32_t>(elapsedMs);
+    const uint32_t dt = toMs(elapsedMs);
     if (d.state == SessionState::Off)
     {
         if (!isSet(d, ShowingNoAnswer)) return;
-        d.inStateMs += dt;
+        addMs(d.inStateMs, dt);
         if (d.inStateMs >= NO_ANSWER_MS)
         {
             emit(out, Kind::DisplayOff);
@@ -339,8 +364,8 @@ void PiSession::onTick(unsigned long elapsedMs, bool linkBusy, Out& out)
         }
         return;
     }
-    d.inStateMs += dt;
-    d.sessionMs += dt;
+    addMs(d.inStateMs, dt);
+    addMs(d.sessionMs, dt);
     switch (d.state)
     {
     case SessionState::Starting:
@@ -351,7 +376,7 @@ void PiSession::onTick(unsigned long elapsedMs, bool linkBusy, Out& out)
         }
         break;
     case SessionState::Running:
-        d.sincePingMs += dt;
+        addMs(d.sincePingMs, dt);
         break;
     case SessionState::RadarDebug:
         if (d.inStateMs >= RADAR_MAX_MS) enterShuttingDown(d);
@@ -362,7 +387,7 @@ void PiSession::onTick(unsigned long elapsedMs, bool linkBusy, Out& out)
             hardOff(d, false, "10 min ohne OK auf SHUTDOWN", out);
             return;
         }
-        d.sinceBusyMs += dt;
+        addMs(d.sinceBusyMs, dt);
         if (d.awaiting == Awaiting::None && !isSet(d, NeedShutdown) && d.sinceBusyMs >= BUSY_RETRY_MS)
             d.flags |= NeedShutdown;
         break;

@@ -63,7 +63,8 @@ class PiSession
 public:
     explicit PiSession(SessionData& data);
     static void reset(SessionData& data);                  // Kaltstart: Off, alles 0
-    bool active() const;                                   // nicht Off, oder PI ANTWORTET NICHT noch sichtbar
+    static bool valid(const SessionData& data);            // false: enum ausserhalb seiner Werte, buttonCount > 6
+    bool active() const;                                  // nicht Off, oder PI ANTWORTET NICHT noch sichtbar
     void resume(std::vector<SessionAction>& out);          // einmal nach jedem Reset, wenn active() (R8)
     void startHand(std::vector<SessionAction>& out);       // BT2 im Zustand Off
     void startNight(std::vector<SessionAction>& out);      // fuer Teil 3b, hier nur getestet
