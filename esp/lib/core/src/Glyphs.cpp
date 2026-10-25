@@ -17,6 +17,7 @@ namespace Glyphs
             case ':': return 0x0808;
             case '+': return 0x1111;
             case '*': return 0x4848;
+            case '>': return 0x0840;
             case '0': return 0xA6A2;
             case '1': return 0x8002;
             case '2': return 0x2723;
@@ -64,7 +65,7 @@ namespace Glyphs
 
         switch (c)
         {
-            case ' ': case '-': case '.': case '/': case ':': case '+': case '*':
+            case ' ': case '-': case '.': case '/': case ':': case '+': case '*': case '>':
                 return true;
             default:
                 return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z');

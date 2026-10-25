@@ -14,6 +14,7 @@
 {"name": "sample_quote_2", "kind": "wrap", "text": "Im Innehalten wird es still. In der Stille hoerst du was dein Herz dir lange sagen wollte.", "row1": "Im Innehalten wird es   ", "row2": "still. In der Stille    ", "row3": "hoerst du was dein Herz ", "row4": "dir lange sagen wollte. ", "fits": 1},
 {"name": "glyph_lower_a", "kind": "glyph", "char": "a", "segments": "83A3", "displayable": 1},
 {"name": "glyph_seven", "kind": "glyph", "char": "7", "segments": "8022", "displayable": 1},
+{"name": "glyph_pointer", "kind": "glyph", "char": ">", "segments": "0840", "displayable": 1},
 {"name": "glyph_excl", "kind": "glyph", "char": "!", "segments": "0000", "displayable": 0},
 {"name": "glyph_umlaut", "kind": "glyph", "char": "\u00e4", "segments": "0000", "displayable": 0},
 {"name": "glyph_newline", "kind": "glyph", "char": "\n", "segments": "0000", "displayable": 0},
