@@ -74,6 +74,7 @@ Jeder Eintrag sagt, was gilt, warum, und was es kostet, wenn er falsch ist.
 - **R12 `MODE|RADAR` ausserhalb von BETRIEB:** Der ESP antwortet `ERROR|STATE`. Der Pi schaltet dann nicht um (Spec §6.2). Ein `OK` in HERUNTERFAHREN würde den Pi auf 115 200 Baud schicken, und das `SHUTDOWN` käme nie an.
 - **R13 GPIO22 gehört dem `BusGuard`:** lgpio kann eine Leitung in einem Prozess nur einmal belegen. Der `BusGuard` belegt GPIO4 und GPIO22 und bietet `radar_high()` an. `Activity` liest die Anwesenheit dort statt über `RadarPresence`.
 - **R14 Bus in der Sitzung:** Der ESP hält den I²C-Bus heute bis zum Deep Sleep (`enterDeepSleep` gibt ihn frei). In einer Sitzung gibt er ihn gleich nach dem Lesen des Expanders frei. Er nimmt ihn nur für seine eigenen Anzeige-Aktionen. Die kommen nur vor, wenn der Pi nicht schreibt: in EINSCHALTEN, nach `OK` auf `SHUTDOWN` und nach einem harten Aus.
+- **R15 Radar endet nach 55 min** (während Task 3 entschieden, vom Owner bestätigt am 2026-10-25): Die Anwendung Radar des Pi endet nach 55 min von selbst. Der Pi schaltet zurück (`MODE|NORMAL`) und schickt `DONE`. Die 60 min des ESP bleiben als Rückfall für einen Pi, der im Radar-Debug hängt (Spec §13). Grund: V6 will nach 60 min Radar ein Herunterfahren. Im Radar-Modus gehört die UART aber dem Radar, ein `SHUTDOWN` des ESP käme nie an. Der Pi muss den Modus also selbst verlassen. Die 5 min Abstand decken eine Uhr des ESP, die nach Resets nachgeht (R1). Kostet: Eine Sitzung mit Radar endet nach 55 statt 60 min. Die Zahl kann der Owner ändern.
 
 ## Review Focus
 
@@ -466,3 +467,108 @@ Diese Abnahme folgt erst, wenn der Pi eingerichtet ist (Teil 0) und der Owner fl
 6. Regel B: den Abstand von der INT_GPIO_EXP-Flanke bis zur ersten SCL-Flanke des ESP und die Reaktion des Pi messen. Dasselbe nach einer Radar-Flanke (R3).
 7. RADAR im Menü, mit `MODE`. BT2 im Radar → herunterfahren nach der Rückkehr.
 8. Den kürzesten sicheren Abstand für BT6 messen und in die Anleitung eintragen.
+9. BT2 im Menü zweimal schnell hintereinander drücken → `PI FAEHRT HERUNTER`, der Pi fährt sauber herunter.
+10. BT2 noch einmal drücken, während `PI FAEHRT HERUNTER` geschrieben wird → der Pi fährt trotzdem sauber herunter.
+11. Den Dienst neu starten, während die Anwendung Radar läuft → die UART gehört wieder dem ESP, und das Menü kommt wieder.
+12. Nach jeder Sitzung der Schritte 2–11 die Logs prüfen: Der Pi hat `poweroff` aufgerufen, und im Log des ESP steht kein „hart aus“. Ausnahme ist Schritt 4, dort ist das harte Aus gewollt.
+
+---
+
+## Stand nach der Umsetzung (2026-10-25)
+
+### Gebaut
+
+| Task | Was | Commits |
+|---|---|---|
+| 1 | `SESSION` im Protokoll beider Seiten | 494a98d |
+| 2 | `PiLink` auf dem ESP: `READY` nie als Wiederholung, nach Reset neu melden | 5cc3b84 |
+| 3 | Zustandsmaschine `PiSession` | 47314bf |
+| 4 | Sitzung, Speisung und Nummern im RTC-Speicher; Prüfung der Daten | 79b8d60, c085f5e |
+| 5 | `Application` führt die Sitzung; Sitzungszeit in jedem Takt gesichert | b07b54b, 7563124 |
+| 6 | `READY` und `SESSION` auf dem Pi | 8da8f32 |
+| 7 | Herunterfahren auf dem Pi | b49a131 |
+| 8 | Regel B auf dem Pi (`BusGuard`) | 3287a51 |
+| 9 | Dienst-Ablauf in `app.main`; Radar endet nach 55 min (R15); `OK` auf `SHUTDOWN` erst nach freier Anzeige | c4a9631, 086b2b2, e0a96cf |
+| 10 | systemd-Dienst und README | 7a9a78c, e0df19e |
+| 11 | Abnahme am Gerät | offen bis Teil 0 |
+| Abschluss | Korrekturen aus der Schlussprüfung: der Pi bedient nach dem `OK` auf `SHUTDOWN` weiter (I-1); `READY` noch einmal ohne `SESSION` (M-3); nach `DONE` ohne `SHUTDOWN` selbst aus, sudoers-Regel beim Start geprüft (M-4); Warnung von Regel B höchstens alle 10 s; `StartLimitIntervalSec=0`; der ESP sichert vor den Aktionen und nach jedem Senden, ein nicht gesendetes Send gilt als Frist (I-1, M-1, M-2); Spezifikationen nachgeführt (M-7, M-8) | 01e74d1, eb60844, 1cf05df, fcedbb6, fc05086, 9e1c2f6, 71dfbac und der Commit mit diesem Abschnitt |
+
+### Entscheide während der Umsetzung
+
+Jeder Entscheid sagt, was gilt, und was es kostet, wenn er falsch ist.
+
+- **Task 4 und 5 zusammen:** Ein Auftrag und eine Prüfung für beide. Task 4 hat keinen eigenen Test und dient nur Task 5. Kostet: Die Prüfung sieht einen grösseren Diff auf einmal.
+- **Offene Punkte in Task 3:**
+  - `startHand` und `startNight` gelten nur aus AUS. Ein Start von Hand beendet `PI ANTWORTET NICHT` früher.
+  - Jede Antwort auf `PING` setzt die Aussetzer auf null.
+  - Eine Antwort ohne offene eigene Anfrage wird nur geloggt.
+  - Zurück in BETRIEB beginnt der PING-Abstand neu.
+
+  Kostet: kleine Änderungen am Verhalten von Task 3, die die Prüfung oder die Abnahme findet.
+- **Daten im RTC-Speicher prüfen:** `PiSession::valid` prüft die enums und `buttonCount <= 6`, mit nativem Test. Die `Application` setzt eine ungültige Sitzung nach dem Laden zurück. Die Zeitzähler bleiben beim grössten Wert stehen, statt überzulaufen. Grund: Daten mit gültiger CRC, aber falschen Werten schrieben sonst neben die Warteschlange oder schliefen nie ein. Kostet: ein paar Zeilen in `PiSession`.
+- **R15:** siehe die Liste der Rulings oben. Kostet: Eine Sitzung mit Radar endet nach 55 statt 60 min.
+- **Offene Punkte in Task 6:**
+  - `announce_ready` wartet auf jede Antwort nur begrenzt und versucht es bei jeder Antwort ausser `OK` neu.
+  - `session_reason` bleibt `None` bis zum ersten gültigen `SESSION`.
+  - `shutdown_done` wird nach dem `OK` und nach `on_shutdown` gesetzt, auch wenn `on_shutdown` wirft, nie bei `BUSY`. Seit der Schlussprüfung läuft `on_shutdown` höchstens einmal.
+
+  Kostet: kleine Änderungen am Verhalten des Pi; Task 9 baut darauf.
+- **Offene Punkte in Task 8:**
+  - Der Guard wartet, indem er mit der eingespeisten Uhr und `sleep` nachschaut.
+  - `free_s` zählt ab der letzten steigenden Flanke an GPIO4, die Radar-Pause ab der letzten an GPIO22. Beides muss erfüllt sein.
+  - `max_wait_s` begrenzt ein Warten, mit einer Warnung.
+  - Fehlt lgpio oder scheitert `start()`, wartet der Guard nie, mit einem Eintrag im Log.
+  - `stop()` darf mehrmals laufen.
+
+  Kostet: Zeiten, die die Abnahme ohnehin misst.
+- **Wer `DONE` schickt:** Mit dem Dispatcher von `main()` schickt `run_wall` kein `DONE`. `main()` schickt es genau einmal, bei „idle“ und „error“. R15 bringt einen zweiten Grund für „idle“, und zwei Stellen hätten `DONE` doppelt geschickt. Kostet: ein `DONE` mehr auf der Leitung, ohne Schaden.
+- **Task 9, 45 s für die Anzeige:** Im Wand-Modus wartet der Dispatcher bis zu 45 s (`RELEASE_WAIT_S`) auf die freie Anzeige, bevor er `SHUTDOWN` mit `OK` beantwortet, statt 2 s. Das bleibt unter den 60 s des ESP und deckt ein ganzes Bild bei hängendem INT_GPIO_EXP (12 × 1 s). Die stärkere Lösung (`BUSY` bei Ablauf) hätte Task 6 geändert. Kostet: Im Fehlerfall antwortet der Pi bis zu 45 s später. Ist die Anzeige nach 45 s noch nicht frei, bleibt das alte Risiko.
+- **Eine Runde für alle Korrekturen der Schlussprüfung:** I-1 auf beiden Seiten, M-1 bis M-4, M-7, M-8, die Warnung von Regel B, `StartLimitIntervalSec=0`, die zusätzlichen Schritte in Task 11 und dieser Abschnitt. Die Prüfung wollte I-1, M-1 und M-7 vor dem Merge, den Rest vor der Abnahme. Alles ist klein, eine Runde ist billiger als eine spätere. Kostet: ein grösserer Diff für die nächste Prüfung.
+- **Rest von I-1 bleibt:** Kommt ein neu gesendetes `SHUTDOWN` erst an, wenn systemd den Dienst schon beendet hat, läuft es ab, und der ESP schaltet hart aus. Das wird nicht gebaut. Der Pi bedient jetzt bis zum Ende des Prozesses, und der ESP sichert vor dem langsamen Show. Das Fenster sind damit nur noch die Sekunden, die systemd zum Beenden braucht. Ein anderes Verhalten beim harten Aus bräuchte einen Entscheid des Owners. Kostet: selten ein hartes Aus am Ende eines Herunterfahrens, das schon läuft.
+- **M-5 und M-6 bleiben:** M-5 ist fast unmöglich, M-6 nur kosmetisch (siehe unten). Kostet: wie dort beschrieben.
+
+### R15 vom Owner bestätigt
+
+Der Owner hat R15 am 2026-10-25 bestätigt: „55 min passt“.
+
+### Offen
+
+**Protokoll und `PiLink` (ESP)**
+
+- `test_link_codec` prüft die Zahl der Befehlsvektoren (14) fest. Jede neue Nachricht muss sie ändern.
+- Die Bedingungen in `roleOf` und in `PiLink::handleLine` sind lang. Ein benannter Zwischenwert läse sich besser.
+- Task 1: Die Zahl der Fälle (130 rot, 129 grün) ist nicht erklärt. Es fehlt kein Test.
+- Kein Test für `READY`, das noch einmal kommt, während das vorige gemeldet, aber noch nicht beantwortet ist.
+- `test_repeat_after_restore_is_reported_again` zeigt nicht, dass die Antwort danach gespeichert ist.
+
+**`PiSession` und `Application` (ESP)**
+
+- Kein Test für die untere Grenze der 10 s von `PI ANTWORTET NICHT` (`onTick(9999)`).
+- Kein Test prüft, dass `PowerOff` vor `Show PI ANTWORTET NICHT` kommt (R14).
+- `linkBusy` ist nur zusammen mit einem offenen `PING` getestet.
+- Das Rücksetzen der Aussetzer beim Eintritt in BETRIEB ist ungetestet.
+- Ein abgewiesenes `startNight` während `PI ANTWORTET NICHT` bleibt still. Teil 3b soll das im Header festhalten.
+- Der Inhalt des Logs (Dauer der Sitzung) ist nicht geprüft. Einige Tests verketten mehrere Abläufe. `PING_MISSES` ist eine Zahl, steht aber als `unsigned long` bei den Zeiten.
+- Unterbricht ein Reset das Schreiben eines Sitzungstexts, zeigt `resume` ihn nicht neu. Die Anzeige bleibt für diesen Zustand dunkel oder halb geschrieben.
+- Ein Zustandswechsel am Anfang des Durchlaufs (durch `resume` oder eine Taste, vor der Sitzungsschleife) wird nicht als `[SESSION] A -> B` geloggt. Ein Kommentar in `PiSession.h` ist nicht ausgerichtet.
+- M-5: Eine Sitzung mit gültiger CRC, aber unbrauchbaren Werten wird zurückgesetzt, `piPowered` bleibt. Der Pi kann dann noch an sein, während der ESP wieder Zitate zeigt.
+
+**Pi-Dienst**
+
+- Der Zweig `TimeoutError` in `ready.py` ist ungetestet.
+- `test_ready_repeats_after_deadline_with_new_request` prüft keine Nummer. `self.sleeps` in einem Test von `test_ready.py` ist unbenutzt. Ein Kommentar, dass `session_reason` erst nach `session_event` gilt, fehlt.
+- `power_off` gibt dem Runner keine Frist. Die Tests der Fehlerfälle prüfen den Text der Meldung nicht.
+- `BusGuard`: Zwischen dem Lesen des Pegels und dem Rückruf der Flanke liegt ein Wettlauf im µs-Bereich. Die Wiederholung einer abgeschnittenen Übertragung fängt ihn auf.
+- `BusGuard.stop()` setzt die Zeitstempel der Flanken nicht zurück. `self._handle = None` steht doppelt.
+- Tests des `BusGuard`: Der Test ohne lgpio trifft einen `AttributeError` statt `ImportError` und prüft die Warnung nicht. Es fehlen ein Test für 5 ms und 250 ms zusammen und Prüfungen für `stop()`. Einige Vergleiche liegen genau auf der Grenze.
+- Wirft `start_menu` eine Ausnahme, schickt der Pi kein `DONE`. Der ESP schaltet dann mit `PI ANTWORTET NICHT` hart aus. Das betrifft nur Programmierfehler.
+- `DONE` kann nach einem schon beantworteten `SHUTDOWN` kommen, wenn das automatische Aus oder R15 mit einem gemerkten BT2 zusammenfällt. Das schadet nicht. Ein gesetztes `shutdown_done` könnte das `DONE` auslassen.
+- `test_main.py` liest das private `RadarApp._buttons_factory`.
+- Die ganze Python-Suite braucht 16–24 s statt 13 s. Das ist kein Fehler.
+- M-6: BT2 in der Anwendung Radar zeigt kurz das Hauptmenü (etwa 0,2 s), bevor `PI FAEHRT HERUNTER` kommt.
+- Rest von I-1: siehe die Entscheide oben.
+
+**Anleitung**
+
+- README: Für den Dienst gelten neue Gruppen nach einem Neustart des Dienstes. „Neu anmelden“ braucht es nur für die eigene Shell.
+- README: einmal sagen, ob Teil 0 oder die Befehle von Hand gemeint sind; „man“ und „du“ vereinheitlichen.
