@@ -28,4 +28,9 @@ namespace WakePlan
 
     // radioOn: dieser Durchlauf hat Funk; syncFailed: ein Abgleich in diesem Durchlauf ist gescheitert
     WakeDecision decide(const ClockData& clock, const NightData& night, bool radioOn, bool syncFailed);
+
+    // Beim Start eines Versuchs: neue Nacht -> Status, Versuche, rejects, result neu, date = heute
+    // (doneDate, yesterday, quote, pendingWrite bleiben). Ein spaeter Versuch verbraucht
+    // die Termine, die schon vorbei sind (Abschnitt 9, "Kaltstart in der Nacht").
+    void markAttempt(NightData& night, const ClockData& clock);
 }

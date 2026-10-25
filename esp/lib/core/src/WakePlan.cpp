@@ -78,4 +78,43 @@ namespace WakePlan
         // erledigt, drei Versuche oder ausserhalb des Fensters: Richtung naechstes 00:00
         return sleepUntil(now, CivilTime::nextLocalHour(now, 0), true);
     }
+
+    void markAttempt(NightData& night, const ClockData& clock)
+    {
+        const CivilTime::Local local = CivilTime::toZurich(clock.utc);
+        const std::string today = CivilTime::date(local);
+        if (!isDate(night.date, sizeof(night.date), today))
+        {
+            night.status = NightStatus::Idle;
+            night.attempts = 0;
+            night.result = NightResult::None;
+            std::strncpy(night.date, today.c_str(), sizeof(night.date) - 1);
+            night.date[sizeof(night.date) - 1] = '\0';
+        }
+
+        // Termine von heute, die schon erreicht sind (nur im Fenster)
+        int reached = 0;
+        if (local.hour < WINDOW_END_HOUR)
+        {
+            for (int k = 0; k < NightJob::MAX_ATTEMPTS; ++k)
+            {
+                if (CivilTime::atLocalHour(local.year, local.month, local.day, k) <= clock.utc)
+                {
+                    ++reached;
+                }
+            }
+        }
+
+        int attempts = night.attempts + 1;
+        if (attempts < reached)
+        {
+            attempts = reached;
+        }
+        if (attempts > NightJob::MAX_ATTEMPTS)
+        {
+            attempts = NightJob::MAX_ATTEMPTS;
+        }
+        night.attempts = static_cast<uint8_t>(attempts);
+        night.rejects = 0;
+    }
 }

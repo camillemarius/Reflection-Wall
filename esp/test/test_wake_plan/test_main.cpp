@@ -580,6 +580,118 @@ void test_autumn_night_uses_first_2_oclock()
     ASSERT_SLEEP(10800, false, decide(staleClock(three), triedNight(m, 2)));
 }
 
+// --- markAttempt ---
+
+void test_mark_attempt_normal_midnight()
+{
+    NightData n = doneNight(at(2026, 7, 1, 0, 30));
+    const ClockData c = freshClock(midnight() + 5);
+    ASSERT_KIND(WakeKind::StartNight, decide(c, n, true, false));
+    WakePlan::markAttempt(n, c);
+    TEST_ASSERT_EQUAL_UINT8(1, n.attempts);
+    TEST_ASSERT_EQUAL_STRING("2026-07-02", n.date);
+
+    // der Versuch scheitert: weiter bis 01:00
+    n.status = NightStatus::Failed;
+    n.result = NightResult::NoAnswer;
+    ASSERT_SLEEP(3000, false, decide(staleClock(at(2026, 7, 2, 0, 10)), n));
+}
+
+void test_mark_attempt_cold_boot_at_0130_consumes_two_terms()
+{
+    NightData n = emptyNight();
+    setText(n.doneDate, sizeof(n.doneDate), "2026-07-01");
+    const ClockData c = freshClock(at(2026, 7, 2, 1, 30));
+    ASSERT_KIND(WakeKind::StartNight, decide(c, n, true, false));
+    WakePlan::markAttempt(n, c);
+    TEST_ASSERT_EQUAL_UINT8(2, n.attempts);
+
+    // Fehlversuch um 01:35: nicht sofort wieder, sondern um 02:00
+    n.status = NightStatus::Failed;
+    ASSERT_SLEEP(1500, false, decide(staleClock(at(2026, 7, 2, 1, 35)), n));
+    ASSERT_KIND(WakeKind::StartNight, decide(staleClock(at(2026, 7, 2, 2)), n));
+}
+
+void test_mark_attempt_late_at_0210_is_the_last()
+{
+    NightData n = emptyNight();
+    setText(n.doneDate, sizeof(n.doneDate), "2026-07-01");
+    const ClockData c = freshClock(at(2026, 7, 2, 2, 10));
+    ASSERT_KIND(WakeKind::StartNight, decide(c, n, true, false));
+    WakePlan::markAttempt(n, c);
+    TEST_ASSERT_EQUAL_UINT8(3, n.attempts);
+
+    n.status = NightStatus::Failed;
+    ASSERT_SLEEP(10800, false, decide(staleClock(at(2026, 7, 2, 2, 15)), n));
+    ASSERT_KIND(WakeKind::StartNight, decide(freshClock(at(2026, 7, 3, 0)), n));
+
+    // mehr als drei gibt es nicht (NightJob::valid)
+    WakePlan::markAttempt(n, staleClock(at(2026, 7, 2, 2, 20)));
+    TEST_ASSERT_EQUAL_UINT8(3, n.attempts);
+    TEST_ASSERT_TRUE(NightJob::valid(n));
+}
+
+void test_mark_attempt_new_night_resets_status()
+{
+    // gestern gelungen
+    NightData n = emptyNight();
+    n.status = NightStatus::Got;
+    n.result = NightResult::Ok;
+    n.attempts = 1;
+    n.rejects = 2;
+    n.pendingWrite = 1;
+    setText(n.date, sizeof(n.date), "2026-07-01");
+    setText(n.doneDate, sizeof(n.doneDate), "2026-07-01");
+    setText(n.yesterday, sizeof(n.yesterday), "GESTERN");
+    setText(n.quote, sizeof(n.quote), "ZITAT");
+
+    WakePlan::markAttempt(n, freshClock(midnight()));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(NightStatus::Idle), static_cast<uint8_t>(n.status));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(NightResult::None), static_cast<uint8_t>(n.result));
+    TEST_ASSERT_EQUAL_UINT8(1, n.attempts);
+    TEST_ASSERT_EQUAL_UINT8(0, n.rejects);
+    TEST_ASSERT_EQUAL_STRING("2026-07-02", n.date);
+    TEST_ASSERT_EQUAL_STRING("2026-07-01", n.doneDate);
+    TEST_ASSERT_EQUAL_STRING("GESTERN", n.yesterday);
+    TEST_ASSERT_EQUAL_STRING("ZITAT", n.quote);
+    TEST_ASSERT_EQUAL_UINT8(1, n.pendingWrite);
+
+    // gleiche Nacht: Status bleibt, nur rejects faellt auf 0
+    n.status = NightStatus::Failed;
+    n.result = NightResult::Rejected;
+    n.rejects = 3;
+    WakePlan::markAttempt(n, staleClock(at(2026, 7, 2, 1)));
+    TEST_ASSERT_EQUAL_UINT8(2, n.attempts);
+    TEST_ASSERT_EQUAL_UINT8(0, n.rejects);
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(NightStatus::Failed), static_cast<uint8_t>(n.status));
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(NightResult::Rejected), static_cast<uint8_t>(n.result));
+
+    // ausserhalb des Fensters nur + 1
+    WakePlan::markAttempt(n, staleClock(at(2026, 7, 2, 12)));
+    TEST_ASSERT_EQUAL_UINT8(3, n.attempts);
+    NightData day = emptyNight();
+    WakePlan::markAttempt(day, staleClock(at(2026, 7, 2, 12)));
+    TEST_ASSERT_EQUAL_UINT8(1, day.attempts);
+    TEST_ASSERT_EQUAL_STRING("2026-07-02", day.date);
+}
+
+void test_mark_attempt_spring_night_has_two_terms()
+{
+    const uint32_t one = at(2026, 3, 29, 1); // 01:00 MEZ; 02:00 gibt es nicht
+    NightData n = emptyNight();
+    setText(n.doneDate, sizeof(n.doneDate), "2026-03-28");
+    WakePlan::markAttempt(n, freshClock(one + 1800));
+    TEST_ASSERT_EQUAL_UINT8(2, n.attempts);
+    n.status = NightStatus::Failed;
+    // kein Termin 02:00: naechste Nacht
+    ASSERT_SLEEP(10800, false, decide(staleClock(one + 2400), n));
+
+    // kurz vor dem Wechsel sind es immer noch zwei
+    NightData late = emptyNight();
+    WakePlan::markAttempt(late, freshClock(at(2026, 3, 29, 3) - 1));
+    TEST_ASSERT_EQUAL_UINT8(2, late.attempts);
+}
+
 // --- NightData ---
 
 void test_night_data_valid_rejects_bad_values()
@@ -664,6 +776,11 @@ int main(int, char**)
     RUN_TEST(test_many_evening_resets_never_miss_midnight);
     RUN_TEST(test_spring_night_has_no_2_oclock_term);
     RUN_TEST(test_autumn_night_uses_first_2_oclock);
+    RUN_TEST(test_mark_attempt_normal_midnight);
+    RUN_TEST(test_mark_attempt_cold_boot_at_0130_consumes_two_terms);
+    RUN_TEST(test_mark_attempt_late_at_0210_is_the_last);
+    RUN_TEST(test_mark_attempt_new_night_resets_status);
+    RUN_TEST(test_mark_attempt_spring_night_has_two_terms);
     RUN_TEST(test_night_data_valid_rejects_bad_values);
     return UNITY_END();
 }
