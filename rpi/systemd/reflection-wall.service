@@ -3,6 +3,9 @@
 
 [Unit]
 Description=Reflection Wall, Anwendung auf dem Pi
+# Nie aufgeben: auch nach vielen Abstürzen kurz hintereinander startet systemd den Dienst neu.
+# Ohne Dienst schaltet der ESP den Pi nach drei PING hart aus.
+StartLimitIntervalSec=0
 
 [Service]
 # anpassen: Benutzer, der in den Gruppen dialout, i2c und gpio ist
