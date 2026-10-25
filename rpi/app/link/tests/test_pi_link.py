@@ -1,11 +1,32 @@
+import threading
 import time
 import unittest
 
-from app.link.codec import EncodeError, Message
+from app.link.codec import EncodeError, Message, encode
 from app.link.pi_link import LinkBusy, PiLink
 from app.link.tests.fakes import FakeClock, FakePort
 
 READY0 = b"$00:READY*71\n"
+RADAR_FRAME = bytes([0x6E, 0x02, 0x23, 0x00, 0x62])
+
+
+def line(seq, command, data=""):
+    return encode(Message(seq, command, data)) + b"\n"
+
+
+class GatedPort(FakePort):
+    """Das erste read_available() haelt an, bis release gesetzt ist."""
+
+    def __init__(self):
+        super().__init__()
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def read_available(self):
+        if not self.release.is_set():
+            self.entered.set()
+            self.release.wait(2.0)
+        return super().read_available()
 
 
 class PiLinkTest(unittest.TestCase):
@@ -200,6 +221,76 @@ class PiLinkTest(unittest.TestCase):
         self.assertEqual(fut.result(timeout=0), Message(0, "OK"))
 
 
+class PiLinkPauseTest(unittest.TestCase):
+    def setUp(self):
+        self.clock = FakeClock()
+        self.port = FakePort()
+        self.link = PiLink(self.port, clock=self.clock)
+
+    def feed_poll(self, data):
+        self.port.feed(data)
+        self.link.poll()
+
+    def test_pause_stops_port_access(self):
+        self.link.pause()
+        reads = self.port.reads
+        self.feed_poll(line(3, "PING"))
+        self.clock.now = 5.0
+        self.link.poll()
+        self.assertEqual(self.port.reads, reads)
+        self.assertEqual(self.port.take_tx(), b"")
+        self.assertTrue(self.link.incoming.empty())
+
+    def test_pause_with_open_request_raises_link_busy_and_keeps_reading(self):
+        fut = self.link.request("MODE", "RADAR")
+        with self.assertRaises(LinkBusy):
+            self.link.pause()
+        self.feed_poll(line(0, "OK"))
+        self.assertEqual(fut.result(timeout=0), Message(0, "OK"))
+        self.link.pause()
+
+    def test_request_and_reply_while_paused_write_nothing(self):
+        self.feed_poll(line(9, "BUTTON", "1"))
+        msg = self.link.incoming.get_nowait()
+        self.link.pause()
+        self.assertFalse(self.link.reply(msg, "OK"))
+        with self.assertRaises(LinkBusy):
+            self.link.request("DONE")
+        self.assertEqual(self.port.take_tx(), b"")
+
+    def test_resume_discards_buffered_bytes_and_partial_line(self):
+        self.feed_poll(b"$03:PI")
+        self.link.pause()
+        self.port.feed(RADAR_FRAME * 3 + b"\n" + line(4, "PING"))  # PING 04: ganze Zeile
+        self.link.resume()
+        self.feed_poll(b"NG*29\n")  # ergaenzte die alte Teilzeile zu PING 03
+        self.assertEqual(self.port.take_tx(), b"")
+        self.feed_poll(line(5, "PING"))
+        self.assertEqual(self.port.take_tx(), line(5, "PONG"))
+
+    def test_resume_forgets_a_too_long_line_in_progress(self):
+        self.feed_poll(b"A" * 300)
+        self.link.pause()
+        self.link.resume()
+        self.feed_poll(line(3, "PING"))
+        self.assertEqual(self.port.take_tx(), line(3, "PONG"))
+        self.assertEqual(self.link.discarded["TOO_LONG"], 0)
+
+    def test_resume_without_pause_keeps_the_partial_line(self):
+        self.feed_poll(b"$03:PI")
+        self.link.resume()
+        self.feed_poll(b"NG*29\n")
+        self.assertEqual(self.port.take_tx(), line(3, "PONG"))
+
+    def test_requests_work_again_after_resume(self):
+        self.link.pause()
+        self.link.resume()
+        fut = self.link.request("MODE", "NORMAL")
+        self.assertEqual(self.port.take_tx(), line(0, "MODE", "NORMAL"))
+        self.feed_poll(line(0, "OK"))
+        self.assertEqual(fut.result(timeout=0), Message(0, "OK"))
+
+
 class PiLinkThreadTest(unittest.TestCase):
     def setUp(self):
         self.port = FakePort()
@@ -238,6 +329,39 @@ class PiLinkThreadTest(unittest.TestCase):
             self.assertIsNone(fut.result(timeout=1))
             self.assertTrue(self.wait_for(lambda: not self.link.alive))
         self.assertIsNone(self.link.request("READY").result(timeout=0))
+
+    def test_pause_waits_for_a_running_poll_then_leaves_the_port_alone(self):
+        port = GatedPort()
+        link = PiLink(port)
+        self.addCleanup(link.stop)
+        self.addCleanup(port.release.set)
+        link.start()
+        self.assertTrue(port.entered.wait(1.0))
+        paused = threading.Event()
+
+        def pause():
+            link.pause()
+            paused.set()
+        threading.Thread(target=pause, daemon=True).start()
+        self.assertFalse(paused.wait(0.1))  # der laufende Durchgang haelt den Port
+        port.feed(line(3, "PING"))
+        port.release.set()
+        self.assertTrue(paused.wait(1.0))
+        self.assertEqual(port.take_tx(), line(3, "PONG"))  # noch vor dem Ende von pause()
+        reads = port.reads
+        port.feed(line(4, "PING"))
+        time.sleep(0.1)
+        self.assertEqual(port.reads, reads)
+        self.assertEqual(port.take_tx(), b"")
+        link.resume()
+        port.feed(line(5, "PING"))
+        got = bytearray()
+
+        def seen():
+            got.extend(port.take_tx())
+            return line(5, "PONG") in got
+        self.assertTrue(self.wait_for(seen))
+        self.assertNotIn(line(4, "PONG"), got)
 
 
 if __name__ == "__main__":

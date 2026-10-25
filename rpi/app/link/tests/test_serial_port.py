@@ -61,6 +61,50 @@ class SerialPortTest(unittest.TestCase):
             port.close()
         self.assertIn(("close", 7), gpio.calls)
 
+    def test_set_baud_changes_the_open_port(self):
+        ser = serial.serial_for_url("loop://", baudrate=ESP_BAUD)
+        port = SerialPort(ser)
+        self.addCleanup(port.close)
+        port.set_baud(115200)
+        self.assertEqual(ser.baudrate, 115200)
+        port.set_baud(ESP_BAUD)
+        self.assertEqual(ser.baudrate, ESP_BAUD)
+
+    def test_serial_property_is_the_pyserial_object(self):
+        ser = serial.serial_for_url("loop://")
+        port = SerialPort(ser)
+        self.addCleanup(port.close)
+        self.assertIs(port.serial, ser)
+        with self.assertRaises(AttributeError):
+            port.serial = None
+
+    def test_select_radar_drives_gpio23_with_the_held_handle(self):
+        gpio = FakeLgpio()
+        port = open_esp_port("loop://", select_gpio=True, lgpio_module=gpio)
+        self.addCleanup(port.close)
+        gpio.calls.clear()
+        port.select_radar(True)
+        port.select_radar(False)
+        self.assertEqual(gpio.calls, [("write", 7, UART_SELECT_GPIO, 1),
+                                      ("write", 7, UART_SELECT_GPIO, 0)])
+
+    def test_select_radar_imports_lgpio_lazily(self):
+        gpio = FakeLgpio()
+        with mock.patch.dict(sys.modules, {"lgpio": gpio}):
+            port = SerialPort(serial.serial_for_url("loop://"), 7)
+            port.select_radar(True)
+            port.close()
+        self.assertIn(("write", 7, UART_SELECT_GPIO, 1), gpio.calls)
+
+    def test_select_radar_without_handle_does_nothing_and_logs_once(self):
+        port = SerialPort(serial.serial_for_url("loop://"))
+        self.addCleanup(port.close)
+        with self.assertLogs("app.link.serial_port", "WARNING") as cm:
+            port.select_radar(True)
+            port.select_radar(False)
+            port.select_radar(True)
+        self.assertEqual(len(cm.output), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

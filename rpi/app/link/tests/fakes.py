@@ -21,12 +21,14 @@ class FakePort:
         self._tx = bytearray()
         self.fail: Exception | None = None
         self.write_error: Exception | None = None
+        self.reads = 0
 
     def feed(self, data: bytes) -> None:
         with self._lock:
             self._rx += data
 
     def read_available(self) -> bytes:
+        self.reads += 1
         if self.fail is not None:
             raise self.fail
         with self._lock:

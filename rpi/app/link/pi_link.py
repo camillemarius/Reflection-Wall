@@ -2,6 +2,11 @@
 
 Gleiche Regeln wie esp/lib/core/src/PiLink.cpp. Ein Lock schuetzt Zustand und
 Schreiben; gelesen wird ausserhalb der Sperre (nur der Thread liest).
+
+pause()/resume(): Waehrend das Radar die Leitung hat (F4), fasst der Link den Port
+nicht an. Ein zweiter Lock (_port_lock) umfasst jeden Durchgang von poll() mit
+Lesen und Schreiben; pause() wartet darauf, dass ein laufender Durchgang endet.
+Reihenfolge der Locks immer _port_lock vor _lock.
 """
 import collections
 import concurrent.futures
@@ -17,6 +22,8 @@ from app.link.codec import (
 )
 
 REPEAT_S = 0.25
+PAUSED_WAIT_S = 0.02
+RESUME_DISCARD_READS = 64  # Obergrenze, falls die Leitung nie still ist
 
 
 class LinkBusy(RuntimeError):
@@ -35,6 +42,8 @@ class PiLink:
         self._clock = clock
         self._log = log or logging.getLogger("link")
         self._lock = threading.Lock()
+        self._port_lock = threading.Lock()
+        self._paused = False  # gesetzt unter _lock, in poll() gelesen unter _port_lock
         self.incoming: "queue.Queue[Message]" = queue.Queue()
         self.discarded: "collections.Counter[str]" = collections.Counter()
         # Lesen (nur Thread bzw. poll)
@@ -74,6 +83,8 @@ class PiLink:
                 return fut
             if self._future is not None:
                 raise LinkBusy("Anfrage offen")
+            if self._paused:
+                raise LinkBusy("Leitung beim Radar")
             msg = Message(self._tx_seq, command, data)
             frame = encode(msg)  # EncodeError: Nummer bleibt frei
             self._tx_seq = (self._tx_seq + 1) & 0xFF
@@ -91,7 +102,7 @@ class PiLink:
     # --- Antworten auf Anfragen des ESP -------------------------------------
     def reply(self, request: Message, command: str, data: str = "") -> bool:
         with self._lock:
-            if not self._in_progress or request.seq != self._rx_seq:
+            if self._paused or not self._in_progress or request.seq != self._rx_seq:
                 return False
             try:
                 frame = encode(Message(request.seq, command, data))
@@ -104,15 +115,48 @@ class PiLink:
 
     # --- ein Durchgang -------------------------------------------------------
     def poll(self) -> None:
-        chunk = self._port.read_available()  # ausserhalb der Sperre
         done: list[tuple[concurrent.futures.Future, Message | None]] = []
         try:
-            with self._lock:
-                self._feed(chunk, done)
-                self._timers(done)
+            with self._port_lock:
+                if self._paused:
+                    return
+                chunk = self._port.read_available()  # ausserhalb von _lock
+                with self._lock:
+                    self._feed(chunk, done)
+                    self._timers(done)
         finally:
             for fut, result in done:  # ausserhalb der Sperre, damit Rueckrufe nicht blockieren
                 fut.set_result(result)
+
+    # --- Leitung an das Radar abgeben (F4) ----------------------------------
+    def pause(self) -> None:
+        """Danach liest und schreibt der Link nichts mehr, bis resume().
+
+        LinkBusy, wenn eine eigene Anfrage offen ist. Ein laufender Durchgang
+        von poll() wird abgewartet. Waehrend der Pause wirft request() LinkBusy,
+        und reply() gibt False zurueck.
+        """
+        with self._lock:
+            if self._future is not None:
+                raise LinkBusy("Anfrage offen")
+            self._paused = True  # zuerst: neue Durchgaenge fassen den Port nicht mehr an
+        with self._port_lock:
+            pass  # ein laufender Durchgang ist jetzt fertig
+
+    def resume(self) -> None:
+        """Verwirft, was der Port gepuffert hat, und die angefangene Zeile; liest dann weiter."""
+        with self._port_lock:
+            if not self._paused:
+                return
+            try:
+                for _ in range(RESUME_DISCARD_READS):
+                    if not self._port.read_available():
+                        break
+            finally:
+                with self._lock:
+                    self._buf.clear()
+                    self._overflow = False
+                    self._paused = False
 
     def _feed(self, chunk: bytes, done: list) -> None:
         for b in chunk:
@@ -193,6 +237,8 @@ class PiLink:
         try:
             while not self._stop.is_set():
                 self.poll()
+                if self._paused:
+                    self._stop.wait(PAUSED_WAIT_S)
         except Exception:
             self._log.exception("Verbindung zum ESP abgebrochen")
             with self._lock:
