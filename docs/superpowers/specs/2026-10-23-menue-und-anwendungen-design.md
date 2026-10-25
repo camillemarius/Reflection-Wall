@@ -138,7 +138,7 @@ Menü. Eine Tastatur oder SSH braucht es nicht mehr.
 | Nr. | Vorschlag | Warum |
 |---|---|---|
 | V5 | Die Webseite läuft auf Port 80. | Mit Port enthielte die Adresse ein `:`, und das zeigt die Wand heute als `/`. |
-| V6 | D1 gilt mit einer Ausnahme: Läuft die Anwendung Radar, fährt der ESP den Pi nach 60 min herunter (S3-a bleibt). | Im Radar-Modus gehört die UART dem Radar. Der ESP kann dann nicht prüfen, ob der Pi noch lebt. |
+| V6 | D1 gilt mit einer Ausnahme: Läuft die Anwendung Radar, fährt der ESP den Pi nach 60 min herunter (S3-a bleibt). Ergänzt durch R15 (Plan Teil 2, vom Owner bestätigt 2026-10-25): Die Anwendung Radar endet schon nach 55 min von selbst. Der Pi schaltet zurück auf den ESP und schickt `DONE`. Die 60 min des ESP bleiben als Rückfall für einen Pi, der im Radar hängt. | Im Radar-Modus gehört die UART dem Radar. Der ESP kann dann nicht prüfen, ob der Pi noch lebt. |
 | V7 | Reflection von Hand: Der erste Gedanke entsteht nur aus dem Thema. Jeder weitere baut auf dem vorherigen auf, solange man in der Anwendung bleibt. Verlässt man sie, ist alles vergessen. Die alte Datenbank wird nicht mehr gelesen. | Folgt aus D12: Nichts wird gespeichert, also kann auch nichts von früher zurückkommen. Innerhalb einer Runde entsteht trotzdem eine kleine Kette. |
 
 **Stand der Runde B (Owner, 2026-10-25):** V5, V6 und V7 sind angenommen.
@@ -282,8 +282,11 @@ Das Radar braucht die UART des Pi. Deshalb läuft es wie der Radar-Debug (S3-a),
 6. Bei BT4 zeigt er wieder das Menü. Bei BT2 hat sich der ESP den Druck gemerkt
    (§7, `pendingShutdown`) und fährt den Pi jetzt herunter.
 
-Läuft das Radar länger als 60 min, fährt der ESP den Pi herunter (V6). Die
-Radar-Einrichtung schaltet auf dieselbe Weise um und liest die Tasten genauso.
+Nach 55 min beendet der Pi das Radar selbst. Er schaltet zurück wie in Schritt 5
+und schickt dann `DONE` (R15). Ein `SHUTDOWN` des ESP käme im Radar-Modus nie an,
+denn die UART gehört dann dem Radar. Hängt der Pi im Radar, fährt der ESP ihn nach
+60 min herunter (V6). Die Radar-Einrichtung schaltet auf dieselbe Weise um und liest
+die Tasten genauso.
 
 ## 8. Themen und Webseite
 

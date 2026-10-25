@@ -73,6 +73,7 @@ Pi nimmt keinen Schaden, und keine Nachricht geht unbemerkt verloren.
 | L2 | Solange `GET\|QUOTE` offen ist, pausiert das `PING`. Die Frist von 120 s ersetzt es; ohne Antwort gilt die Nacht als Fehlversuch, und der ESP fährt den Pi herunter | 2026-10-25 |
 | L3 | Der ESP behandelt `READY` nie als Wiederholung (gleiche Nummer nach einem Neustart des Pi-Dienstes). Kommt `READY` in einer Sitzung, antwortet er `OK` und schickt das `SESSION\|…` noch einmal | 2026-10-25 |
 | L4 | Teil 4b (die ESP-Seite von Teil 4: `SESSION`, BT4–BT6, Tasten je Zustand, Anzeigen beim Start und Ausschalten, `MODE`) wird Teil von Teil 2, mit einem gemeinsamen Plan | 2026-10-25 |
+| R15 | Die Anwendung Radar des Pi endet nach 55 min von selbst. Der Pi schaltet die UART zurück (`MODE\|NORMAL`) und schickt `DONE`. Grund: Im Radar-Debug gehört die UART dem Radar, ein `SHUTDOWN` des ESP käme nie an. Die 60 min des ESP bleiben als Rückfall für einen Pi, der im Radar-Debug hängt (Plan Teil 2, vom Owner bestätigt) | 2026-10-25 |
 
 A1–A6 waren in Runde 1 als Annahmen formuliert; du hast sie bestätigt. Die
 Begründungen und Gegenprüfungen standen in den Rundendateien der
@@ -245,7 +246,7 @@ Frage, die die Zeichnung beantwortet: *In welchen Zuständen ist der ESP, währe
 ```
                  BT2 (Pi aus) oder Mitternachts-Termin
    ┌──────────┐ ─────────────────────────────────► ┌───────────────┐
-   │   AUS    │                                    │  EINSCHALTEN  │ PING wiederholt
+   │   AUS    │                                    │  EINSCHALTEN  │ kein PING, der Pi wiederholt READY
    │Deep Sleep│ ◄── kein READY bis T_boot ──────── │ wartet READY  │
    └──────────┘     (hart aus)                     └───────┬───────┘
         ▲                                                  │ READY
@@ -267,7 +268,8 @@ Frage, die die Zeichnung beantwortet: *In welchen Zuständen ist der ESP, währe
                       (Speisung aus)               └───────────────┘
 ```
 
-*Gezeichnet 2026-10-19 aus den Entscheiden A3, E3, E4-a, S1-a, S3-a; „3 h“ entfernt nach Teil 4 D1.
+*Gezeichnet 2026-10-19 aus den Entscheiden A3, E3, E4-a, S1-a, S3-a; „3 h“ entfernt nach Teil 4 D1;
+„PING wiederholt“ in EINSCHALTEN ersetzt nach L1 und Plan Teil 2 R7 (2026-10-25).
 „Hart aus“ heisst: Speisung trennen ohne Herunterfahren, mit Eintrag im Log.*
 
 Regeln, die die Zeichnung nicht zeigt:
@@ -276,9 +278,11 @@ Regeln, die die Zeichnung nicht zeigt:
   Pi eingeschaltet hat, sonst `SESSION|NACHT`. Nur bei `HAND` zeigt der Pi das Menü.
   BT2 während EINSCHALTEN merkt sich der ESP und fährt den Pi nach `READY` gleich
   wieder herunter.
-- **PING (E3)** läuft im Zustand BETRIEB. In EINSCHALTEN übernimmt das wiederholte
-  PING bis `READY` diese Rolle, in HERUNTERFAHREN die Wiederholung von `SHUTDOWN`
-  mit ihrer Frist. In RADAR-DEBUG ist es nach S3-a ausgesetzt.
+- **PING (E3)** läuft im Zustand BETRIEB. In EINSCHALTEN schickt der ESP kein PING
+  (Plan Teil 2, R7): Der Pi wiederholt `READY` selbst, bis `OK` kommt (L1), und
+  `T_boot` fängt einen Pi ab, der nie meldet. In HERUNTERFAHREN übernimmt die
+  Wiederholung von `SHUTDOWN` mit ihrer Frist die Rolle des PING. In RADAR-DEBUG ist
+  es nach S3-a ausgesetzt.
 - Der Zustand liegt im RTC-Speicher (Abschnitt 11). Jeder Reset durch eine Taste
   oder das Radar (F4) führt zurück in denselben Zustand; der ESP liest dann den
   Grund und macht weiter.
@@ -417,7 +421,8 @@ Was der ESP in den anderen Zuständen mit einer Taste tut, steht in Teil 4,
 Tabelle 5.2.
 
 Jeder Pegelwechsel an einer der sechs Tasten ist ein Druck (`InputTrigger::ANY_EDGE`).
-Bis Teil 4 stehen BT4–BT6 in der Firmware noch auf `InputTrigger::NONE`.
+Seit Teil 2 stehen auch BT4–BT6 in der Firmware auf `InputTrigger::ANY_EDGE`.
+
 **I²C während einer Sitzung (Entscheid B, 2026-10-22).** Ein Tastendruck oder
 eine Radar-Flanke setzt den ESP zurück. Danach holt er sich sofort den I²C-Bus
 (GPIO15 HIGH), liest den Expander und gibt den Bus zurück. Der Pi sieht dieselben
@@ -450,7 +455,7 @@ Stromausfall). Das Layout ändert sich, deshalb neue `MAGIC`.
 | `wakeCount` | wie heute: Anzahl Weckvorgänge, im Log |
 | `session` | Zustand aus Abschnitt 7 |
 | `piPowered` | ob der ESP die Speisung zuletzt eingeschaltet hat |
-| `sessionSeconds` | verstrichene Sitzungszeit, alle 10 s gesichert; nur noch fürs Log, die 3 h entfallen (Teil 4 D1) |
+| `sessionSeconds` | verstrichene Sitzungszeit, in jedem Takt der Sitzung gesichert (etwa alle 20 ms); nur noch fürs Log, die 3 h entfallen (Teil 4 D1) |
 | `pendingShutdown` | BT2 während RADAR-DEBUG gedrückt |
 | `display` | aus / an / wird geschrieben |
 | `shownIndex`, `shownDate` | Platz und Datum des Zitats, das gerade zu sehen ist (T2-a); massgeblich ist das Datum, der Platz hilft bei gleichen Daten |
@@ -533,7 +538,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | `T_boot` | 120 s | vom Einschalten bis `READY` | Entwurf |
 | `T_shutdown` | 60 s | auf `SHUTDOWN` keine Antwort | Entwurf |
 | BUSY-Wiederholung | 30 s | | Entwurf |
-| BUSY höchstens | 10 min | ab erstem `SHUTDOWN` | Entscheid (S1-a) |
+| BUSY höchstens | 10 min | ab Eintritt in HERUNTERFAHREN, also ab dem Moment, in dem das erste `SHUTDOWN` fällig ist | Entscheid (S1-a) |
 | `T_halt` | 30 s | **wird bei der Inbetriebnahme gemessen** und auf das Doppelte gesetzt | Entscheid (E4-a) |
 | ~~Sitzung höchstens~~ | ~~3 h~~ | entfällt | Teil 4 D1 |
 | Pi ohne Aktivität bis `DONE` | 15 min | nur wenn der Schalter an ist, Standard aus | Teil 4 D2, F6 |
@@ -565,7 +570,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | Stromausfall | Kaltstart: Pi ist aus (Flipflop zurückgesetzt), Uhr unbekannt → NTP; die Liste bleibt (FRAM oder `/quotes.txt`) |
 | WLAN fehlt um Mitternacht | Auftrag nach eigener Uhr; der Pi braucht aber Internet für die KI – meist folgt ein KI-Fehler und der nächste Termin |
 | Flasher steckt | keine Verbindung; wie „Pi bootet nicht“ |
-| Pi hängt im Radar-Debug | nach 60 min `SHUTDOWN`; ohne Antwort nach `T_shutdown` hart aus |
+| Pi hängt im Radar-Debug | Ein laufender Pi beendet das Radar schon nach 55 min selbst und schickt `DONE` (R15). Hängt er, schickt der ESP nach 60 min `SHUTDOWN`; ohne Antwort nach `T_shutdown` hart aus |
 | Frist einer Nachricht abgelaufen | siehe Tabelle in 6.2 |
 
 ---
