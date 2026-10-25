@@ -4,8 +4,9 @@ import threading
 import time
 import unittest
 
-from app.link.codec import Message
-from app.link.pi_link import LinkBusy
+from app.link.codec import Message, decode, encode
+from app.link.pi_link import LinkBusy, PiLink
+from app.link.tests.fakes import FakePort
 from app.ui.activity import Activity
 from app.ui.app_host import StopSignal
 from app.ui.buttons import QueueButtons
@@ -128,6 +129,39 @@ class DispatchTest(unittest.TestCase):
         self.assertEqual(self.link.replies, [(9, "OK", "")])
         self.assertEqual(self.shutdowns, [1])
 
+    def test_second_shutdown_gets_ok_and_on_shutdown_runs_once(self):
+        # I-1: der ESP sendet SHUTDOWN nach einem Reset noch einmal, mit neuer Nummer (R8)
+        self.released.set()
+        self.link.incoming.put(Message(9, "SHUTDOWN", ""))
+        self.assertTrue(self.d.shutdown_done.wait(1.0))
+        self.link.incoming.put(Message(10, "SHUTDOWN", ""))
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 2))
+        self.assertEqual(self.link.replies, [(9, "OK", ""), (10, "OK", "")])
+        self.assertEqual(self.shutdowns, [1])
+
+    def test_shut_down_once_calls_on_shutdown_only_the_first_time(self):
+        self.assertTrue(self.d.shut_down_once())
+        self.assertTrue(self.d.shutdown_done.is_set())
+        self.assertFalse(self.d.shut_down_once())
+        self.released.set()
+        self.link.incoming.put(Message(9, "SHUTDOWN", ""))
+        self.assertTrue(wait_for(lambda: self.link.replies))
+        self.assertEqual(self.link.replies, [(9, "OK", "")])
+        self.assertEqual(self.shutdowns, [1])
+
+    def test_shut_down_once_sets_done_even_if_on_shutdown_raises(self):
+        def failing():
+            self.shutdowns.append(1)
+            raise OSError("sudo fehlt")
+
+        d = LinkDispatcher(self.link, self.buttons, self.activity, self.stop, self.released,
+                           on_shutdown=failing)
+        with self.assertLogs("app.ui.link_dispatch", "ERROR"):
+            self.assertTrue(d.shut_down_once())
+        self.assertTrue(d.shutdown_done.is_set())
+        self.assertFalse(d.shut_down_once())
+        self.assertEqual(self.shutdowns, [1])
+
     def test_shutdown_busy_does_not_set_shutdown_done(self):
         self.d.radar_writing.set()
         self.link.incoming.put(Message(4, "SHUTDOWN", ""))
@@ -145,6 +179,45 @@ class DispatchTest(unittest.TestCase):
         t0 = time.monotonic()
         self.d.stop()
         self.assertLess(time.monotonic() - t0, 0.5)
+
+
+class RealLinkShutdownTest(unittest.TestCase):
+    """Mit dem echten PiLink: Nummern und offene Anfragen wie auf der Leitung."""
+
+    def setUp(self):
+        self.port = FakePort()
+        self.link = PiLink(self.port)
+        self.link.start()
+        self.addCleanup(self.link.stop)
+        self.stop, self.released, self.shutdowns = StopSignal(), threading.Event(), []
+        self.d = LinkDispatcher(self.link, QueueButtons(), Activity(), self.stop, self.released,
+                                on_shutdown=lambda: self.shutdowns.append(1), release_wait_s=2.0)
+        self.d.start()
+        self.addCleanup(self.d.stop)
+        self._tx = b""
+
+    def answers(self):
+        self._tx += self.port.take_tx()
+        return [(m.seq, m.command) for m in (decode(line) for line in self._tx.split(b"\n") if line)]
+
+    def feed(self, seq, command):
+        self.port.feed(encode(Message(seq, command, "")) + b"\n")
+
+    def test_second_shutdown_while_the_first_waits_gets_ok(self):
+        # Waehrend das erste SHUTDOWN auf die Anzeige wartet, kommt ein neues (Reset des ESP).
+        # PiLink kennt nur noch die neue Nummer: das OK auf das erste geht nicht raus (mit
+        # Log), das neue bekommt seins, und on_shutdown laeuft einmal.
+        self.feed(0x20, "SHUTDOWN")
+        self.assertTrue(wait_for(self.stop.is_set))
+        self.feed(0x21, "SHUTDOWN")
+        self.assertTrue(wait_for(lambda: self.port.unread() == 0))
+        time.sleep(0.05)  # PiLink hat die Zeile gelesen und gemeldet
+        with self.assertLogs("app.ui.link_dispatch", "INFO") as logs:
+            self.released.set()
+            self.assertTrue(wait_for(lambda: (0x21, "OK") in self.answers()))
+        self.assertNotIn((0x20, "OK"), self.answers())
+        self.assertIn("#20", "\n".join(logs.output))
+        self.assertEqual(self.shutdowns, [1])
 
 
 class SendDoneTest(unittest.TestCase):

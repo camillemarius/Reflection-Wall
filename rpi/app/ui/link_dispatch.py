@@ -39,6 +39,7 @@ class LinkDispatcher:
         self.session_event = threading.Event()
         self.session_reason = None
         self.shutdown_done = threading.Event()
+        self._shutdown_lock = threading.Lock()
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -98,12 +99,26 @@ class LinkDispatcher:
         self._stop_signal.set("shutdown")
         if not self._released.wait(self._release_wait_s):
             log.warning("Anzeige nach %.1f s nicht freigegeben", self._release_wait_s)
-        self._link.reply(msg, "OK")
-        try:
-            self._on_shutdown()
-        except Exception:
-            log.exception("Herunterfahren fehlgeschlagen")
-        self.shutdown_done.set()
+        if not self._link.reply(msg, "OK"):
+            # Waehrend des Wartens kam eine neuere Anfrage (der ESP sendet SHUTDOWN nach einem
+            # Reset neu, R8). PiLink kennt nur noch deren Nummer; sie bekommt ihr OK gleich danach.
+            log.info("OK auf SHUTDOWN #%02X nicht gesendet, die Anfrage ist nicht mehr offen",
+                     msg.seq)
+        if not self.shut_down_once():
+            log.info("SHUTDOWN noch einmal beantwortet, das Herunterfahren laeuft schon")
+
+    def shut_down_once(self) -> bool:
+        """Ruft on_shutdown hoechstens einmal auf und setzt danach shutdown_done, auch wenn
+        on_shutdown wirft. True nur beim ersten Aufruf. Ein SHUTDOWN kann mehrfach kommen (R8)."""
+        with self._shutdown_lock:
+            if self.shutdown_done.is_set():
+                return False
+            try:
+                self._on_shutdown()
+            except Exception:
+                log.exception("Herunterfahren fehlgeschlagen")
+            self.shutdown_done.set()
+            return True
 
     def send_done(self, timeout_s: float = 30.0) -> bool:
         deadline = self._clock() + timeout_s

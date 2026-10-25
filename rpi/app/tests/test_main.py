@@ -11,7 +11,8 @@ from unittest import mock
 from app import main as app_main
 from app.applications import settings_apps
 from app.driver.display.wall_display import WallDisplay
-from app.link.codec import Message
+from app.link.codec import Message, decode, encode, role_of
+from app.link.tests.fakes import FakePort
 from app.ui.activity import Activity
 from app.ui.app_host import AppContext, StopApp, StopSignal, run_app
 from app.ui.buttons import BT4, QueueButtons, _SmbusReader
@@ -172,18 +173,45 @@ class WallLink:
         return fut
 
 
+def frame(seq, command, data=""):
+    return encode(Message(seq, command, data)) + b"\n"
+
+
+class LinePort(FakePort):
+    """Port fuer den echten PiLink: der Test spielt den ESP und liest mit, was der Pi sendet."""
+
+    def __init__(self, events):
+        super().__init__()
+        self.events = events
+        self._sent = b""
+
+    def close(self):
+        self.events.append(("port", "close"))
+
+    def sent(self):
+        """Alles, was der Pi bisher gesendet hat, als Nachrichten."""
+        self._sent += self.take_tx()
+        return [decode(line) for line in self._sent.split(b"\n") if line]
+
+
 class WallRun:
     """main() im Wand-Modus in einem eigenen Thread. Bus, Port, PiLink, BusGuard und power_off
-    sind Fakes; was sie sehen, steht der Reihe nach in events."""
+    sind Fakes; was sie sehen, steht der Reihe nach in events.
 
-    def __init__(self, test, apps=None, run_wall=None):
+    Mit real_link=True laeuft der echte PiLink auf einem LinePort: put() schreibt dann Zeilen
+    wie der ESP, und port.sent() zeigt, was der Pi geantwortet hat.
+
+    Nach der Sitzung bedient main() weiter, bis der Prozess endet (I-1). Das Warten darauf ist
+    hier ein Event: serving ist gesetzt, sobald main() wartet; end_process() beendet es, wie
+    systemd beim Herunterfahren."""
+
+    def __init__(self, test, apps=None, run_wall=None, real_link=False):
         self.events = []
         self.bus = FakeBus(self.events)
-        self.link = WallLink(self.events)
         self.guard = FakeGuard(self.events)
-        self.port = mock.Mock()
-        self.port.close.side_effect = lambda: self.events.append(("port", "close"))
         self.power_off = mock.Mock(side_effect=lambda: self.events.append(("power_off",)))
+        self.serving = threading.Event()
+        self.process_end = threading.Event()
         self._seq = 0
         self._stack = contextlib.ExitStack()
         test.addCleanup(self._stack.close)
@@ -193,7 +221,15 @@ class WallRun:
         self.patch("load_dotenv")
         self.patch("idle_minutes_from_env", return_value=0)
         self.patch("open_esp_port", side_effect=self._open_port)
-        self.pilink = self.patch("PiLink", return_value=self.link)
+        if real_link:
+            self.link = None
+            self.port = LinePort(self.events)
+        else:
+            self.link = WallLink(self.events)
+            self.port = mock.Mock()
+            self.port.close.side_effect = lambda: self.events.append(("port", "close"))
+            self.pilink = self.patch("PiLink", return_value=self.link)
+        self.patch("_wait_for_process_end", side_effect=self._wait_for_end)
         self.patch("BusGuard", return_value=self.guard)
         self.patch("power_off", self.power_off)
         self.wall_display = self.patch(
@@ -216,21 +252,58 @@ class WallRun:
         self.events.append(("port", "open"))
         return self.port
 
+    def _wait_for_end(self):
+        self.serving.set()
+        self.process_end.wait(10)
+
     def _end(self):
         if self.thread.is_alive():
-            self.put("SHUTDOWN")
+            if not self.serving.is_set():
+                self.put("SHUTDOWN")  # die Sitzung laeuft noch
+            self.process_end.set()
             self.thread.join(3)
 
     def start(self):
-        """Startet main(); True, sobald READY gesendet wurde."""
+        """Startet main(); True, sobald READY gesendet (mit echtem PiLink: und beantwortet) ist."""
         self.thread.start()
-        return wait_for(lambda: ("request", "READY") in self.events)
+        if self.link is not None:
+            return wait_for(lambda: ("request", "READY") in self.events)
+        if not wait_for(lambda: self.sent("READY")):
+            return False
+        self.port.feed(frame(self.sent("READY")[-1].seq, "OK"))
+        return True
 
     def put(self, command, data=""):
-        """Eine Anfrage des ESP; der Zeitpunkt steht als ("put", command, data) in events."""
+        """Eine Anfrage des ESP; der Zeitpunkt steht als ("put", command, data) in events.
+        Gibt die Nummer zurueck."""
         self._seq += 1
         self.events.append(("put", command, data))
-        self.link.incoming.put(Message(self._seq, command, data))
+        if self.link is not None:
+            self.link.incoming.put(Message(self._seq, command, data))
+        else:
+            self.port.feed(frame(self._seq, command, data))
+        return self._seq
+
+    def sent(self, command):
+        """Mit echtem PiLink: was der Pi mit diesem Befehl gesendet hat."""
+        return [m for m in self.port.sent() if m.command == command]
+
+    def answers(self):
+        """Mit echtem PiLink: die Antworten des Pi als (Nummer, Befehl)."""
+        return [(m.seq, m.command) for m in self.port.sent() if role_of(m.command) == "response"]
+
+    def replies(self, command):
+        """Mit WallLink: die Antworten des Pi auf diesen Befehl, der Reihe nach."""
+        return [e[2] for e in list(self.events) if e[0] == "reply" and e[1] == command]
+
+    def wait_serving(self):
+        """True, sobald main() nach der Sitzung nur noch bedient und auf das Prozessende wartet."""
+        return wait_for(self.serving.is_set)
+
+    def end_process(self, timeout=1.5):
+        """Wie systemd beim Herunterfahren: das Warten endet, main() raeumt auf und kehrt zurueck."""
+        self.process_end.set()
+        return self.join(timeout)
 
     def join(self, timeout=1.5):
         self.thread.join(timeout)
@@ -494,7 +567,8 @@ class MainTest(unittest.TestCase):
         wall.put("SESSION", "HAND")
         self.assertTrue(wait_for(lambda: run_wall.called))
         wall.put("SHUTDOWN")
-        self.assertTrue(wall.join())
+        self.assertTrue(wall.wait_serving())
+        self.assertTrue(wall.end_process())
         wall.smbus.assert_called_once_with(1)
         self.assertEqual([e for e in wall.events if e[0] in ("smbus", "guard", "port", "link")][:4],
                          [("smbus", 1), ("guard", "start"), ("port", "open"), ("link", "start")])
@@ -532,7 +606,7 @@ class MainTest(unittest.TestCase):
         wall.put("BUTTON", "6")
         self.assertTrue(wait_for(lambda: wall.shown()[-1][:2] == ["  A", "> B"]))
         wall.put("SHUTDOWN")
-        self.assertTrue(wall.join())
+        self.assertTrue(wall.wait_serving())
         wall.power_off.assert_called_once_with()
 
     def test_auto_off_counts_from_the_menu_start(self):
@@ -551,7 +625,7 @@ class MainTest(unittest.TestCase):
         now[0] = 122.0
         self.assertTrue(wait_for(lambda: "DONE" in wall.requests()))
         wall.put("SHUTDOWN")
-        self.assertTrue(wall.join())
+        self.assertTrue(wall.wait_serving())
 
     def test_nacht_keeps_display_dark_until_shutdown(self):
         wall = WallRun(self)
@@ -560,8 +634,9 @@ class MainTest(unittest.TestCase):
         self.assertTrue(wait_for(lambda: ("reply", "SESSION", "OK") in wall.events))
         time.sleep(0.2)
         self.assertTrue(wall.thread.is_alive())  # wartet auf SHUTDOWN
+        self.assertFalse(wall.serving.is_set())
         wall.put("SHUTDOWN")
-        self.assertTrue(wall.join())
+        self.assertTrue(wall.wait_serving())
         self.assertIn(("reply", "SHUTDOWN", "OK"), wall.events)
         wall.power_off.assert_called_once_with()
         self.assertEqual(wall.display_writes(), [])
@@ -572,7 +647,7 @@ class MainTest(unittest.TestCase):
         wall = WallRun(self)
         self.assertTrue(wall.start())
         wall.put("SHUTDOWN")
-        self.assertTrue(wall.join())
+        self.assertTrue(wall.wait_serving())
         self.assertIn(("reply", "SHUTDOWN", "OK"), wall.events)
         wall.power_off.assert_called_once_with()
         self.assertEqual(wall.display_writes(), [])
@@ -597,7 +672,7 @@ class MainTest(unittest.TestCase):
         wall.put("BUTTON", "5")
         self.assertTrue(entered.wait(2))
         wall.put("SHUTDOWN")
-        self.assertTrue(wall.join())
+        self.assertTrue(wall.wait_serving())
         ok = wall.position(("reply", "SHUTDOWN", "OK"))
         self.assertLess(wall.position(("left",)), ok)
         self.assertLess(ok, wall.position(("power_off",)))
@@ -626,7 +701,7 @@ class MainTest(unittest.TestCase):
         wall.put("BUTTON", "5")
         self.assertTrue(running.wait(2))
         wall.put("SHUTDOWN")
-        self.assertTrue(wall.join())
+        self.assertTrue(wall.wait_serving())
         self.assertIn(["ENDE"], wall.shown())
         self.assertLess(max(wall.display_writes()), wall.position(("reply", "SHUTDOWN", "OK")))
 
@@ -660,7 +735,7 @@ class MainTest(unittest.TestCase):
         self.assertTrue(running.wait(2))
         wall.guard.delay = 0.03  # ab jetzt: 12 Module brauchen zusammen etwa 0,36 s
         wall.put("SHUTDOWN")
-        self.assertTrue(wall.join())
+        self.assertTrue(wall.wait_serving())
         ok = wall.position(("reply", "SHUTDOWN", "OK"))
         self.assertIn(full_screen, wall.shown())
         self.assertLess(max(wall.display_writes()), ok)
@@ -681,7 +756,7 @@ class MainTest(unittest.TestCase):
         wall.put("SHUTDOWN")
         self.assertTrue(wait_for(lambda: ("reply", "SHUTDOWN", "OK") in wall.events))
         go.set()
-        self.assertTrue(wall.join())
+        self.assertTrue(wall.wait_serving())
         wall.power_off.assert_called_once_with()
         self.assertEqual(wall.display_writes(), [])
 
@@ -692,9 +767,9 @@ class MainTest(unittest.TestCase):
         wall.put("SESSION", "HAND")
         self.assertTrue(wait_for(lambda: "DONE" in wall.requests()))
         time.sleep(0.2)
-        self.assertTrue(wall.thread.is_alive())  # wartet auf SHUTDOWN
+        self.assertFalse(wall.serving.is_set())  # wartet auf SHUTDOWN
         wall.put("SHUTDOWN")
-        self.assertTrue(wall.join())
+        self.assertTrue(wall.wait_serving())
         self.assertEqual(wall.requests(), ["READY", "DONE"])
         wall.power_off.assert_called_once_with()
 
@@ -710,10 +785,103 @@ class MainTest(unittest.TestCase):
         self.assertTrue(wall.start())
         with self.assertLogs("app.main", "ERROR"):
             wall.put("SHUTDOWN")
-            self.assertTrue(wall.join())
+            self.assertTrue(wall.wait_serving())
+            self.assertTrue(wall.end_process())
         wall.link.stop.assert_called_once_with()
         self.assertIn(("port", "close"), wall.events)
         self.assertIn(("guard", "stop"), wall.events)
+
+    # --- I-1: nach dem OK auf SHUTDOWN weiter bedienen, bis der Prozess endet ---------------
+
+    def test_second_shutdown_after_ok_gets_ok_and_powers_off_once(self):
+        # Ein Reset des ESP in HERUNTERFAHREN sendet SHUTDOWN noch einmal, mit neuer Nummer
+        # (R8). Der Pi hat schon geantwortet und power_off gerufen; er bleibt an der Leitung.
+        wall = WallRun(self)
+        self.assertTrue(wall.start())
+        wall.put("SESSION", "HAND")
+        self.assertTrue(wait_for(lambda: wall.shown()))
+        wall.put("SHUTDOWN")
+        self.assertTrue(wall.wait_serving())
+        wall.put("SHUTDOWN")
+        self.assertTrue(wait_for(lambda: wall.replies("SHUTDOWN") == ["OK", "OK"]))
+        wall.power_off.assert_called_once_with()
+        self.assertTrue(wall.thread.is_alive())
+        self.assertNotIn(("link", "stop"), wall.events)
+        self.assertTrue(wall.end_process())
+        for event in (("link", "stop"), ("port", "close"), ("guard", "stop")):
+            self.assertIn(event, wall.events)
+
+    def test_second_shutdown_while_the_first_waits_gets_ok_real_link(self):
+        # Mit dem echten PiLink: das zweite SHUTDOWN kommt, waehrend das erste noch auf die
+        # Anzeige wartet. PiLink kennt dann nur noch die neue Nummer, das OK auf das erste
+        # geht nicht mehr raus (pi_link.py reply). Das neue SHUTDOWN bekommt sein OK.
+        entered, leaving, finish = threading.Event(), threading.Event(), threading.Event()
+
+        def slow_leave(ctx):
+            entered.set()
+            try:
+                while True:
+                    ctx.wait_button()
+            finally:
+                leaving.set()
+                finish.wait(2)  # wie leave() der Radar-Umschaltung: die Anzeige ist noch belegt
+
+        wall = WallRun(self, apps=[FakeApp("A", run=slow_leave)], real_link=True)
+        self.assertTrue(wall.start())
+        session = wall.put("SESSION", "HAND")
+        self.assertTrue(wait_for(lambda: wall.shown()))
+        self.assertIn((session, "OK"), wall.answers())
+        wall.put("BUTTON", "5")
+        self.assertTrue(entered.wait(2))
+        first = wall.put("SHUTDOWN")
+        self.assertTrue(leaving.wait(2))  # das erste SHUTDOWN wartet jetzt auf die Anzeige
+        second = wall.put("SHUTDOWN")     # der ESP sendet nach einem Reset neu
+        self.assertTrue(wait_for(lambda: wall.port.unread() == 0))
+        time.sleep(0.05)                  # PiLink hat die Zeile gelesen und gemeldet
+        finish.set()
+        self.assertTrue(wait_for(lambda: (second, "OK") in wall.answers()))
+        self.assertNotIn((first, "OK"), wall.answers())
+        self.assertTrue(wall.wait_serving())
+        wall.power_off.assert_called_once_with()
+        third = wall.put("SHUTDOWN")      # noch ein Reset
+        self.assertTrue(wait_for(lambda: (third, "OK") in wall.answers()))
+        wall.power_off.assert_called_once_with()
+        self.assertTrue(wall.end_process())
+
+    def test_shutdown_before_ok_to_ready_serves_on(self):
+        # T9-a: kommt SHUTDOWN, bevor READY sein OK hat, gibt announce_ready False. Auch dann
+        # bleibt der Pi an der Leitung und beantwortet jedes weitere SHUTDOWN.
+        wall = WallRun(self)
+        wall.patch("announce_ready", side_effect=lambda link, stop: not stop.wait(2))
+        wall.thread.start()
+        wall.put("SHUTDOWN")
+        self.assertTrue(wall.wait_serving())
+        wall.put("SHUTDOWN")
+        self.assertTrue(wait_for(lambda: wall.replies("SHUTDOWN") == ["OK", "OK"]))
+        wall.power_off.assert_called_once_with()
+        self.assertEqual(wall.display_writes(), [])
+        self.assertTrue(wall.end_process())
+
+    def test_ctrl_c_while_serving_ends_main_and_cleans_up(self):
+        wall = WallRun(self)
+        wall.patch("_wait_for_process_end", side_effect=KeyboardInterrupt)
+        self.assertTrue(wall.start())
+        wall.put("SHUTDOWN")
+        self.assertTrue(wall.join())
+        for event in (("link", "stop"), ("port", "close"), ("guard", "stop")):
+            self.assertIn(event, wall.events)
+
+    def test_wait_for_process_end_sleeps_until_interrupted(self):
+        sleeps = []
+
+        def sleep(s):
+            sleeps.append(s)
+            if len(sleeps) == 3:
+                raise KeyboardInterrupt
+
+        with self.assertRaises(KeyboardInterrupt):
+            app_main._wait_for_process_end(sleep=sleep)
+        self.assertEqual(sleeps, [app_main.SERVE_POLL_S] * 3)
 
 
 if __name__ == "__main__":

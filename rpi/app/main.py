@@ -3,6 +3,7 @@
 import argparse
 import logging
 import threading
+import time
 
 from dotenv import load_dotenv
 
@@ -37,6 +38,7 @@ DONE_WAIT_S = 120.0       # nach DONE: so lange darf das SHUTDOWN des ESP brauch
 # fuer SHUTDOWN (T_shutdown, 60 s); deckt ein ganzes Bild bei haengendem INT_GPIO_EXP
 # (Regel B wartet vor jedem der 12 Module bis zu 1 s).
 RELEASE_WAIT_S = 45.0
+SERVE_POLL_S = 1.0        # Takt des Wartens auf das Prozessende (Ctrl+C bricht es ab)
 
 
 class RadarPcPlaceholder:
@@ -161,6 +163,14 @@ def _await_power_off(dispatcher, result) -> None:
         log.warning("Nach %.0f s nicht heruntergefahren; der ESP schaltet trotzdem ab", wait_s)
 
 
+def _wait_for_process_end(sleep=time.sleep) -> None:
+    """Nach der Sitzung: Leitung und Dispatcher bleiben an, bis systemd den Prozess beim
+    Herunterfahren beendet. Sendet der ESP nach einem Reset SHUTDOWN noch einmal (R8), bekommt
+    es so sein OK. Kehrt nie zurueck; Ctrl+C bricht mit KeyboardInterrupt ab."""
+    while True:
+        sleep(SERVE_POLL_S)
+
+
 def _stop_quietly(name, action) -> None:
     try:
         action()
@@ -169,7 +179,8 @@ def _stop_quietly(name, action) -> None:
 
 
 def _serve_wall(stop, activity_minutes) -> None:
-    """Wand-Modus: READY, auf SESSION warten, Sitzung bedienen, auf das Herunterfahren warten."""
+    """Wand-Modus: READY, auf SESSION warten, Sitzung bedienen, auf das Herunterfahren warten.
+    Danach weiter bedienen, bis der Prozess endet (I-1)."""
     import smbus2  # erst hier: auf dem PC nicht installierbar
 
     bus = smbus2.SMBus(1)  # ein Bus fuer Anzeige und Radar-Tasten
@@ -187,8 +198,6 @@ def _serve_wall(stop, activity_minutes) -> None:
         dispatcher = LinkDispatcher(link, buttons, activity, stop, released,
                                     on_shutdown=power_off, release_wait_s=RELEASE_WAIT_S)
         dispatcher.start()
-        if not announce_ready(link, stop):  # L1
-            return
 
         def radar_factory():
             return RadarApp(
@@ -203,14 +212,18 @@ def _serve_wall(stop, activity_minutes) -> None:
                             radar_factory=radar_factory, dispatcher=dispatcher,
                             display_released=released)
 
-        reason = _await_session(dispatcher, stop)
-        if reason == "HAND":
-            result = _hand_session(start_menu, stop, released)
-        elif reason == "NACHT":
-            result = _night_session(stop)
-        else:  # SHUTDOWN vor SESSION (R9): die Anzeige bleibt beim ESP
-            result = stop.reason or "shutdown"
-        _await_power_off(dispatcher, result)
+        # announce_ready gibt False, wenn stop vor dem OK auf READY kam: ein SHUTDOWN, das der
+        # Dispatcher schon bearbeitet. Dann gibt es keine Sitzung, bedient wird trotzdem.
+        if announce_ready(link, stop):  # L1
+            reason = _await_session(dispatcher, stop)
+            if reason == "HAND":
+                result = _hand_session(start_menu, stop, released)
+            elif reason == "NACHT":
+                result = _night_session(stop)
+            else:  # SHUTDOWN vor SESSION (R9): die Anzeige bleibt beim ESP
+                result = stop.reason or "shutdown"
+            _await_power_off(dispatcher, result)
+        _wait_for_process_end()
     except KeyboardInterrupt:
         stop.set("shutdown")
     finally:
