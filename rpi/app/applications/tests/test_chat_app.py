@@ -1,3 +1,4 @@
+import threading
 import time
 import unittest
 
@@ -130,7 +131,8 @@ class ChatAppTest(unittest.TestCase):
     def test_ai_error_string_then_retry(self):
         answers = ["Fehler: Netz", "GUT"]
         app, ctx, display, rec, speaker, _ = make([(READY, 5), (REC, 5), ('NOCH EINMAL', 5), (READY, 4)], ask=lambda m: answers.pop(0))
-        run(app, ctx)
+        with self.assertLogs("app.applications.chat_app", level="ERROR"):
+            run(app, ctx)
         texts = display.texts()
         self.assertTrue(any("KI NICHT ERREICHBAR" in t for t in texts))
         self.assertEqual(speaker.spoken, ["GUT"])
@@ -141,14 +143,36 @@ class ChatAppTest(unittest.TestCase):
             raise ValueError("GROQ_API_KEY fehlt")
 
         app, ctx, display, _, speaker, _ = make([(READY, 5), (REC, 5), ('NICHT ERREICHBAR', 4)], ask=ask)
-        self.assertEqual(run(app, ctx), "back")
+        with self.assertLogs("app.applications.chat_app", level="ERROR"):
+            self.assertEqual(run(app, ctx), "back")
         self.assertTrue(any("KI NICHT ERREICHBAR" in t for t in display.texts()))
         self.assertEqual(speaker.spoken, [])
+
+    def test_empty_ai_answer_is_a_failure(self):
+        answers = ["   ", "GUT"]
+        app, ctx, display, rec, speaker, _ = make([(READY, 5), (REC, 5), ('NOCH EINMAL', 5), (READY, 4)], ask=lambda m: answers.pop(0))
+        with self.assertLogs("app.applications.chat_app", level="ERROR"):
+            run(app, ctx)
+        self.assertTrue(any("KI NICHT ERREICHBAR" in t for t in display.texts()))
+        self.assertEqual(speaker.spoken, ["GUT"])
 
     def test_bt4_while_recording_stops_recorder(self):
         app, ctx, _, rec, *_ = make([(READY, 5), (REC, 4)])
         self.assertEqual(run(app, ctx), "back")
+        deadline = time.monotonic() + 2
+        while rec.events != ["start", "stop"] and time.monotonic() < deadline:
+            time.sleep(0.01)
         self.assertEqual(rec.events, ["start", "stop"])
+
+    def test_bt4_while_recording_returns_without_waiting_for_transcription(self):
+        release = threading.Event()
+        rec = FakeRecorder()
+        rec.stop_recording = lambda: (release.wait(5), "")[1]
+        app, ctx, *_ = make([(READY, 5), (REC, 4)], recorder=rec)
+        started = time.monotonic()
+        self.assertEqual(run(app, ctx), "back")
+        self.assertLess(time.monotonic() - started, 1)
+        release.set()
 
     def test_long_answer_is_shortened_by_asking_again(self):
         answers = ["X" * 200, "KURZ"]

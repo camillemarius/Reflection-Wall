@@ -2,6 +2,7 @@
 # Chat auf der Wand: BT5 nimmt auf, BT5 beendet, die Wand zeigt die Antwort, der Lautsprecher sagt sie.
 # Die Antwort wird erst ganz angezeigt (Seiten mit BT5) und danach einmal gesprochen.
 import logging
+import threading
 
 from app.ui.app_host import StopApp
 from app.ui.buttons import BT5
@@ -36,8 +37,8 @@ class ChatApp:
         messages = [{"role": "system", "content": SHORT_RULE},
                     {"role": "user", "content": text}]
         answer = ask_short(lambda: ask(messages))
-        if answer.startswith("Fehler"):
-            raise RuntimeError(answer)
+        if not answer.strip() or answer.startswith("Fehler"):
+            raise RuntimeError(answer.strip() or "leere Antwort")
         return answer
 
     def _speak(self, text: str) -> None:
@@ -85,10 +86,17 @@ class ChatApp:
             return ctx.run_blocking(recorder.stop_recording) or ""
         finally:
             if recording:
-                try:
-                    recorder.stop_recording()
-                except Exception:
-                    log.exception("Aufnahme liess sich nicht beenden")
+                # Nur das Mikrofon freigeben: im Hintergrund, das Ergebnis wird verworfen,
+                # damit BT4 sofort ins Menue zurueckkehrt.
+                threading.Thread(target=self._discard, args=(recorder,),
+                                 name="chat-discard", daemon=True).start()
+
+    @staticmethod
+    def _discard(recorder) -> None:
+        try:
+            recorder.stop_recording()
+        except Exception:
+            log.exception("Aufnahme liess sich nicht beenden")
 
     def _answer(self, ctx, text: str) -> str:
         while True:
