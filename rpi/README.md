@@ -35,7 +35,7 @@ Im PC-Modus stehen die Ziffern 6, 5 und 4 für diese Tasten.
 
 Beim ersten Eintritt in CHAT lädt das Programm das Modell für die Spracherkennung. Dabei zeigt die Wand `MIKROFON WIRD VORBEREITET`. Danach bleibt das Modell geladen.
 
-RADAR zeigt an der Wand vorerst `FEHLER IN RADAR`. Die ESP-Firmware beantwortet `MODE` heute mit `ERROR|UNKNOWN`. Das ändert sich erst, wenn der ESP `MODE` versteht (Teil 2).
+RADAR funktioniert mit der ESP-Firmware dieses Stands. Der ESP versteht `MODE|RADAR` und `MODE|NORMAL`. Der Pi schaltet die Leitung um und wieder zurück (`app/link/radar_switch.py`). Das ist ungeprüft bis zur Abnahme am Gerät. Nach 55 min endet das Radar, siehe Ablauf mit dem ESP.
 
 Stürzt eine Anwendung ab, zeigt die Wand `FEHLER IN <NAME>` und `BT4 ZURUECK`. Den Grund schreibt das Programm ins Log.
 
@@ -93,7 +93,7 @@ Nach dem Start schickt der Pi `READY`, etwa alle 3 s, bis der ESP mit `OK` antwo
 
 Bei `SHUTDOWN` des ESP beendet der Pi die laufende Anwendung und schreibt die Anzeige nicht mehr. Er wartet bis zu 45 s, bis die Anzeige frei ist. Dann antwortet er `OK` und ruft `sudo -n /usr/bin/systemctl poweroff` auf. Den Strom schaltet der ESP `T_halt` später ab.
 
-Der Pi schickt `DONE`, wenn die Leerlaufzeit abläuft, die Shell abstürzt oder das Radar 55 min gelaufen ist. Im Radar-Modus gehört die UART dem Radar. Darum kommt der ESP dann nicht an den Pi heran. Danach schickt der ESP `SHUTDOWN`.
+Der Pi schickt `DONE`, wenn die Leerlaufzeit abläuft, die Shell abstürzt oder das Radar 55 min gelaufen ist. Beim Radar endet die Anwendung zuerst selbst und schaltet die UART zurück auf den ESP (GPIO23 LOW, 74 880 Baud, `MODE|NORMAL`). Erst dann schickt der Pi `DONE`. Danach schickt der ESP `SHUTDOWN`.
 
 ## Regel B (I²C-Bus)
 
