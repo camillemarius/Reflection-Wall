@@ -84,23 +84,6 @@ namespace
     // Takt der Sitzung. delay() fuettert dazwischen den Watchdog.
     constexpr unsigned long SESSION_TICK_MS = 20;
 
-    // Die Zeitzaehler aendern sich in jedem Takt. Ohne andere
-    // Aenderung reicht es, sie so oft zu sichern.
-    constexpr unsigned long SESSION_SAVE_MS = 1000;
-
-    // Alles ausser den Zeitzaehlern: Zustand, offene Anfrage,
-    // Flags, Aussetzer und Tasten
-    bool sameExceptTime(const SessionData& a, const SessionData& b)
-    {
-        return a.state == b.state &&
-               a.reason == b.reason &&
-               a.awaiting == b.awaiting &&
-               a.flags == b.flags &&
-               a.missedPings == b.missedPings &&
-               a.buttonCount == b.buttonCount &&
-               memcmp(a.buttons, b.buttons, sizeof(a.buttons)) == 0;
-    }
-
     // So oft liest die Wand den Radar, solange sie an ist. Das
     // Delay fuettert zugleich den Watchdog.
     constexpr unsigned long WALL_POLL_MS = 200;
@@ -382,7 +365,7 @@ void Application::saveState()
 // und die Verdrahtung. Jeder Takt holt alles ab, was auf der
 // Leitung wartet, und beantwortet eine Anfrage des Pi, bevor er
 // die naechste Zeile liest. Danach zaehlt onTick die Zeit und
-// schickt, was ansteht.
+// schickt, was ansteht, und der Zustand wird gesichert.
 //
 // R14: Der Pi schreibt jetzt auf den Bus. Der ESP gibt ihn hier
 // frei und nimmt ihn nur noch fuer seine eigenen Anzeigetexte
@@ -395,16 +378,14 @@ void Application::runSession(std::vector<SessionAction>& actions)
     I2CMasterControl::disable();
 
     // millis() zaehlt ab diesem Reset: der erste Takt nimmt die
-    // Zeit seit dem Start mit, nur der Reset selbst geht verloren (R1)
+    // Zeit seit dem Start mit (R1)
     unsigned long lastTick = 0;
-    unsigned long lastSave = millis();
     unsigned long discarded = _link.discarded();
 
     while (_session.active())
     {
         const unsigned long tickStart = millis();
-        const SessionData before = _state.session;
-        bool event = false;
+        const SessionState before = _state.session.state;
 
         // poll meldet ein Ereignis nach dem anderen: bis nichts mehr wartet
         while (true)
@@ -429,7 +410,6 @@ void Application::runSession(std::vector<SessionAction>& actions)
                     break;
             }
 
-            event = true;
             _session.onLink(ev, actions);
 
             // Die Antwort (Reply) muss raus, bevor poll weiterliest
@@ -449,21 +429,17 @@ void Application::runSession(std::vector<SessionAction>& actions)
         _session.onTick(now - lastTick, _link.busy(), actions);
         lastTick = now;
 
-        const bool acted = !actions.empty();
         executeActions(actions);
 
-        const SessionData& after = _state.session;
+        if (_state.session.state != before)
+            DebugSerial.printf("[SESSION] %s -> %s\n", stateName(before), stateName(_state.session.state));
 
-        if (after.state != before.state)
-            DebugSerial.printf("[SESSION] %s -> %s\n", stateName(before.state), stateName(after.state));
-
-        // Sichern, sobald sich ausser der Zeit etwas geaendert hat,
-        // sonst spaetestens jede Sekunde
-        if (event || acted || !sameExceptTime(before, after) || now - lastSave >= SESSION_SAVE_MS)
-        {
-            saveState();
-            lastSave = now;
-        }
+        // In jedem Takt sichern: die Zeitzaehler aendern sich in
+        // jedem Takt. Ein Reset verliert so ausser sich selbst nur
+        // die Zeit seit diesem Takt (R1), und auch eine schnelle
+        // Folge von Resets laesst die Fristen weiterlaufen. Kostet
+        // eine CRC ueber 52 Byte und 15 Woerter RTC-Speicher.
+        saveState();
 
         const unsigned long spent = millis() - tickStart;
 
