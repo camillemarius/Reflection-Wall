@@ -12,6 +12,7 @@ from app import main as app_main
 from app.applications import settings_apps
 from app.driver.display.wall_display import WallDisplay
 from app.link.codec import Message, decode, encode, role_of
+from app.link.pi_link import LinkBusy
 from app.link.tests.fakes import FakePort
 from app.ui.activity import Activity
 from app.ui.app_host import AppContext, StopApp, StopSignal, run_app
@@ -870,6 +871,54 @@ class MainTest(unittest.TestCase):
         self.assertTrue(wall.join())
         for event in (("link", "stop"), ("port", "close"), ("guard", "stop")):
             self.assertIn(event, wall.events)
+
+    # --- M-3: READY noch einmal, solange SESSION fehlt -------------------------------------
+
+    def _repeating_wall(self):
+        wall = WallRun(self)
+        wall.patch("READY_REPEAT_S", 0.05)
+        wall.patch("SESSION_POLL_S", 0.01)
+        return wall
+
+    def test_ready_repeats_until_session_comes(self):
+        # Hat der ESP das OK auf READY gegeben und vor dem Sichern einen Reset gehabt, steht er
+        # noch in EINSCHALTEN und sendet kein SESSION. Ein neues READY holt ihn zurueck (L3).
+        self.assertEqual(app_main.READY_REPEAT_S, 10.0)
+        wall = self._repeating_wall()
+        self.assertTrue(wall.start())
+        self.assertTrue(wait_for(lambda: wall.requests().count("READY") >= 3))
+        wall.put("SESSION", "HAND")
+        self.assertTrue(wait_for(lambda: wall.shown()))
+        count = wall.requests().count("READY")
+        time.sleep(0.2)
+        self.assertEqual(wall.requests().count("READY"), count)
+
+    def test_ready_repeat_ends_with_shutdown_before_session(self):
+        wall = self._repeating_wall()
+        self.assertTrue(wall.start())
+        self.assertTrue(wait_for(lambda: wall.requests().count("READY") >= 2))
+        wall.put("SHUTDOWN")
+        self.assertTrue(wall.wait_serving())
+        count = wall.requests().count("READY")
+        time.sleep(0.2)
+        self.assertEqual(wall.requests().count("READY"), count)
+        wall.power_off.assert_called_once_with()
+
+    def test_ready_repeat_skips_a_busy_link(self):
+        wall = self._repeating_wall()
+        original, calls = wall.link.request, []
+
+        def request(command, data=""):
+            calls.append(command)
+            if len(calls) > 1:
+                raise LinkBusy("Anfrage offen")
+            return original(command, data)
+
+        wall.link.request = request
+        self.assertTrue(wall.start())
+        self.assertTrue(wait_for(lambda: len(calls) >= 3))
+        wall.put("SESSION", "HAND")
+        self.assertTrue(wait_for(lambda: wall.shown()))
 
     def test_wait_for_process_end_sleeps_until_interrupted(self):
         sleeps = []

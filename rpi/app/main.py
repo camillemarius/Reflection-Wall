@@ -16,7 +16,7 @@ from app.applications.stickman_app import StickmanApp
 from app.driver.bus_rule import BusGuard
 from app.driver.display.terminal_display import TerminalDisplay
 from app.driver.display.wall_display import WallDisplay
-from app.link.pi_link import PiLink
+from app.link.pi_link import LinkBusy, PiLink
 from app.link.radar_switch import RadarSwitch
 from app.link.ready import announce_ready
 from app.link.serial_port import open_esp_port
@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 EXPIRY_POLL_S = 1.0
 SHELL_STOP_WAIT_S = 40.0  # leave() der Radar-Umschaltung wartet bis zu 30 s auf MODE|NORMAL
 SESSION_POLL_S = 0.1      # so oft schaut der Wand-Modus nach stop, solange er wartet
+READY_REPEAT_S = 10.0     # so oft geht READY noch einmal raus, solange SESSION fehlt (L3)
 SHUTDOWN_WAIT_S = 10.0    # nach SHUTDOWN: power_off laeuft schon im Dispatcher
 DONE_WAIT_S = 120.0       # nach DONE: so lange darf das SHUTDOWN des ESP brauchen
 # So lange wartet das OK auf SHUTDOWN auf die freigegebene Anzeige. Unter der Frist des ESP
@@ -125,12 +126,29 @@ def run_wall(display, buttons, activity, stop_event, link=None, radar_factory=No
     return result[0] if result else "error"
 
 
-def _await_session(dispatcher, stop):
-    """Grund der Sitzung ("HAND" oder "NACHT"); None, wenn vorher stop kam (R9)."""
+def _await_session(dispatcher, stop, link, clock=time.monotonic):
+    """Grund der Sitzung ("HAND" oder "NACHT"); None, wenn vorher stop kam (R9).
+
+    Fehlt SESSION, geht alle READY_REPEAT_S ein neues READY raus. Hatte der ESP nach seinem OK
+    auf READY einen Reset, bevor er gesichert hat, steht er noch in EINSCHALTEN. Das neue READY
+    bringt ihn in BETRIEB, und er sendet SESSION (L3)."""
+    last = clock()
     while not dispatcher.session_event.wait(SESSION_POLL_S):
         if stop.is_set():
             return None
+        if clock() - last >= READY_REPEAT_S:
+            last = clock()
+            _repeat_ready(link)
     return dispatcher.session_reason
+
+
+def _repeat_ready(link) -> None:
+    """Ein READY, ohne auf die Antwort zu warten; die braucht hier niemand."""
+    try:
+        link.request("READY")
+    except LinkBusy:
+        return  # eine Anfrage ist noch offen: beim naechsten Mal
+    log.info("Kein SESSION nach READY, READY noch einmal")
 
 
 def _hand_session(start_menu, stop, released) -> str:
@@ -215,7 +233,7 @@ def _serve_wall(stop, activity_minutes) -> None:
         # announce_ready gibt False, wenn stop vor dem OK auf READY kam: ein SHUTDOWN, das der
         # Dispatcher schon bearbeitet. Dann gibt es keine Sitzung, bedient wird trotzdem.
         if announce_ready(link, stop):  # L1
-            reason = _await_session(dispatcher, stop)
+            reason = _await_session(dispatcher, stop, link)
             if reason == "HAND":
                 result = _hand_session(start_menu, stop, released)
             elif reason == "NACHT":
