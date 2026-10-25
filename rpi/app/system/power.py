@@ -19,3 +19,17 @@ def power_off(runner=subprocess.run) -> bool:
         log.error("Herunterfahren fehlgeschlagen: Rueckgabecode %s", result.returncode)
         return False
     return True
+
+
+# Fragt sudo, ob die sudoers-Regel den Befehl ohne Passwort erlaubt (R6). Fuehrt ihn nicht aus.
+CHECK_CMD = ["sudo", "-n", "-l", "/usr/bin/systemctl", "poweroff"]
+CHECK_TIMEOUT_S = 5.0
+
+
+def can_power_off(runner=subprocess.run) -> bool:
+    """True, wenn die sudoers-Regel fuer power_off da ist. Fragt nie nach einem Passwort, wirft nie."""
+    try:
+        result = runner(CHECK_CMD, check=False, capture_output=True, timeout=CHECK_TIMEOUT_S)
+    except Exception:
+        return False
+    return result.returncode == 0

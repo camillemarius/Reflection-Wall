@@ -20,7 +20,7 @@ from app.link.pi_link import LinkBusy, PiLink
 from app.link.radar_switch import RadarSwitch
 from app.link.ready import announce_ready
 from app.link.serial_port import open_esp_port
-from app.system.power import power_off
+from app.system.power import can_power_off, power_off
 from app.ui.activity import Activity, idle_minutes_from_env
 from app.ui.app_host import DEFAULT_CONFIG_DIR, StopSignal
 from app.ui.buttons import ExpanderButtons, KeyboardButtons, QueueButtons, _SmbusReader
@@ -171,13 +171,22 @@ def _night_session(stop) -> str:
 
 def _await_power_off(dispatcher, result) -> None:
     """Nach der Sitzung: bei "idle" und "error" bittet der Pi mit DONE ums Ausschalten (nur
-    hier, genau einmal); dann wartet er, bis der Dispatcher das SHUTDOWN erledigt hat."""
+    hier, genau einmal); dann wartet er, bis der Dispatcher das SHUTDOWN erledigt hat.
+    Kommt nach einem bestaetigten DONE kein SHUTDOWN, faehrt der Pi selbst herunter: er
+    wollte ohnehin aus (M-4)."""
     wait_s = SHUTDOWN_WAIT_S
+    done = False
     if result in ("idle", "error"):
-        if not dispatcher.send_done():
+        done = dispatcher.send_done()
+        if not done:
             log.warning("DONE wurde nicht bestaetigt")
         wait_s = DONE_WAIT_S
-    if not dispatcher.shutdown_done.wait(wait_s):
+    if dispatcher.shutdown_done.wait(wait_s):
+        return
+    if done:
+        log.warning("Nach DONE %.0f s kein SHUTDOWN; der Pi faehrt selbst herunter", wait_s)
+        dispatcher.shut_down_once()
+    else:
         log.warning("Nach %.0f s nicht heruntergefahren; der ESP schaltet trotzdem ab", wait_s)
 
 
@@ -199,6 +208,9 @@ def _stop_quietly(name, action) -> None:
 def _serve_wall(stop, activity_minutes) -> None:
     """Wand-Modus: READY, auf SESSION warten, Sitzung bedienen, auf das Herunterfahren warten.
     Danach weiter bedienen, bis der Prozess endet (I-1)."""
+    if not can_power_off():  # R6, M-4
+        log.error("sudoers-Regel fuer 'systemctl poweroff' fehlt: der Pi kann sich nicht selbst "
+                  "herunterfahren, jedes Ende einer Sitzung trennt ihn hart (rpi/README.md)")
     import smbus2  # erst hier: auf dem PC nicht installierbar
 
     bus = smbus2.SMBus(1)  # ein Bus fuer Anzeige und Radar-Tasten

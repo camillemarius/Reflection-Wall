@@ -231,6 +231,7 @@ class WallRun:
             self.port.close.side_effect = lambda: self.events.append(("port", "close"))
             self.pilink = self.patch("PiLink", return_value=self.link)
         self.patch("_wait_for_process_end", side_effect=self._wait_for_end)
+        self.can_power_off = self.patch("can_power_off", return_value=True)  # nie echtes sudo
         self.patch("BusGuard", return_value=self.guard)
         self.patch("power_off", self.power_off)
         self.wall_display = self.patch(
@@ -871,6 +872,48 @@ class MainTest(unittest.TestCase):
         self.assertTrue(wall.join())
         for event in (("link", "stop"), ("port", "close"), ("guard", "stop")):
             self.assertIn(event, wall.events)
+
+    # --- M-4: Sitzung ohne SHUTDOWN zu Ende, sudoers-Regel -------------------------------
+
+    def test_done_without_shutdown_powers_off_and_serves_on(self):
+        # DONE ist bestaetigt, aber kein SHUTDOWN kommt. Der Pi wollte aus und faehrt selbst
+        # herunter; ein spaetes SHUTDOWN bekommt trotzdem sein OK, power_off laeuft einmal.
+        wall = WallRun(self, run_wall=mock.Mock(return_value="idle"))
+        wall.patch("DONE_WAIT_S", 0.05)
+        self.assertTrue(wall.start())
+        with self.assertLogs("app.main", "WARNING"):
+            wall.put("SESSION", "HAND")
+            self.assertTrue(wall.wait_serving())
+        self.assertEqual(wall.requests(), ["READY", "DONE"])
+        wall.power_off.assert_called_once_with()
+        wall.put("SHUTDOWN")
+        self.assertTrue(wait_for(lambda: wall.replies("SHUTDOWN") == ["OK"]))
+        wall.power_off.assert_called_once_with()
+
+    def test_unconfirmed_done_without_shutdown_does_not_power_off(self):
+        wall = WallRun(self, run_wall=mock.Mock(return_value="idle"))
+        wall.patch("DONE_WAIT_S", 0.05)
+        with mock.patch.object(LinkDispatcher, "send_done", return_value=False):
+            self.assertTrue(wall.start())
+            wall.put("SESSION", "HAND")
+            self.assertTrue(wall.wait_serving())
+        wall.power_off.assert_not_called()
+
+    def test_missing_sudoers_rule_is_logged_as_error(self):
+        wall = WallRun(self)
+        wall.can_power_off.return_value = False
+        with self.assertLogs("app.main", "ERROR") as logs:
+            self.assertTrue(wall.start())
+        self.assertIn("sudoers", "\n".join(logs.output))
+        wall.can_power_off.assert_called_once_with()
+        wall.put("SESSION", "HAND")  # sonst aendert sich nichts
+        self.assertTrue(wait_for(lambda: wall.shown()))
+
+    def test_sudoers_rule_is_checked_at_start(self):
+        wall = WallRun(self)
+        with self.assertNoLogs("app.main", "ERROR"):
+            self.assertTrue(wall.start())
+        wall.can_power_off.assert_called_once_with()
 
     # --- M-3: READY noch einmal, solange SESSION fehlt -------------------------------------
 
