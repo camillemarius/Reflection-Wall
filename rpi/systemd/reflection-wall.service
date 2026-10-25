@@ -1,0 +1,21 @@
+# systemd-Dienst der Reflection Wall (ungeprüft bis zur Abnahme am Gerät)
+# Einrichtung: siehe rpi/README.md, Abschnitt "Dienst einrichten"
+
+[Unit]
+Description=Reflection Wall, Anwendung auf dem Pi
+
+[Service]
+# anpassen: Benutzer, der in den Gruppen dialout, i2c und gpio ist
+User=pi
+# anpassen: Pfad zum Ordner rpi/ im Repository
+WorkingDirectory=/home/pi/Reflection-Wall/rpi
+# anpassen: Pfad zum Python des venv
+ExecStart=/home/pi/.venvs/reflection-wall-rpi/bin/python -m app.main
+Restart=on-failure
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1
+# Die Webseite läuft auf Port 80
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
