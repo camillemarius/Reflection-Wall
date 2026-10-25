@@ -36,8 +36,8 @@ Menü. Eine Tastatur oder SSH braucht es nicht mehr.
 - Teil 5: Tanz-Show, Animationen, Video und Spiel. Teil 4 lässt im Menü Platz
   dafür (Abschnitt 13).
 - Was die Anwendungen inhaltlich tun. Die Aufträge an die KI bleiben, wie sie
-  sind, mit zwei Ausnahmen: Reflection von Hand bekommt ihr Thema (V7), und der
-  Chat bittet um kurze Antworten (Abschnitt 14).
+  sind, mit zwei Ausnahmen: Reflection von Hand bekommt ihr Thema (V7), und alle
+  Anwendungen verlangen von der KI höchstens 96 Zeichen (D17).
 - Der Auftrag um Mitternacht. Er gehört zu Teil 3b. Dieser Entwurf legt nur die
   Datei fest, aus der das Thema kommt, und dass der Pi dann die Anzeige nicht
   anfasst (F1).
@@ -117,7 +117,7 @@ Menü. Eine Tastatur oder SSH braucht es nicht mehr.
 | Nr. | Vorschlag | Warum |
 |---|---|---|
 | V1 | Nach einem Start mit BT2 zeigt der ESP `PI STARTET`, bis der Pi das Menü zeigt. Nach BT2 in der Sitzung zeigt er `PI FAEHRT HERUNTER`. Ist der Pi aus, schaltet der ESP die Anzeige aus; danach gilt wieder §8 (Radar oder BT1 schalten sie ein). Beim Start um Mitternacht bleibt die Wand dunkel. | Sonst sieht man nach BT2 bis zu einer Minute nichts und drückt noch einmal. Ohne „Anzeige aus“ bliebe das Menü stehen, obwohl der Pi aus ist. |
-| V2 | Passt ein Text nicht auf vier Zeilen, zeigt die Wand ihn in Seiten zu drei Zeilen. Die vierte Zeile zeigt zum Beispiel `BT5 WEITER   1/3`. BT5 zeigt die nächste Seite. BT4 verlässt die Anwendung auf jeder Seite. | Chat-Antworten sind oft länger als 96 Zeichen. Ohne Hinweis sieht man nicht, dass noch etwas kommt. |
+| V2 | *Ersetzt durch den Entscheid des Owners unten (2026-10-25).* ~~Seiten zu drei Zeilen, die vierte Zeile zeigt `BT5 WEITER   1/3`.~~ | |
 | V3 | Kommt man aus einer Anwendung zurück, steht der Zeiger auf dieser Anwendung. Nach dem Einschalten steht er auf `CHAT`. | Wer dieselbe Anwendung noch einmal will, drückt nur BT5. |
 | V4 | In einer Adresse steht der Punkt auf einer eigenen Stelle (`WALL·LOCAL`). | Sonst hängt er kaum sichtbar am Buchstaben davor, und man liest `WALLLOCAL`. |
 
@@ -127,7 +127,11 @@ Menü. Eine Tastatur oder SSH braucht es nicht mehr.
   Timer des ESP ihn geweckt hat. F1 ist entsprechend geändert. Die Anzeigetexte von
   V1 (`PI STARTET`, `PI FAEHRT HERUNTER`, danach dunkel) sind noch nicht entschieden.
 - V2 ist abgelehnt: Eine ganze Zeile für den Hinweis auf die nächste Seite ist zu
-  viel. Eine andere Lösung ist noch nicht entschieden.
+  viel. Stattdessen gilt **D17** (unten).
+
+| Nr. | Entscheid |
+|---|---|
+| D17 | **Lange Texte der KI** (Owner, 2026-10-25: „c, und wenn nicht möglich, dann a“). Der Auftrag an die KI verlangt höchstens 96 Zeichen. Passt die Antwort nicht auf vier Zeilen, fragt der Pi noch einmal, höchstens drei Anfragen insgesamt. Passt sie dann immer noch nicht, zeigt die Wand sie in Seiten zu vier vollen Zeilen. Folgt noch eine Seite, leuchtet unten rechts ein `>`; diese eine Stelle bleibt dafür frei. BT5 blättert, BT4 verlässt die Anwendung auf jeder Seite. Das gilt für Chat, Quiz und Reflection. |
 
 ### 4.3 Vorschläge: Ablauf (Runde B)
 
@@ -240,11 +244,11 @@ Tasten selbst (Abschnitt 7); sonst kommen sie als `BUTTON|n` vom ESP.
 Alle Anwendungen zeigen ihren Text über dieselbe Umbruchregel wie die Zitate:
 24 Zeichen pro Zeile, vier Zeilen, Umbruch an Wortgrenzen. Kleinbuchstaben
 erscheinen als Grossbuchstaben, Umlaute werden umschrieben. Ist ein Text länger,
-gilt V2.
+gilt D17.
 
 | Anwendung | Ablauf mit den Tasten | Heute |
 |---|---|---|
-| **CHAT** (Sprachassistent) | Anzeige `BT5 UND SPRECHEN`. BT5 startet die Aufnahme, BT5 beendet sie. Die Wand zeigt `DENKE NACH`, dann die Antwort; der Lautsprecher spricht sie. Bei mehreren Seiten zeigt BT5 die nächste (V2), nach der letzten wieder `BT5 UND SPRECHEN`. Ohne Mikrofon: `KEIN MIKROFON`. | 3× ENTER; erzeugt eine eigene Anzeige |
+| **CHAT** (Sprachassistent) | Anzeige `BT5 UND SPRECHEN`. BT5 startet die Aufnahme, BT5 beendet sie. Die Wand zeigt `DENKE NACH`, dann die Antwort; der Lautsprecher spricht sie. Bei mehreren Seiten zeigt BT5 die nächste (D17), nach der letzten wieder `BT5 UND SPRECHEN`. Ohne Mikrofon: `KEIN MIKROFON`. | 3× ENTER; erzeugt eine eigene Anzeige |
 | **QUIZ** | Die Wand zeigt `FRAGE WIRD ERZEUGT`, dann die Frage. BT5 zeigt Hinweis 1, BT5 Hinweis 2, BT5 die Lösung, BT5 eine neue Frage. | 4× ENTER |
 | **REFLECTION** (von Hand) | Anzeige `REFLECTION` und `BT5 NEUER GEDANKE`. BT5 zeigt `DENKE NACH`, dann den Gedanken. BT5 holt den nächsten (V7). Thema aus `thema_hand.txt` (Abschnitt 8). Nichts wird gespeichert (D12). | 1× ENTER; liest und speichert heute die Datenbank |
 | **RADAR** | Das Strichmännchen steht je nach Entfernung der Person näher oder weiter. BT4 beendet. Ablauf in Abschnitt 7. | kaputt: Anzeige-Funktionen fehlen, öffnet UART und GPIO selbst |
@@ -399,8 +403,9 @@ entfällt.
   wartet.
 - **Reflection von Hand (V7):** der zweite Gedanke bekommt den ersten mit; nach dem
   Verlassen beginnt es neu; nichts wird gespeichert.
-- **Seiten (V2):** ein Text mit 5 bis 12 Zeilen ergibt die richtigen Seiten und die
-  richtige Anzeige `1/3`.
+- **Lange Texte (D17):** eine zu lange Antwort führt zu einer neuen Anfrage, höchstens
+  drei; danach Seiten zu vier Zeilen, `>` unten rechts nur, wenn noch eine Seite
+  folgt, und die letzte Zeile lässt diese Stelle frei.
 - **Schrift:** `>` und der Punkt auf eigener Stelle in `tests/display_vectors.json`,
   geprüft auf beiden Seiten.
 - **Adressen:** Modul-Nummer → Adresse nach der Tabelle in Abschnitt 3.
@@ -487,8 +492,7 @@ Teil 5 bekommt einen eigenen Entwurf.
   und wie sie Port 80 bekommt, ohne dass der Dienst als root läuft.
 - Wo der Schalter für D2 steht (zum Beispiel in `.env`) und wie er heisst.
 - Die genauen Anzeigetexte im Rahmen von 4 × 24 Zeichen.
-- Wie der Chat seine Antworten kurz hält. Der Auftrag an die KI darf um „höchstens
-  vier Zeilen“ bitten; V2 bleibt der Rückfall.
+- Wie der Auftrag an die KI die 96 Zeichen verlangt (D17).
 - Wie Reflection von Hand das Thema und den vorherigen Gedanken in den Auftrag an
   die KI bringt (V7).
 - Wie der Anwendungsrahmen eine Anwendung beendet, die auf die KI wartet.
