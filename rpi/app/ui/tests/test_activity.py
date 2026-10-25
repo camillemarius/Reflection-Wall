@@ -121,6 +121,8 @@ class EnvTest(unittest.TestCase):
 
 
 class FakeLgpio:
+    SET_PULL_DOWN = 32
+
     def __init__(self, level=1):
         self.level = level
         self.calls = []
@@ -129,8 +131,11 @@ class FakeLgpio:
         self.calls.append(("open", chip))
         return 7
 
-    def gpio_claim_input(self, h, gpio):
-        self.calls.append(("claim", h, gpio))
+    def gpio_claim_input(self, h, gpio, flags=0):
+        self.calls.append(("claim", h, gpio, flags))
+
+    def gpiochip_close(self, h):
+        self.calls.append(("close", h))
 
     def gpio_read(self, h, gpio):
         self.calls.append(("read", h, gpio))
@@ -143,10 +148,46 @@ class RadarPresenceTest(unittest.TestCase):
         r = RadarPresence(lgpio_module=fake)
         self.assertEqual(fake.calls, [])
         self.assertTrue(r.present())
-        self.assertEqual(fake.calls[:2], [("open", 0), ("claim", 7, 22)])
+        self.assertEqual(fake.calls[:2], [("open", 0), ("claim", 7, 22, 32)])
         fake.level = 0
         self.assertFalse(r.present())
         self.assertEqual(sum(1 for c in fake.calls if c[0] == "open"), 1)
+
+    def test_claim_uses_pull_down(self):
+        fake = FakeLgpio(0)
+        RadarPresence(lgpio_module=fake).present()
+        self.assertIn(("claim", 7, 22, fake.SET_PULL_DOWN), fake.calls)
+
+    def test_claim_failure_closes_handle_and_keeps_nothing(self):
+        class BusyPin(FakeLgpio):
+            def gpio_claim_input(self, h, gpio, flags=0):
+                raise OSError("GPIO busy")
+
+        fake = BusyPin()
+        r = RadarPresence(lgpio_module=fake)
+        self.assertFalse(r.present())
+        self.assertFalse(r.present())
+        self.assertEqual(fake.calls.count(("close", 7)), 2)
+        self.assertIsNone(r._handle)
+
+    def test_failed_import_is_not_retried(self):
+        import builtins
+        real, tries = builtins.__import__, []
+
+        def fake_import(name, *a, **k):
+            if name == "lgpio":
+                tries.append(1)
+                raise ImportError(name)
+            return real(name, *a, **k)
+
+        builtins.__import__ = fake_import
+        try:
+            r = RadarPresence()
+            self.assertFalse(r.present())
+            self.assertFalse(r.present())
+        finally:
+            builtins.__import__ = real
+        self.assertEqual(len(tries), 1)
 
     def test_error_means_absent(self):
         class Broken(FakeLgpio):

@@ -42,6 +42,7 @@ class Activity:
                 self._last = self._clock()
 
     def expired(self) -> bool:
+        # Regelmaessig abfragen: setzt den Zaehler zurueck, solange busy() oder eine Person da ist.
         if self._idle_s == 0:
             return False
         present = bool(self._person_present()) if self._person_present else False
@@ -66,15 +67,28 @@ class RadarPresence:
         self._gpio = gpio
         self._lgpio = lgpio_module
         self._handle: int | None = None
+        self._unavailable = False
 
     def present(self) -> bool:
+        if self._unavailable:
+            return False
+        if self._lgpio is None:
+            try:
+                import lgpio as lgpio_module  # erst hier: auf dem PC nicht installiert
+            except ImportError:
+                self._unavailable = True  # nicht bei jeder Abfrage neu versuchen
+                return False
+            self._lgpio = lgpio_module
         try:
             if self._handle is None:
-                if self._lgpio is None:
-                    import lgpio as lgpio_module  # erst hier: auf dem PC nicht installiert
-                    self._lgpio = lgpio_module
                 handle = self._lgpio.gpiochip_open(GPIO_CHIP)
-                self._lgpio.gpio_claim_input(handle, self._gpio)
+                try:
+                    # Pull-down: ohne Radar darf der Pin nicht zufaellig HIGH lesen
+                    self._lgpio.gpio_claim_input(handle, self._gpio,
+                                                 self._lgpio.SET_PULL_DOWN)
+                except Exception:
+                    self._lgpio.gpiochip_close(handle)
+                    raise
                 self._handle = handle
             return bool(self._lgpio.gpio_read(self._handle, self._gpio))
         except Exception:
