@@ -3,6 +3,7 @@
 #include <user_interface.h>
 #include "pinMapping.h"
 #include "DebugLogger.h"
+#include "features.h"
 
 namespace
 {
@@ -35,7 +36,9 @@ WakeupReason::Reason WakeupReason::getReason()
     if (_expLevel == LOW)
         return Reason::INT_GPIO_EXP;
 
-    if (_hlkLevel == HIGH && _rawReason != REASON_DEFAULT_RST)
+    // INT_HLK zaehlt nur mit Radar: ohne ihn liest der Pin wegen des
+    // Pull-ups dauernd HIGH und jeder Timer-Wecker sah wie der Radar aus (R12).
+    if (Features::RADAR_INSTALLED && _hlkLevel == HIGH && _rawReason != REASON_DEFAULT_RST)
         return Reason::INT_HLK;
 
     switch (_rawReason)

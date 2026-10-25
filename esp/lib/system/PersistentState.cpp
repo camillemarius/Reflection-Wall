@@ -13,9 +13,13 @@ static_assert(sizeof(DisplayState) == 1, "DisplayState muss ein Byte bleiben");
 static_assert(sizeof(PersistentState::Data) % 4 == 0,
               "RTC-Speicher wird in 4-Byte-Bloecken gelesen und geschrieben");
 
-// 20 Byte Wand, 28 Byte Sitzung, 4 Byte Speisung und Nummern. Aendert sich
-// die Groesse, muss auch MAGIC sich aendern.
-static_assert(sizeof(PersistentState::Data) == 52, "Layout von Data geaendert: MAGIC anpassen");
+// 20 Byte Wand, 28 Byte Sitzung, 4 Byte Speisung und Nummern, 24 Byte Uhr,
+// 224 Byte Nacht. Aendert sich die Groesse, muss auch MAGIC sich aendern.
+static_assert(sizeof(PersistentState::Data) == 300, "Layout von Data geaendert: MAGIC anpassen");
+
+// Magic und CRC (8 Byte) plus Data passen in die 512 Byte RTC-Speicher.
+static_assert(sizeof(PersistentState::Data) + 8 <= 512,
+              "Block passt nicht in den RTC-Speicher des ESP8266");
 
 
 void PersistentState::setDefaults(Data& data)
@@ -37,6 +41,9 @@ void PersistentState::setDefaults(Data& data)
     data.txSeq = 0;
     data.rxSeq = 0;
     data.rxValid = 0;
+
+    Clock::reset(data.clock);
+    NightJob::reset(data.night);
 }
 
 
@@ -85,7 +92,7 @@ void PersistentState::save(const Data& data)
 
 
 // Standard-CRC32 (Polynom 0xEDB88320), bitweise gerechnet.
-// Bei 52 Byte Nutzdaten lohnt keine Tabelle.
+// Bei 300 Byte Nutzdaten lohnt keine Tabelle.
 
 uint32_t PersistentState::crc32(const uint8_t* data, size_t length)
 {

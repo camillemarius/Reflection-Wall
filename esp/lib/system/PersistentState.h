@@ -3,6 +3,8 @@
 #include <Arduino.h>
 
 #include "PiSession.h"
+#include "Clock.h"
+#include "NightData.h"
 
 // ---------------------------------------------------------
 // Zustand, der einen Reset ueberlebt
@@ -67,6 +69,10 @@ public:
         uint8_t  txSeq;
         uint8_t  rxSeq;
         uint8_t  rxValid;
+
+        // Uhr (UTC) und Auftrag der Nacht
+        ClockData clock;
+        NightData night;
     };
 
     // Liest den Zustand. Rueckgabe false bedeutet Kaltstart
@@ -84,10 +90,10 @@ private:
         Data     data;
     };
 
-    // "RWL3" - aendert sich, sobald sich das Layout von Data
+    // "RWL4" - aendert sich, sobald sich das Layout von Data
     // aendert, damit alte Daten nach einem Update verworfen
     // statt fehlinterpretiert werden.
-    static constexpr uint32_t MAGIC = 0x52574C33;
+    static constexpr uint32_t MAGIC = 0x52574C34;
 
     // Offset im RTC-Speicher, gezaehlt in 4-Byte-Bloecken
     static constexpr uint32_t RTC_OFFSET = 0;

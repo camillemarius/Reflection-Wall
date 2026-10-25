@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 // ---------------------------------------------------------
 // Bauschalter
 // ---------------------------------------------------------
@@ -23,6 +25,12 @@ namespace Features
     // false: Es bleibt aus und spart rund 70 mA und 200 ms Bootzeit.
     // Der Wert liegt im RTC-Speicher. Darum gilt er erst ab dem naechsten Start.
     constexpr bool WAKE_RF_ENABLED = false;
+
+    // true: Testbetrieb der Nacht (N4, R4). Die Uhr geht um NIGHT_TEST_LEAD_S vor,
+    // der Auftrag der Nacht startet so schon kurz nach dem Einschalten statt um Mitternacht.
+    // false: Normalbetrieb.
+    constexpr bool NIGHT_TEST = false;
+    constexpr uint32_t NIGHT_TEST_LEAD_S = 120;
 
     // Baudrate der Leitung zum Pi, zugleich die der Debug-Ausgabe auf derselben UART.
     // 74880 wie das Boot-ROM des ESP8266 (E2-a). Z12: sonst 115200 hier und in rpi/app/link/serial_port.py.

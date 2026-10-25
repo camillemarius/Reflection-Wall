@@ -13,7 +13,7 @@ pio device monitor      # serielle Konsole, 74880 Baud
 
 **Erstes Flashen dieser Firmware (Sitzung mit dem Pi):** Der Zustand im RTC-Speicher hat ein neues Format (`MAGIC` „RWL3“). Der erste Start nach dem Flashen gilt deshalb als Kaltstart, und der ESP hält den Pi für aus. Läuft der Pi gerade, macht man die Wand vor dem ersten BT2 kurz stromlos; das Flipflop der Speisung steht dann wieder auf aus. Den Pi fährt man davor am besten selbst herunter. Sonst schaltet der erste BT2 den Pi hart aus: Der ESP will ihn einschalten, und der Puls kippt die Speisung auf aus.
 
-**OTA:** Zurzeit nicht nutzbar. Kein Code startet WLAN oder OTA: `WifiController::begin` und `OtaManager::begin` hat keine Stelle aufgerufen. Darum haben die Zeilen unter `#OTA` in `platformio.ini` und die VS-Code-Aufgabe „Upload ESP + Telnet“ heute keine Wirkung. Geflasht wird nur über USB. Teil 3b der Umsetzung (Mitternacht, siehe Spezifikation Abschnitt 16) bringt WLAN zurück. Er holt außerdem die Uhrzeit aus dem Internet (NTP).
+**OTA:** Zurzeit nicht nutzbar. Kein Code startet WLAN oder OTA: `TimeSync` und `OtaManager::begin` hat keine Stelle aufgerufen. Darum haben die Zeilen unter `#OTA` in `platformio.ini` und die VS-Code-Aufgabe „Upload ESP + Telnet“ heute keine Wirkung. Geflasht wird nur über USB. Teil 3b der Umsetzung (Mitternacht, siehe Spezifikation Abschnitt 16) bringt WLAN zurück. Er holt außerdem die Uhrzeit aus dem Internet (NTP).
 
 ## Ablauf im Normalbetrieb
 
