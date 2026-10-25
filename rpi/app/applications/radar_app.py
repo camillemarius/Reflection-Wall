@@ -14,10 +14,15 @@ log = logging.getLogger(__name__)
 SENSOR_TIMEOUT_S = 5.0
 FRAME_S = 0.1
 NO_RADAR = ["RADAR ANTWORTET NICHT", "BT4 ZURUECK"]
+# R15 (zu V6): Im Radar-Modus gehoert die UART dem Radar, ein SHUTDOWN des ESP kaeme nie an.
+# Darum endet die Anwendung nach 55 min selbst, schaltet zurueck, und der Pi bittet mit DONE
+# ums Ausschalten. Die 60 min des ESP bleiben nur fuer einen Pi, der im Radar-Modus haengt.
+MAX_RADAR_S = 55 * 60
 
 _BACK = "back"
 _STOPPED = "stopped"
 _NO_DATA = "no_data"
+_LIMIT = "limit"
 
 
 class RadarApp:
@@ -36,6 +41,9 @@ class RadarApp:
         # Zurueckgeschaltet: ab hier kommen die Tasten wieder ueber den ESP.
         if outcome == _STOPPED:
             raise StopApp(ctx.stop_event.reason or "shutdown")
+        if outcome == _LIMIT:
+            ctx.display.clear()
+            raise StopApp("idle")  # die Bildschirmfolge endet; main() sendet DONE (R15)
         if outcome == _NO_DATA:
             ctx.display.show_lines(NO_RADAR)
             while True:
@@ -54,11 +62,14 @@ class RadarApp:
         stickman = Stickman(ctx.display, min_distance=0.7, max_distance=2.0)
         ctx.display.clear()
         last_stamp = sensor.data.timestamp
-        last_data = self._clock()
+        started = last_data = self._clock()
         present = False
         while True:
             if ctx.stop_event.is_set():
                 return _STOPPED
+            if self._clock() - started >= MAX_RADAR_S:
+                log.info("Radar: nach %.0f min beendet (R15)", MAX_RADAR_S / 60)
+                return _LIMIT
             sensor.update()
             now = self._clock()
             if sensor.data.timestamp != last_stamp:
