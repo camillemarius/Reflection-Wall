@@ -1,5 +1,6 @@
 # settings_apps.py
 # Einstellungen: THEMA AENDERN (Webseite auf dem Pi) und RADAR EINRICHTEN (vorerst Platzhalter).
+import logging
 import time
 from typing import Callable, Tuple
 
@@ -7,6 +8,8 @@ from app.driver.display.cells import normalize
 from app.topics import CONFIG_DIR
 from app.ui.app_host import AppContext
 from app.web.topic_server import TopicServer, wall_address
+
+log = logging.getLogger(__name__)
 
 TIMEOUT_S = 15 * 60
 POLL_S = 1.0
@@ -37,6 +40,7 @@ class ThemaApp:
             try:
                 server.start()
             except OSError:
+                log.exception("Webseite startet nicht")
                 ctx.display.show_lines(["WEBSEITE GEHT NICHT", "BT4 ZURUECK"])
                 while True:
                     ctx.wait_button()

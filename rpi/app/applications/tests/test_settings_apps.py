@@ -164,10 +164,12 @@ class ThemaAppTest(unittest.TestCase):
     def test_server_cannot_start(self):
         servers = []
         app, ctx, display = make(Buttons([BT4]), servers, fail=True)
-        with self.assertRaises(StopApp):
-            app.run(ctx)
+        with self.assertLogs("app.applications.settings_apps", level="ERROR") as logs:
+            with self.assertRaises(StopApp):
+                app.run(ctx)
         self.assertEqual(display.lines[-1][:2], ["WEBSEITE GEHT NICHT", "BT4 ZURUECK"])
         self.assertEqual(servers[0].stopped, 1)
+        self.assertIn("port 80", logs.output[0])  # die Ursache steht im Log
 
 
 class RadarSetupPlaceholderTest(unittest.TestCase):
