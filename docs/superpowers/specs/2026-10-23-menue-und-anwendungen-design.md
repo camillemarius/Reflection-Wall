@@ -121,6 +121,14 @@ Menü. Eine Tastatur oder SSH braucht es nicht mehr.
 | V3 | Kommt man aus einer Anwendung zurück, steht der Zeiger auf dieser Anwendung. Nach dem Einschalten steht er auf `CHAT`. | Wer dieselbe Anwendung noch einmal will, drückt nur BT5. |
 | V4 | In einer Adresse steht der Punkt auf einer eigenen Stelle (`WALL·LOCAL`). | Sonst hängt er kaum sichtbar am Buchstaben davor, und man liest `WALLLOCAL`. |
 
+**Stand der Runde A (Owner, 2026-10-25):**
+- V3 und V4 sind angenommen.
+- V1: Der Owner verlangt, dass der Pi in jedem Fall erfährt, ob BT2 oder der tägliche
+  Timer des ESP ihn geweckt hat. F1 ist entsprechend geändert. Die Anzeigetexte von
+  V1 (`PI STARTET`, `PI FAEHRT HERUNTER`, danach dunkel) sind noch nicht entschieden.
+- V2 ist abgelehnt: Eine ganze Zeile für den Hinweis auf die nächste Seite ist zu
+  viel. Eine andere Lösung ist noch nicht entschieden.
+
 ### 4.3 Vorschläge: Ablauf (Runde B)
 
 | Nr. | Vorschlag | Warum |
@@ -136,7 +144,7 @@ brauchen aber deine Unterschrift.
 
 | Nr. | Festlegung |
 |---|---|
-| F1 | **Startgrund.** Nach `READY` schickt der ESP bei einem Start mit BT2 die neue Nachricht `SESSION\|HAND`. Der Pi antwortet `OK` und zeigt das Menü. Ohne diese Nachricht, also um Mitternacht, fasst der Pi die Anzeige nicht an. |
+| F1 | **Startgrund** (vom Owner verlangt, 2026-10-25). Nach `READY` sagt der ESP dem Pi in jedem Fall, warum er ihn eingeschaltet hat: `SESSION\|HAND` nach BT2, `SESSION\|NACHT` nach dem täglichen Timer. Der Pi antwortet `OK`. Bei `HAND` zeigt er das Menü. Bei `NACHT` fasst er die Anzeige nicht an und wartet auf `GET\|QUOTE`. Bis die Nachricht da ist, zeigt der Pi nichts. |
 | F2 | **BT2 in der Sitzung.** Der ESP schickt `SHUTDOWN`. Der Pi beendet die laufende Anwendung, schreibt nichts mehr auf die Anzeige und antwortet `OK`. `BUSY` antwortet er nur, während er Werte ins Radar schreibt (Radar-Einrichtung, Schritt 8, etwa 1 s). Erst nach `OK` schreibt der ESP `PI FAEHRT HERUNTER`. |
 | F3 | **Tasten am ESP je Zustand:** siehe Tabelle 5.2. In jedem Zustand speichert der ESP den neuen Stand des Expanders. |
 | F4 | **Radar-Umschaltung.** Ein Baustein im Pi-Dienst schaltet auf das Radar und zurück: `MODE\|RADAR`, Baudrate, GPIO23, und zurück bis `MODE\|NORMAL`. Er nutzt die UART und GPIO23, die der Dienst schon offen hat. Die Anwendung Radar und die Radar-Einrichtung nutzen ihn beide. Keine Anwendung öffnet die UART oder GPIO23 selbst. |
@@ -310,7 +318,7 @@ Tastendruck (F6).
 |---|---|---|
 | Pi ein- und ausschalten, Sitzung | PiSession (Teil 2) | ESP |
 | Tasten lesen, alle als Pegelwechsel, je Zustand nach Tabelle 5.2 | Tasten und PiLink | ESP |
-| Startgrund melden (`SESSION\|HAND`, F1) | PiSession | ESP |
+| Startgrund melden (`SESSION\|HAND` oder `SESSION\|NACHT`, F1) | PiSession | ESP |
 | `PI STARTET`, `PI FAEHRT HERUNTER`, danach Anzeige aus (V1) | DisplayCtl | ESP |
 | Tasten empfangen in der Sitzung | Tastenquelle, aus PiLink | Pi |
 | Tasten lesen im Radar-Modus | Tastenquelle, am Expander über I²C | Pi |
@@ -330,7 +338,7 @@ eine Schnittstelle.
 
 | Grenze | Richtung | Vertrag |
 |---|---|---|
-| ESP – Pi, UART | ESP → Pi `BUTTON\|n`, `SHUTDOWN`, **neu** `SESSION\|HAND`; Pi → ESP `DONE`, `MODE\|RADAR`, `MODE\|NORMAL` | §6.3; neu ist nur `SESSION\|HAND` (F1), Antwort `OK`, Frist 3 s |
+| ESP – Pi, UART | ESP → Pi `BUTTON\|n`, `SHUTDOWN`, **neu** `SESSION\|HAND` und `SESSION\|NACHT`; Pi → ESP `DONE`, `MODE\|RADAR`, `MODE\|NORMAL` | §6.3; neu ist nur `SESSION` (F1), Antwort `OK`, Frist 3 s |
 | Pi – Anzeige, I²C | Pi schreibt | Adressen aus Abschnitt 3; Regel B (§10) |
 | Pi – Expander, I²C | Pi liest, nur im Radar-Modus | Abschnitt 7; Regel B |
 | Pi – Radar, UART | beide | 115 200 Baud, GPIO23 HIGH (§6.4), nur über F4 |
@@ -357,7 +365,7 @@ entfällt.
 - BT4–BT6 werden wie BT1–BT3 ausgewertet: Jeder Pegelwechsel ist ein Druck. Was
   dann geschieht, steht in Tabelle 5.2.
 - Die Obergrenze von 3 h für eine Sitzung entfällt (D1).
-- `SESSION|HAND` nach `READY`, wenn BT2 den Pi eingeschaltet hat (F1).
+- Nach `READY` immer `SESSION|HAND` oder `SESSION|NACHT` (F1).
 - V1: `PI STARTET`, `PI FAEHRT HERUNTER`, danach Anzeige aus.
 - Das Zeichen `>` und, für V4, ein Punkt auf eigener Stelle in der Schrift.
 
@@ -372,7 +380,7 @@ entfällt.
 | Tasten-Expander über I²C nicht lesbar (Radar-Modus) | einmal neu lesen; dann zurück auf den ESP und ins Menü, Grund im Log |
 | Webseite startet nicht (zum Beispiel Port belegt) | `WEBSEITE GEHT NICHT`; BT4 geht zurück |
 | Taste kommt während `DENKE NACH` | BT4 und BT2 wirken sofort; BT5 und BT6 zählen nicht |
-| `SESSION\|HAND` bleibt ohne Antwort | der ESP wiederholt wie bei jeder Nachricht; nach der Frist fährt er den Pi herunter wie nach BT2 |
+| `SESSION` bleibt ohne Antwort | der ESP wiederholt wie bei jeder Nachricht; nach der Frist fährt er den Pi herunter wie nach BT2 |
 | ESP nimmt den Bus mitten in einer Übertragung | Regel B, Rückfall: der Pi wiederholt die Übertragung (§10) |
 | Dienst auf dem Pi startet neu | wie §13; danach zeigt der Pi wieder das Menü |
 
@@ -384,8 +392,8 @@ entfällt.
 - **Tasten je Bildschirm:** jede Zeile der Tabelle 5.1 als Testfall.
 - **Tasten am ESP je Zustand:** jede Zelle der Tabelle 5.2 als Testfall, als reine
   Logik auf dem ESP.
-- **Startgrund (F1):** mit `SESSION|HAND` zeigt der Pi das Menü, ohne fasst er die
-  Anzeige nicht an.
+- **Startgrund (F1):** mit `SESSION|HAND` zeigt der Pi das Menü; mit `SESSION|NACHT`
+  und solange noch keine Nachricht da ist, fasst er die Anzeige nicht an.
 - **Anwendungen:** mit festen KI-Antworten und eingespeisten Tasten. Jede kommt
   ohne `input()` aus. BT4 und `SHUTDOWN` beenden sie, auch während sie auf die KI
   wartet.
@@ -426,10 +434,10 @@ Entwurf angenommen hat.
 - §2 S3-a: Der Radar-Modus dient nicht mehr nur zum Einstellen; die Anwendung
   Radar nutzt ihn auch. Die 60 min bleiben (V6).
 - §4 F9: Alle sechs Tasten laufen über Flipflops.
-- §6.3: neue Nachricht `SESSION|HAND` (F1). Die Zeile `BUTTON|<n>` nennt BT1 und
+- §6.3: neue Nachricht `SESSION|HAND` oder `SESSION|NACHT` (F1). Die Zeile `BUTTON|<n>` nennt BT1 und
   BT3–BT6.
-- §7: In der Zeichnung entfällt „3 h“. Neu: `SESSION|HAND` nach `READY`, wenn BT2
-  den Pi eingeschaltet hat. BT2 während EINSCHALTEN nach Tabelle 5.2.
+- §7: In der Zeichnung entfällt „3 h“. Neu: nach `READY` immer `SESSION|HAND` oder
+  `SESSION|NACHT`. BT2 während EINSCHALTEN nach Tabelle 5.2.
 - §8, letzter Punkt: Die Messung mit kurzen Taps auf BT4–BT6 ist überholt.
 - §10: Tabelle der Tasten nach Abschnitt 5.1 und 5.2. Der Satz „BT4–BT6 werten die
   fallende Flanke aus“ war falsch und entfällt: Alle Tasten werten jeden
