@@ -143,6 +143,10 @@ Menü. Eine Tastatur oder SSH braucht es nicht mehr.
 
 **Stand der Runde B (Owner, 2026-10-25):** V5, V6 und V7 sind angenommen.
 
+| Nr. | Entscheid |
+|---|---|
+| D18 | **Pi antwortet nicht** (Owner, 2026-10-25). Schaltet der ESP den Pi hart aus, weil `READY` nicht kam oder drei `PING` ohne Antwort blieben, zeigt die Wand etwa 10 s lang `PI ANTWORTET NICHT` und wird dann dunkel. Gehört zu Teil 4b (ESP). |
+
 ### 4.4 Festlegungen des Entwurfs (Runde C)
 
 Diese Punkte ergaben sich aus der Gegenprüfung. Sie haben keine echte Alternative,
@@ -376,6 +380,7 @@ entfällt.
 - Die Obergrenze von 3 h für eine Sitzung entfällt (D1).
 - Nach `READY` immer `SESSION|HAND` oder `SESSION|NACHT` (F1).
 - V1: `PI STARTET`, `PI FAEHRT HERUNTER`, danach Anzeige aus.
+- D18: `PI ANTWORTET NICHT` für etwa 10 s nach einem harten Aus.
 - Das Zeichen `>` und, für V4, ein Punkt auf eigener Stelle in der Schrift.
 
 ## 10. Fehlerfälle
