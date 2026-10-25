@@ -1,10 +1,25 @@
 import unittest
 
+from app.driver.display.ascii_map import ASCII_16SEG
+from app.driver.display.cells import lines_to_cells
 from app.driver.display.text_layout import wrap
 from app.ui.pages import paginate
 
+POINTER_MASK = ASCII_16SEG[">"]
+
 
 class PaginateTest(unittest.TestCase):
+    def test_pointer_in_the_last_cell_even_with_dots_in_row_4(self):
+        # Ein Punkt teilt die Stelle mit dem Zeichen davor: der Zeiger muss trotzdem in Stelle 96.
+        pages = paginate("SO. ENDE. MEHR TEXT. " * 12)
+        self.assertGreater(len(pages), 1)
+        self.assertTrue(any("." in page[3] for page in pages[:-1]))
+        for page in pages[:-1]:
+            cells = lines_to_cells(page)
+            self.assertEqual(cells[95], POINTER_MASK, page)
+            self.assertNotIn(POINTER_MASK, cells[72:95], page)
+        self.assertNotIn(POINTER_MASK, lines_to_cells(pages[-1]))
+
     def test_short_text_one_page(self):
         self.assertEqual(paginate("HALLO WELT"), [wrap("HALLO WELT")[0]])
 

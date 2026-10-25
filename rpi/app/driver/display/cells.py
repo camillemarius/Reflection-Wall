@@ -36,6 +36,16 @@ def line_to_cells(line: str, dots_own_cell: bool = False) -> list[int]:
     return cells + [0] * (CHARS_PER_ROW - len(cells))
 
 
+def used_cells(line: str) -> int:
+    """Wie viele Stellen line belegt; Punkte zaehlen wie in line_to_cells (ohne dots_own_cell)."""
+    count = 0
+    for ch in line:
+        if ch == "." and count:
+            continue  # gehoert zum Zeichen davor
+        count += 1
+    return count
+
+
 def lines_to_cells(lines: Sequence[str], dots_own_cell: bool = False) -> list[int]:
     """Genau 96 Muster, fehlende Zeilen bleiben leer."""
     cells: list[int] = []

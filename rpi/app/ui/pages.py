@@ -1,6 +1,7 @@
 # ui/pages.py
 # Seiten fuer lange Texte (D17): vier volle Zeilen je Seite, auf jeder Seite
 # ausser der letzten steht ein '>' an Stelle 24 der Zeile 4.
+from app.driver.display.cells import used_cells
 from app.driver.display.text_layout import CHARS_PER_ROW, ROWS, wrap
 
 POINTER = ">"
@@ -39,5 +40,10 @@ def paginate(text: str) -> list[list[str]]:
             last = row == ROWS - 1
             width = CHARS_PER_ROW - 1 if last else CHARS_PER_ROW
             piece, index = _take_row(text, index, width)
-            page.append(piece.ljust(width) + (POINTER if last else ""))
+            if last:
+                # Nach Stellen auffuellen, nicht nach Zeichen: ein Punkt teilt die Stelle mit
+                # dem Zeichen davor, der Zeiger muss trotzdem in die letzte Stelle.
+                page.append(piece + " " * (width - used_cells(piece)) + POINTER)
+            else:
+                page.append(piece.ljust(width))
         pages.append(page)
