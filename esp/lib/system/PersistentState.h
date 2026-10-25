@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "PiSession.h"
+
 // ---------------------------------------------------------
 // Zustand, der einen Reset ueberlebt
 // ---------------------------------------------------------
@@ -51,6 +53,20 @@ public:
         // sich verschoben hat.
         uint8_t  shownIndex;
         char     shownDate[11];
+
+        // Sitzung mit dem Pi (PiSession). Ein Reset durch eine
+        // Taste oder den Radar macht im selben Zustand weiter.
+        SessionData session;
+
+        // 1 = der ESP hat den Pi zuletzt eingeschaltet. Das
+        // Flipflop laesst sich nicht zuruecklesen (F5).
+        uint8_t  piPowered;
+
+        // Nummern der Verbindung (PiLink::state): naechste eigene
+        // Nummer, letzte Nummer des Pi und ob die gilt (0/1)
+        uint8_t  txSeq;
+        uint8_t  rxSeq;
+        uint8_t  rxValid;
     };
 
     // Liest den Zustand. Rueckgabe false bedeutet Kaltstart
@@ -68,10 +84,10 @@ private:
         Data     data;
     };
 
-    // "RWL2" - aendert sich, sobald sich das Layout von Data
+    // "RWL3" - aendert sich, sobald sich das Layout von Data
     // aendert, damit alte Daten nach einem Update verworfen
     // statt fehlinterpretiert werden.
-    static constexpr uint32_t MAGIC = 0x52574C32;
+    static constexpr uint32_t MAGIC = 0x52574C33;
 
     // Offset im RTC-Speicher, gezaehlt in 4-Byte-Bloecken
     static constexpr uint32_t RTC_OFFSET = 0;
