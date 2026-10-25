@@ -398,3 +398,87 @@
 - Ganze Python-Suite und `pio test -e native` grün.
 - Von Hand am PC: `python -m app.main --pc`, mit 6/5/4 durch alle Menüpunkte; Chat, Quiz und Reflection brauchen dafür `GROQ_API_KEY` und die Datenbank wie heute.
 - Nicht in 4a, sondern in 4b: Tasten am ESP je Zustand, BT4–BT6 als Pegelwechsel, `SESSION|HAND`/`SESSION|NACHT`, `PI STARTET`, Abnahme an der Wand (Spec §11, Teil „Am Gerät“).
+
+---
+
+## Stand nach der Umsetzung (2026-10-25)
+
+Alle 13 Aufgaben sind umgesetzt und einzeln geprüft. Eine Schlussprüfung über den ganzen Branch fand 3 wichtige Punkte und 14 kleinere; die wichtigen und 10 kleinere sind in einer Korrekturrunde behoben und nachgeprüft. Python: 305 Tests grün.
+
+### Entscheide während der Umsetzung (Rulings)
+
+- Vorab-Ruling P1: Reihenfolge 1, 2, 3, 4, **6, 5**, 7 … — T6 vor T5, damit T5 das echte `Activity` nutzt — kostet nichts, falls falsch.
+- Vorab-Ruling P2: Die Löschungen von `rpi/app/applications/Animations/Stickman.py` (T10) und `Animations/Radar.py` (T11) wandern in Task 13, wo `main.py` neu geschrieben wird — sonst ist die Suite zwischen T10 und T13 rot — kostet zwei Zeilen Umplanung, falls falsch.
+- Task 2: Ruling: fuehrender Punkt belegt eine leere Stelle (".A" → [0, A]) – Brief mehrdeutig, Pruefer akzeptiert; ob der ESP es gleich macht, ist offen → Schlusspruefung – kostet eine Zeile, falls falsch
+- Task 3: Ruling: clear() bleibt "Wand sofort leeren"; neu clear_canvas() (nur Puffer, kein Bus); in Task 11 ruft animations/stickman.py pro Bild clear_canvas() statt clear() – verhindert Flackern ohne die Bedeutung von clear() fuer Menue/Anwendungen zu aendern – kostet eine Methode, falls falsch
+- Task 6: Ruling: GPIO22 mit internem Pull-down einlesen (lgpio.SET_PULL_DOWN) – ohne Radar sonst zufaellig HIGH, Pi bliebe wach; ein Push-Pull-Ausgang des Radars ueberstimmt den Pull-down – kostet eine Flag, falls die Platine schon einen Pull-down hat
+- Task 5: Ruling: StopSignal (set(reason)/is_set/reason/wait) statt nacktem Event; Tasten beruehren Activity in Shell/AppContext; run_blocking/show_pages/Shell-Details im Auftrag festgelegt – Brief liess sie offen – kostet Umbenennungen, falls falsch
+- Task 5: Ruling: Abhaengigkeiten (Radar-Umschaltung, config_dir, Server) kommen ueber die Konstruktoren der Anwendungen (wie im Plan: RadarApp(switch_factory…), ReflectionApp(config_dir=…), ThemaApp(server_factory)), nicht ueber AppContext; Shell bleibt ohne radar/config_dir – kostet ein Feld in AppContext, falls falsch
+- Task 7: Ruling: send_done(timeout_s=30) – bei LinkBusy alle 0,25 s, bei None nach 10 s erneut (§6.2) – Brief sagte nur "bis OK oder Frist" – kostet eine Zahl, falls falsch
+- Task 8: Ruling: Antwort zuerst als Seiten zeigen, danach einmal ganz sprechen; leere Umschrift → NICHTS VERSTANDEN; Recorder/Lautsprecher erst beim ersten run erzeugen – Brief liess es offen – kostet eine Reihenfolge, falls falsch
+- Task 8: Ruling: leere KI-Antwort zaehlt als KI-Fehler; BT4 waehrend der Aufnahme stoppt den Recorder in einem Hintergrund-Thread (Ergebnis verworfen) – sonst Sekunden Verzoegerung bis zum Menue – kostet einen Thread, falls falsch
+- Task 9: Ruling: Quiz erzeugt bis zu dreimal neu, wenn ein Feld nicht auf 4 Zeilen passt, danach Seiten; Quiz-Auftrag in prompt.py; Kette der Reflection nur lokal in run – Brief liess es offen – kostet Umbau der Wiederholung, falls falsch
+- Task 10: Ruling: kaputte Bilddatei wird mit Warnung uebersprungen statt die Animation zu stoppen; Dateien als utf-8-sig lesen – Brief schwieg – kostet eine Zeile, falls falsch
+- Task 10: Ruling: nicht-numerisches FRAME_TIME → Datei wird uebersprungen (Entscheid 3), nur nicht-positive Zahlen fallen auf 0,4 s – so stand es im Fix-Auftrag; der Nachpruef-Auftrag hatte es falsch zusammengefasst – kostet nichts, falls falsch
+- Task 11: Ruling: Umsetzer auf dem staerksten Modell (opus) – PiLink-Thread und Leitungsumschaltung sind heikel – kostet nur Geld
+- Task 11: Ruling: pause() wartet eine laufende Abfrage ab und ist danach portfrei; resume() verwirft gepufferte Radar-Bytes; RadarApp beendet sich auch bei gesetztem Stopp-Signal; ExpanderError → zurueck ins Menue mit Log – Brief liess es offen – kostet Umbau, falls falsch
+- Task 11: Ruling: nach ausdruecklichem ERROR/BUSY auf MODE|RADAR kein MODE|NORMAL – der ESP hat dann nicht umgeschaltet (§6.4); weicht vom Wortlaut von Review Focus 3 ab – kostet eine einzelne Nachricht, falls falsch
+- Task 13: Ruling: im PC-Modus zeigt RADAR "RADAR NUR AN DER WAND"; ReflectionAI/prompt*.py bleiben als Vorlage fuer Teil 3b; on_shutdown im Wand-Modus nur Log (Herunterfahren bringt Teil 2); ein gemeinsamer SMBus(1) fuer Anzeige und Expander; bei Ablauf von F6 erst Stopp "idle", Shell-Ende abwarten, dann DONE – Brief liess es offen – kostet Umbau der Verdrahtung, falls falsch
+- Final: Ruling: eine Korrekturrunde mit I-1..I-3, drei Pflicht-Minors aus dem Ledger (Verwerf-Thread, test_chat_flow, run_wall-Absturz) und den neuen Minors M-1, M-2, M-3, M-4, M-6, M-7, M-10, M-12, M-13, M-11 (ein E2E-Test) – billig und fuer die Person an der Wand sichtbar – kostet eine groessere Runde, falls zu viel
+- Final: Ruling: M-5, M-8, M-9, M-14 und alle uebrigen Minors bleiben fuer spaeter; M-9 (Punkte ESP vs. Pi) ist ein Entscheid des Owners in 4b – kostet spaetere Nacharbeit
+
+### Hinweise für Teil 2 und 4b
+
+- Task 11: note fuer Task 13: waehrend PiLink pausiert wirft request() LinkBusy → run_wall muss erst das Stopp-Signal setzen und nach dem Radar DONE senden; ExpanderButtons fuer das Radar mit dem Bus/bus_guard des Dienstes bauen
+- Task 11: note fuer Teil 2/4b: Die ESP-Firmware beantwortet MODE heute mit ERROR|UNKNOWN; RADAR im Menue zeigt an der Wand FEHLER IN RADAR, bis der ESP RADAR-DEBUG kann (Teil 2)
+- Offen aus der Schlussprüfung: M-5 (Sprechen nach BT4 abbrechen), M-8 (Quiz speichert Fragen, die niemand sah), M-9 (ESP und Pi zeichnen Punkte verschieden; Entscheid des Owners in 4b), M-14 (Wiederholung beim Expander, gehört zu Regel B), Rest von M-11 (Testlücken).
+
+### Aufgeschobene kleinere Punkte
+
+- Task 2: minor (deferred): cells.py:47-53 mehrere fuehrende Punkte ("..A") leuchten uneinheitlich
+- Task 2: minor (deferred): cells.normalize ohne NFC – zerlegte Umlaute (U+0308) werden leer
+- Task 2: minor (deferred): cells nutzt ASCII_16SEG.get, text_layout.displayable getrennt – koennten auseinanderlaufen
+- Task 3: minor (deferred): start() verwirft Rueckgabe der Init-Transfers (nur Warnung) – Kommentar fehlt
+- Task 3: minor (deferred): show_lines/show_text lassen die Zeichenflaeche stehen; spaeteres refresh() zeigt alte Flaeche
+- Task 3: minor (deferred): TerminalDisplay druckt bei jedem refresh()
+- Task 4: minor (deferred): ExpanderButtons – Wiederholung ohne Log; `log` ungenutzt
+- Task 4: minor (deferred): KeyboardButtons – bei EOF endet der Thread still, get(None) blockiert; zweites start() startet zweiten Thread
+- Task 4: minor (deferred): ExpanderButtons nur fuer einen Verbraucher, nicht dokumentiert
+- Task 4: minor (deferred): Tests fehlen fuer drain()-Neubezug, Lesefehler in start(), bus_guard bei Wiederholung
+- Task 6: minor (deferred): int() akzeptiert "1_5" und "+15" beim Schalter
+- Task 6: minor (deferred): test_failed_import_is_not_retried patcht builtins.__import__ global
+- Task 5: minor (deferred): test_buttons_before_start_are_drained prueft das Leeren nicht (vakuum)
+- Task 5: minor (deferred): test_settings_app_starts_and_returns_to_submenu kann ohne Rueckkehr gruen sein; sleep(0.1)
+- Task 5: minor (deferred): _choose zeichnet das Menue vor der Stopp-Pruefung (ein Bild zu viel)
+- Task 5: minor (deferred): leere settings → Menu([]) ValueError
+- Task 5: minor (deferred): vor dem Fehlerbild nicht geleert – altes BT4 schliesst "FEHLER IN …" sofort
+- Task 5: minor (deferred): Shell-drain beruehrt Activity nicht (anders als run_blocking)
+- Task 5: minor (deferred): ungetestet: BT4 oben tut nichts, Menu.select-Wrap, wait_button(timeout=0)
+- Task 7: minor (deferred): Fehler im Handler vor der Antwort → keine Antwort (ERROR|INTERNAL fehlt)
+- Task 7: minor (deferred): zweites SHUTDOWN (neue Nummer) ruft on_shutdown erneut
+- Task 7: minor (deferred): send_done kann timeout_s um bis zu 10 s ueberziehen
+- Task 7: minor (deferred): test_stop_ends_thread_quickly prueft is_alive nicht
+- Task 8: minor (deferred): echte Antwort, die mit "Fehler" beginnt, gilt als KI-Fehler (Vertrag von write_to_ai)
+- Task 8: minor (deferred): test_chat_flow prueft die Reihenfolge der Anzeigen nicht
+- Task 8: minor (deferred): Verwerf-Thread der Aufnahme wird nicht abgewartet; neue Aufnahme koennte sich mit altem stop_recording ueberschneiden
+- Task 7: minor (deferred): test_shutdown_answers_after_wait_limit druckt die Warnung "Anzeige nach 0.1 s nicht freigegeben" in die Testausgabe (assertLogs fehlt)
+- Task 9: minor (deferred): topics.save – mkstemp setzt 0600 auf thema*.txt
+- Task 9: minor (deferred): save schreibt zwei Dateien nacheinander (nicht gemeinsam atomar)
+- Task 9: minor (deferred): schwache Tests: test_long_thought_asks_again, test_save_uses_replace, test_reflection_never_touches_db
+- Task 9: minor (deferred): Quiz zeigt Platzhalter, wenn nur Loesung/Hinweis fehlen
+- Task 10: minor (deferred): Schluessel mit float-Werten werden nicht als int geprueft (wird durch das Ueberspringen kaputter Dateien teilweise abgefangen)
+- Task 10: minor (deferred): eingespeiste Bilder mit Dauer 0 umgehen die Pruefung in load_frames (nur ueber Konstruktor erreichbar)
+- Task 11: minor (deferred): _send_normal nicht abgesichert – OSError ueberspringt _forget() und ersetzt die urspruengliche Ausnahme
+- Task 11: minor (deferred): toter Link → leave() wartet 30 s, ohne zu senden
+- Task 11: minor (deferred): reply() waehrend pause geht verloren (nur bei SHUTDOWN-Wettlauf mit RADAR)
+- Task 11: minor (deferred): keine Wartezeit nach dem Umschalten des Multiplexers vor reset_input_buffer
+- Task 11: minor (deferred): Menue friert bis 33 s ohne Hinweis ein, wenn der ESP schweigt
+- Task 11: minor (deferred): Ergebnis von leave() wird ignoriert; Testluecken (Fehler in der Radar-Schleife, Link nach Abbruch)
+- Task 12: minor (deferred): Handler ohne Socket-Timeout (haengender Client haelt einen Thread)
+- Task 12: minor (deferred): >64 KB Body vor 413 nicht gelesen; stop() ohne Schutz bei totem Thread; Ausnahme aus stop() ersetzt die urspruengliche
+- Task 12: minor (deferred): irrefuehrender Kommentar und privater Zugriff (_last) in test_settings_apps
+- Task 13: minor (deferred): Fehler in shell.run() im Thread → run_wall gibt still "shutdown" zurueck
+- Task 13: minor (deferred): Bus nie geschlossen; Aufraeumen fehlt, wenn open_esp_port/PiLink beim Start scheitern
+- Task 13: minor (deferred): main importiert privates _SmbusReader
+- Task 13: minor (deferred): README Zeile 68 nennt die geloeschten Klassen
+- Task 13: minor (deferred): altes driver/display/display.py ist jetzt unbenutzt
