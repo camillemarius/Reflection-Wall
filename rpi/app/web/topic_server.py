@@ -5,7 +5,7 @@ import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable, Tuple
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 from app import topics
 
@@ -25,10 +25,10 @@ small{{color:#555}} button{{margin-top:1rem;padding:.6rem 1.2rem;font-size:1rem}
 <h1>Themen</h1>
 {message}<form method="post" action="/" accept-charset="utf-8">
 <p><label>Tägliches Thema<br>
-<input type="text" name="daily" maxlength="{max}" value="{daily}"></label><br>
+<input type="text" name="daily" maxlength="{max}" value="{daily}" placeholder="{daily_fallback}"></label><br>
 <small>{note}</small></p>
 <p><label>Thema für Reflection von Hand<br>
-<input type="text" name="hand" maxlength="{max}" value="{hand}"></label></p>
+<input type="text" name="hand" maxlength="{max}" value="{hand}" placeholder="{hand_fallback}"></label></p>
 <button type="submit">Speichern</button>
 </form></body></html>
 """
@@ -66,11 +66,17 @@ class TopicServer:
         self._thread = None
         self.port = port
 
-    def _render(self, daily: str, hand: str, saved: bool = False) -> bytes:
+    def _render(self, saved: bool = False) -> bytes:
+        # Die Felder zeigen den Inhalt der Dateien. Die geltende Ersatzangabe steht nur als
+        # placeholder da, damit ein Speichern sie nicht in die Datei schreibt.
+        directory = self._config_dir
         message = "<p><strong>Gespeichert.</strong></p>\n" if saved else ""
         return _PAGE.format(message=message, max=topics.MAX_LENGTH, note=html.escape(CHAIN_NOTE),
-                            daily=html.escape(daily, quote=True),
-                            hand=html.escape(hand, quote=True)).encode("utf-8")
+                            daily=html.escape(topics.read_daily_file(directory), quote=True),
+                            daily_fallback=html.escape(topics.DEFAULT_TOPIC, quote=True),
+                            hand=html.escape(topics.read_hand_file(directory), quote=True),
+                            hand_fallback=html.escape(topics.read_daily(directory), quote=True),
+                            ).encode("utf-8")
 
     def _make_handler(self):
         server = self
@@ -87,12 +93,20 @@ class TopicServer:
                 self.end_headers()
                 self.wfile.write(body)
 
+            def _same_origin(self) -> bool:
+                """Schutz vor fremden Seiten (CSRF): Origin, ersatzweise Referer, fehlt oder
+                passt zum eigenen Host."""
+                source = self.headers.get("Origin") or self.headers.get("Referer")
+                if not source:
+                    return True
+                host = self.headers.get("Host", "")
+                return bool(host) and urlsplit(source).netloc.lower() == host.lower()
+
             def do_GET(self):
                 if self.path.split("?")[0] != "/":
                     self._send(404, b"Nicht gefunden.")
                     return
-                self._send(200, server._render(topics.read_daily(server._config_dir),
-                                               topics.read_hand(server._config_dir)))
+                self._send(200, server._render())
 
             def do_POST(self):
                 if self.path.split("?")[0] != "/":
@@ -107,17 +121,21 @@ class TopicServer:
                         self.rfile.read(length)
                     self._send(413, "Eingabe zu gross.".encode("utf-8"))
                     return
-                form = parse_qs(self.rfile.read(length).decode("utf-8", errors="replace"),
-                                keep_blank_values=True)
-                daily = form.get("daily", [topics.read_daily(server._config_dir)])[0]
-                hand = form.get("hand", [topics.read_hand(server._config_dir)])[0]
+                body = self.rfile.read(length)
+                if not self._same_origin():
+                    self._send(403, "Nur von dieser Seite aus.".encode("utf-8"))
+                    return
+                form = parse_qs(body.decode("utf-8", errors="replace"), keep_blank_values=True)
+                # Fehlt ein Feld, bleibt seine Datei, wie sie ist (keine Ersatzangabe hinein).
+                daily = form.get("daily", [topics.read_daily_file(server._config_dir)])[0]
+                hand = form.get("hand", [topics.read_hand_file(server._config_dir)])[0]
                 try:
                     topics.save(server._config_dir, daily, hand)
                 except OSError:
                     self._send(500, "Speichern fehlgeschlagen.".encode("utf-8"))
                     return
                 server._on_save()
-                self._send(200, server._render(topics.clean(daily), topics.clean(hand), saved=True))
+                self._send(200, server._render(saved=True))
 
         return Handler
 

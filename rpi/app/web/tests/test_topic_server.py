@@ -3,6 +3,7 @@ import unittest
 import urllib.error
 import urllib.parse
 import urllib.request
+from html.parser import HTMLParser
 from pathlib import Path
 from unittest import mock
 
@@ -28,16 +29,91 @@ class TopicServerTest(unittest.TestCase):
     def _on_save(self):
         self.saved += 1
 
-    def _post(self, daily, hand, raw=None):
+    def _post(self, daily, hand, raw=None, headers=None):
         data = raw if raw is not None else urllib.parse.urlencode(
             {"daily": daily, "hand": hand}).encode("utf-8")
-        request = urllib.request.Request(self.url, data=data, method="POST")
+        request = urllib.request.Request(self.url, data=data, method="POST", headers=headers or {})
         with urllib.request.urlopen(request, timeout=5) as response:
             return response.read().decode("utf-8")
 
     def _get(self):
         with urllib.request.urlopen(self.url, timeout=5) as response:
             return response.read().decode("utf-8")
+
+    def _fields(self):
+        """Die Eingabefelder der Seite: Name -> Attribute (wie ein Browser sie sieht)."""
+        page = self._get()
+
+        class Inputs(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.found = {}
+
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == "input" and "name" in attrs:
+                    self.found[attrs["name"]] = attrs
+
+        parser = Inputs()
+        parser.feed(page)
+        return parser.found
+
+    def test_fields_show_the_files_and_the_fallback_as_placeholder(self):
+        fields = self._fields()
+        self.assertEqual(fields["daily"].get("value"), "")
+        self.assertEqual(fields["daily"].get("placeholder"), topics.DEFAULT_TOPIC)
+        self.assertEqual(fields["hand"].get("value"), "")
+        self.assertEqual(fields["hand"].get("placeholder"), topics.DEFAULT_TOPIC)
+        topics.save(self.dir, "Mut", "")
+        fields = self._fields()
+        self.assertEqual(fields["daily"].get("value"), "Mut")
+        self.assertEqual(fields["hand"].get("value"), "")
+        self.assertEqual(fields["hand"].get("placeholder"), "Mut")
+
+    def test_saving_the_unchanged_page_writes_no_fallback(self):
+        (self.dir / topics.DAILY_FILE).write_text("Mut\n", encoding="utf-8")
+        fields = self._fields()
+        self._post(fields["daily"].get("value", ""), fields["hand"].get("value", ""))
+        self.assertEqual((self.dir / topics.HAND_FILE).read_text(encoding="utf-8"), "")
+        self._post("Neu", self._fields()["hand"].get("value", ""))
+        self.assertEqual(topics.read_hand(self.dir), "Neu")  # folgt weiter dem taeglichen Thema
+
+    def test_empty_daily_field_writes_no_default(self):
+        self._post("", "")
+        self.assertEqual((self.dir / topics.DAILY_FILE).read_text(encoding="utf-8"), "")
+        self.assertEqual(topics.read_daily(self.dir), topics.DEFAULT_TOPIC)
+
+    def test_missing_field_keeps_the_file_as_it_is(self):
+        (self.dir / topics.DAILY_FILE).write_text("Mut\n", encoding="utf-8")
+        self._post("", "", raw=b"daily=Neu")
+        self.assertEqual(topics.read_daily(self.dir), "Neu")
+        self.assertEqual((self.dir / topics.HAND_FILE).read_text(encoding="utf-8"), "")
+        self.assertEqual(topics.read_hand(self.dir), "Neu")
+
+    def _assert_forbidden(self, headers):
+        topics.save(self.dir, "Alt", "Hand")
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self._post("Fremd", "Fremd", headers=headers)
+        self.assertEqual(caught.exception.code, 403)
+        caught.exception.close()
+        self.assertEqual((topics.read_daily(self.dir), topics.read_hand(self.dir)), ("Alt", "Hand"))
+        self.assertEqual(self.saved, 0)
+
+    def test_post_from_another_origin_is_forbidden(self):
+        self._assert_forbidden({"Origin": "http://evil.example"})
+
+    def test_post_with_null_origin_is_forbidden(self):
+        self._assert_forbidden({"Origin": "null"})
+
+    def test_post_with_foreign_referer_is_forbidden(self):
+        self._assert_forbidden({"Referer": "http://evil.example/seite"})
+
+    def test_post_from_the_own_page_is_accepted(self):
+        own = "http://127.0.0.1:%d" % self.server.port
+        self.assertIn("Gespeichert.", self._post("A", "B", headers={"Origin": own}))
+        self.assertIn("Gespeichert.", self._post("C", "D", headers={"Referer": own + "/"}))
+        self.assertEqual(topics.read_daily(self.dir), "C")
+        self.assertEqual(self.saved, 2)
 
     def test_get_shows_topics(self):
         topics.save(self.dir, "Mut", "Freundschaft")

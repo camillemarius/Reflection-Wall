@@ -23,6 +23,16 @@ def _read(config_dir, name: str) -> str:
         return ""
 
 
+def read_daily_file(config_dir=CONFIG_DIR) -> str:
+    """Inhalt von thema.txt ohne Ersatzangabe ("" wenn leer oder fehlend)."""
+    return _read(config_dir, DAILY_FILE)
+
+
+def read_hand_file(config_dir=CONFIG_DIR) -> str:
+    """Inhalt von thema_hand.txt ohne Ersatzangabe ("" wenn leer oder fehlend)."""
+    return _read(config_dir, HAND_FILE)
+
+
 def read_daily(config_dir=CONFIG_DIR) -> str:
     return _read(config_dir, DAILY_FILE) or DEFAULT_TOPIC
 
