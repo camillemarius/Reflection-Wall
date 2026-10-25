@@ -8,21 +8,43 @@ import unittest
 from unittest import mock
 
 from app import main as app_main
+from app.applications import settings_apps
 from app.link.codec import Message
 from app.ui.activity import Activity
-from app.ui.app_host import AppContext, StopSignal, run_app
-from app.ui.buttons import QueueButtons
+from app.ui.app_host import AppContext, StopApp, StopSignal, run_app
+from app.ui.buttons import BT4, QueueButtons
 
 
 class FakeDisplay:
-    def __init__(self):
+    def __init__(self, events=None):
         self.shown = []
+        self.events = events
 
     def show_lines(self, lines, dots_own_cell=False):
         self.shown.append(list(lines))
+        if self.events is not None:
+            self.events.append(("show", list(lines)))
 
     def start(self):
         pass
+
+
+class EventLink:
+    """Test-Leitung fuer den echten LinkDispatcher: Anfragen des ESP kommen ueber incoming."""
+
+    def __init__(self, events):
+        self.incoming = queue.Queue()
+        self.events = events
+
+    def reply(self, request, command, data=""):
+        self.events.append(("reply", request.command, command))
+        return True
+
+    def request(self, command, data=""):
+        self.events.append(("request", command))
+        fut = concurrent.futures.Future()
+        fut.set_result(Message(1, "OK", ""))
+        return fut
 
 
 class FakeLink:
@@ -92,10 +114,111 @@ class BuildAppsTest(unittest.TestCase):
         self.assertEqual(run_app(placeholder, ctx), "back")
         self.assertEqual(display.shown[0][:2], ["RADAR NUR AN DER WAND", "BT4 ZURUECK"])
 
+    def test_thema_app_writes_into_the_given_config_dir(self):
+        _, settings = app_main.build_apps("eigener-ordner")
+        thema = settings[0]
+        buttons = QueueButtons()
+        buttons.put(BT4)
+        ctx = AppContext(FakeDisplay(), buttons, Activity(), StopSignal())
+        with mock.patch.object(settings_apps, "TopicServer") as server:
+            with self.assertRaises(StopApp):
+                thema.run(ctx)
+        server.assert_called_once()
+        self.assertEqual(server.call_args[0][0], "eigener-ordner")
+
 
 class RunWallTest(unittest.TestCase):
     def patched(self, apps):
         return mock.patch.object(app_main, "build_apps", return_value=(apps, []))
+
+    def test_shell_crash_returns_error_and_is_logged(self):
+        shell = mock.Mock()
+        shell.return_value.run.side_effect = RuntimeError("kaputt")
+        shell.return_value.display_released = threading.Event()
+        with self.patched([FakeApp("A")]), mock.patch.object(app_main, "Shell", shell):
+            with self.assertLogs("app.main", level="ERROR") as logs:
+                result = app_main.run_wall(FakeDisplay(), QueueButtons(), Activity(), StopSignal())
+        self.assertEqual(result, "error")
+        self.assertIn("kaputt", "\n".join(logs.output))
+
+    def _interrupt_in_app(self, leave_s):
+        """run_wall bekommt Ctrl+C, waehrend eine Anwendung laeuft, deren Ende leave_s dauert."""
+        display, buttons, stop = FakeDisplay(), QueueButtons(), StopSignal()
+        self.addCleanup(stop.set, "shutdown")
+        entered, left = threading.Event(), threading.Event()
+
+        def radar(ctx):
+            entered.set()
+            try:
+                while True:
+                    ctx.wait_button()
+            finally:
+                time.sleep(leave_s)  # wie leave() der Radar-Umschaltung
+                left.set()
+
+        class Interrupting(Activity):
+            def expired(self):
+                if entered.is_set():
+                    raise KeyboardInterrupt
+                return False
+
+        buttons.put(5)
+        with self.patched([FakeApp("RADAR", run=radar)]), \
+                mock.patch.object(app_main, "EXPIRY_POLL_S", 0.01):
+            started = time.monotonic()
+            with self.assertRaises(KeyboardInterrupt):
+                app_main.run_wall(display, buttons, Interrupting(), stop)
+        return stop, left, time.monotonic() - started
+
+    def test_interrupt_stops_the_shell_and_waits_for_the_app_to_leave(self):
+        stop, left, _ = self._interrupt_in_app(leave_s=0.2)
+        self.assertTrue(left.is_set())
+        self.assertEqual(stop.reason, "shutdown")
+
+    def test_interrupt_waits_for_the_shell_only_up_to_the_limit(self):
+        with mock.patch.object(app_main, "SHELL_STOP_WAIT_S", 0.1), \
+                self.assertLogs("app.main", level="WARNING"):
+            _, left, took = self._interrupt_in_app(leave_s=3.0)
+        self.assertFalse(left.is_set())
+        self.assertLess(took, 2.0)
+
+    def test_end_to_end_with_link_dispatcher(self):
+        # Echter LinkDispatcher mit Test-Leitung: BUTTON|n bewegt das Menue, SHUTDOWN bekommt
+        # OK erst, wenn die Anwendung beendet und die Anzeige freigegeben ist.
+        events = []
+        display, link = FakeDisplay(events), EventLink(events)
+        buttons, stop = QueueButtons(), StopSignal()
+        entered = threading.Event()
+
+        def slow_leave(ctx):
+            entered.set()
+            try:
+                while True:
+                    ctx.wait_button()
+            finally:
+                time.sleep(0.2)
+                events.append(("left",))
+
+        with self.patched([FakeApp("A"), FakeApp("B", run=slow_leave)]):
+            thread, result = start_wall(display, buttons, Activity(), stop, link=link,
+                                        on_shutdown=lambda: events.append(("on_shutdown",)))
+            self.assertTrue(wait_for(lambda: display.shown))
+            self.assertEqual(display.shown[-1][:2], ["> A", "  B"])
+            link.incoming.put(Message(1, "BUTTON", "6"))
+            self.assertTrue(wait_for(lambda: display.shown[-1][:2] == ["  A", "> B"]))
+            link.incoming.put(Message(2, "BUTTON", "5"))
+            self.assertTrue(entered.wait(3))
+            link.incoming.put(Message(3, "SHUTDOWN", ""))
+            thread.join(5)
+            self.assertTrue(wait_for(lambda: ("on_shutdown",) in events))
+        self.assertEqual(result, ["shutdown"])
+        self.assertEqual([e for e in events if e[0] == "reply"],
+                         [("reply", "BUTTON", "OK"), ("reply", "BUTTON", "OK"),
+                          ("reply", "SHUTDOWN", "OK")])
+        ok = events.index(("reply", "SHUTDOWN", "OK"))
+        self.assertLess(events.index(("left",)), ok)
+        self.assertLess(ok, events.index(("on_shutdown",)))
+        self.assertFalse([e for e in events[ok:] if e[0] == "show"])
 
     def test_keys_6_5_4_do_not_end_and_show_menu_again(self):
         display, buttons, stop = FakeDisplay(), QueueButtons(), StopSignal()

@@ -10,7 +10,7 @@ from app.applications.chat_app import ChatApp
 from app.applications.quiz_app import QuizApp
 from app.applications.radar_app import RadarApp
 from app.applications.reflection_app import ReflectionApp
-from app.applications.settings_apps import RadarSetupPlaceholder, ThemaApp
+from app.applications.settings_apps import RadarSetupPlaceholder, ThemaApp, default_server_factory
 from app.applications.stickman_app import StickmanApp
 from app.driver.display.terminal_display import TerminalDisplay
 from app.driver.display.wall_display import WallDisplay
@@ -26,6 +26,7 @@ from app.ui.shell import Shell
 log = logging.getLogger(__name__)
 
 EXPIRY_POLL_S = 1.0
+SHELL_STOP_WAIT_S = 40.0  # leave() der Radar-Umschaltung wartet bis zu 30 s auf MODE|NORMAL
 
 
 class RadarPcPlaceholder:
@@ -48,7 +49,8 @@ def build_apps(config_dir, radar_app=None):
         radar_app if radar_app is not None else RadarPcPlaceholder(),
         StickmanApp(),
     ]
-    settings = [ThemaApp(), RadarSetupPlaceholder()]
+    settings = [ThemaApp(server_factory=default_server_factory(config_dir)),
+                RadarSetupPlaceholder()]
     return apps, settings
 
 
@@ -72,7 +74,15 @@ def run_wall(display, buttons, activity, stop_event, link=None, radar_factory=No
         dispatcher.start()
 
     result = []
-    worker = threading.Thread(target=lambda: result.append(shell.run()), name="shell", daemon=True)
+
+    def run_shell() -> None:
+        try:
+            result.append(shell.run())
+        except Exception:
+            log.exception("Bildschirmfolge abgestuerzt")
+            result.append("error")
+
+    worker = threading.Thread(target=run_shell, name="shell", daemon=True)
     worker.start()
     try:
         expired = False
@@ -86,9 +96,16 @@ def run_wall(display, buttons, activity, stop_event, link=None, radar_factory=No
             if not dispatcher.send_done():
                 log.warning("DONE wurde nicht bestaetigt")
     finally:
+        if worker.is_alive():
+            # Ctrl+C oder Prozessende: die Anwendung beenden und auf sie warten, damit sie
+            # aufraeumt (das Radar schaltet die Leitung mit leave() zurueck).
+            stop_event.set("shutdown")
+            worker.join(SHELL_STOP_WAIT_S)
+            if worker.is_alive():
+                log.warning("Bildschirmfolge nach %.0f s nicht beendet", SHELL_STOP_WAIT_S)
         if dispatcher is not None:
             dispatcher.stop()
-    return result[0] if result else "shutdown"
+    return result[0] if result else "error"
 
 
 def main(argv=None) -> None:
