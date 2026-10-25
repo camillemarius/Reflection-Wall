@@ -127,6 +127,7 @@ class RecordingWallDisplay(WallDisplay):
 class FakeGuard:
     def __init__(self, events):
         self.events = events
+        self.delay = 0.0  # > 0: wie Regel B mit haengendem INT_GPIO_EXP, vor jeder Uebertragung
 
     def start(self):
         self.events.append(("guard", "start"))
@@ -137,8 +138,14 @@ class FakeGuard:
     def radar_high(self):
         return False
 
+    @contextlib.contextmanager
+    def _transfer(self):
+        if self.delay:
+            time.sleep(self.delay)
+        yield
+
     def __call__(self):
-        return contextlib.nullcontext()
+        return self._transfer()
 
 
 class WallLink:
@@ -622,6 +629,46 @@ class MainTest(unittest.TestCase):
         self.assertTrue(wall.join())
         self.assertIn(["ENDE"], wall.shown())
         self.assertLess(max(wall.display_writes()), wall.position(("reply", "SHUTDOWN", "OK")))
+
+    def test_ok_to_shutdown_waits_for_a_slow_display_write(self):
+        # Review Focus 4 mit Review Focus 5: haengt INT_GPIO_EXP, wartet der Guard vor jeder
+        # Uebertragung, und ein ganzes Bild dauert lange. Das OK auf SHUTDOWN kommt erst nach
+        # dem Schreiben. Der Dispatcher hier hat nur 0,05 s als eigene Frist; besteht der Test,
+        # dann gibt main() die eigene, laengere Frist mit.
+        running = threading.Event()
+        full_screen = ["X" * 24] * 4
+
+        def busy(ctx):
+            try:
+                ctx.display.show_lines(["A"])
+                running.set()
+                while True:
+                    ctx.wait_button()
+            finally:
+                ctx.display.show_lines(full_screen)  # alle 12 Module, je mit Wartezeit
+                wall.events.append(("left",))
+
+        def short_default(*args, release_wait_s=0.05, **kwargs):
+            return LinkDispatcher(*args, release_wait_s=release_wait_s, **kwargs)
+
+        wall = WallRun(self, apps=[FakeApp("A", run=busy)])
+        wall.patch("LinkDispatcher", short_default)
+        self.assertTrue(wall.start())
+        wall.put("SESSION", "HAND")
+        self.assertTrue(wait_for(lambda: wall.shown()))
+        wall.put("BUTTON", "5")
+        self.assertTrue(running.wait(2))
+        wall.guard.delay = 0.03  # ab jetzt: 12 Module brauchen zusammen etwa 0,36 s
+        wall.put("SHUTDOWN")
+        self.assertTrue(wall.join())
+        ok = wall.position(("reply", "SHUTDOWN", "OK"))
+        self.assertIn(full_screen, wall.shown())
+        self.assertLess(max(wall.display_writes()), ok)
+        self.assertLess(wall.position(("left",)), ok)
+        # Die Frist deckt ein ganzes Bild mit haengender Leitung (12 x 1 s) und bleibt unter
+        # T_shutdown (60 s), der Frist des ESP fuer SHUTDOWN.
+        self.assertGreater(app_main.RELEASE_WAIT_S, 12.0)
+        self.assertLess(app_main.RELEASE_WAIT_S, 60.0)
 
     def test_hand_after_ok_to_shutdown_leaves_display_alone(self):
         # Review Focus 4: SESSION|HAND und SHUTDOWN sind beantwortet, bevor main() die Sitzung

@@ -33,6 +33,10 @@ SHELL_STOP_WAIT_S = 40.0  # leave() der Radar-Umschaltung wartet bis zu 30 s auf
 SESSION_POLL_S = 0.1      # so oft schaut der Wand-Modus nach stop, solange er wartet
 SHUTDOWN_WAIT_S = 10.0    # nach SHUTDOWN: power_off laeuft schon im Dispatcher
 DONE_WAIT_S = 120.0       # nach DONE: so lange darf das SHUTDOWN des ESP brauchen
+# So lange wartet das OK auf SHUTDOWN auf die freigegebene Anzeige. Unter der Frist des ESP
+# fuer SHUTDOWN (T_shutdown, 60 s); deckt ein ganzes Bild bei haengendem INT_GPIO_EXP
+# (Regel B wartet vor jedem der 12 Module bis zu 1 s).
+RELEASE_WAIT_S = 45.0
 
 
 class RadarPcPlaceholder:
@@ -181,7 +185,7 @@ def _serve_wall(stop, activity_minutes) -> None:
         released = threading.Event()
         released.set()  # noch laeuft keine Bildschirmfolge: SHUTDOWN bekommt sofort OK
         dispatcher = LinkDispatcher(link, buttons, activity, stop, released,
-                                    on_shutdown=power_off)
+                                    on_shutdown=power_off, release_wait_s=RELEASE_WAIT_S)
         dispatcher.start()
         if not announce_ready(link, stop):  # L1
             return
