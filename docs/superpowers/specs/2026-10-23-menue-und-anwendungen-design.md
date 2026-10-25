@@ -125,7 +125,7 @@ Menü. Eine Tastatur oder SSH braucht es nicht mehr.
 - V3 und V4 sind angenommen.
 - V1: Der Owner verlangt, dass der Pi in jedem Fall erfährt, ob BT2 oder der tägliche
   Timer des ESP ihn geweckt hat. F1 ist entsprechend geändert. Die Anzeigetexte von
-  V1 (`PI STARTET`, `PI FAEHRT HERUNTER`, danach dunkel) sind noch nicht entschieden.
+  V1 (`PI STARTET`, `PI FAEHRT HERUNTER`, danach dunkel) sind angenommen.
 - V2 ist abgelehnt: Eine ganze Zeile für den Hinweis auf die nächste Seite ist zu
   viel. Stattdessen gilt **D17** (unten).
 
@@ -140,6 +140,8 @@ Menü. Eine Tastatur oder SSH braucht es nicht mehr.
 | V5 | Die Webseite läuft auf Port 80. | Mit Port enthielte die Adresse ein `:`, und das zeigt die Wand heute als `/`. |
 | V6 | D1 gilt mit einer Ausnahme: Läuft die Anwendung Radar, fährt der ESP den Pi nach 60 min herunter (S3-a bleibt). | Im Radar-Modus gehört die UART dem Radar. Der ESP kann dann nicht prüfen, ob der Pi noch lebt. |
 | V7 | Reflection von Hand: Der erste Gedanke entsteht nur aus dem Thema. Jeder weitere baut auf dem vorherigen auf, solange man in der Anwendung bleibt. Verlässt man sie, ist alles vergessen. Die alte Datenbank wird nicht mehr gelesen. | Folgt aus D12: Nichts wird gespeichert, also kann auch nichts von früher zurückkommen. Innerhalb einer Runde entsteht trotzdem eine kleine Kette. |
+
+**Stand der Runde B (Owner, 2026-10-25):** V5, V6 und V7 sind angenommen.
 
 ### 4.4 Festlegungen des Entwurfs (Runde C)
 
