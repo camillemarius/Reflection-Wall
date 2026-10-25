@@ -96,6 +96,44 @@ class DispatchTest(unittest.TestCase):
         self.assertFalse(self.stop.is_set())
         self.assertEqual(self.shutdowns, [])
 
+    def test_session_hand_sets_reason_and_event(self):
+        self.assertIsNone(self.d.session_reason)
+        self.link.incoming.put(Message(11, "SESSION", "HAND"))
+        self.assertTrue(self.d.session_event.wait(1.0))
+        self.assertEqual(self.d.session_reason, "HAND")
+        self.assertTrue(wait_for(lambda: self.link.replies))
+        self.assertEqual(self.link.replies, [(11, "OK", "")])
+
+    def test_second_session_is_answered_and_ignored(self):
+        self.link.incoming.put(Message(11, "SESSION", "HAND"))
+        self.link.incoming.put(Message(12, "SESSION", "NACHT"))
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 2))
+        self.assertEqual(self.link.replies, [(11, "OK", ""), (12, "OK", "")])
+        self.assertEqual(self.d.session_reason, "HAND")
+
+    def test_session_bad_data_is_error(self):
+        self.link.incoming.put(Message(13, "SESSION", "X"))
+        self.assertTrue(wait_for(lambda: self.link.replies))
+        self.assertEqual(self.link.replies, [(13, "ERROR", "BAD_SESSION")])
+        self.assertIsNone(self.d.session_reason)
+        self.assertFalse(self.d.session_event.is_set())
+
+    def test_shutdown_sets_shutdown_done_after_reply(self):
+        self.assertFalse(self.d.shutdown_done.is_set())
+        self.link.incoming.put(Message(9, "SHUTDOWN", ""))
+        self.assertTrue(wait_for(self.stop.is_set))
+        self.assertFalse(self.d.shutdown_done.is_set())
+        self.released.set()
+        self.assertTrue(self.d.shutdown_done.wait(1.0))
+        self.assertEqual(self.link.replies, [(9, "OK", "")])
+        self.assertEqual(self.shutdowns, [1])
+
+    def test_shutdown_busy_does_not_set_shutdown_done(self):
+        self.d.radar_writing.set()
+        self.link.incoming.put(Message(4, "SHUTDOWN", ""))
+        self.assertTrue(wait_for(lambda: self.link.replies))
+        self.assertFalse(self.d.shutdown_done.is_set())
+
     def test_other_requests_kept(self):
         m = Message(5, "GET", "X")
         self.link.incoming.put(m)

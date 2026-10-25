@@ -1,5 +1,5 @@
 # ui/link_dispatch.py
-# Verbindet die Anfragen des ESP (PiLink.incoming) mit dem Menue: Tasten und Ausschalten.
+# Verbindet die Anfragen des ESP (PiLink.incoming) mit dem Menue: Tasten, Sitzung und Ausschalten.
 import concurrent.futures
 import logging
 import queue
@@ -36,6 +36,9 @@ class LinkDispatcher:
         self._thread = None
         self.radar_writing = threading.Event()
         self.other: "queue.Queue" = queue.Queue()
+        self.session_event = threading.Event()
+        self.session_reason = None
+        self.shutdown_done = threading.Event()
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -69,10 +72,24 @@ class LinkDispatcher:
                 self._buttons.put(int(msg.data))
             else:
                 self._link.reply(msg, "ERROR", "BAD_BUTTON")
+        elif msg.command == "SESSION":
+            self._session(msg)
         elif msg.command == "SHUTDOWN":
             self._shutdown(msg)
         else:
             self.other.put(msg)
+
+    def _session(self, msg) -> None:
+        if msg.data not in ("HAND", "NACHT"):
+            self._link.reply(msg, "ERROR", "BAD_SESSION")
+            return
+        self._link.reply(msg, "OK")
+        if self.session_event.is_set():
+            log.info("SESSION|%s noch einmal, ignoriert (Grund bleibt %s)",
+                     msg.data, self.session_reason)
+            return
+        self.session_reason = msg.data
+        self.session_event.set()
 
     def _shutdown(self, msg) -> None:
         if self.radar_writing.is_set():
@@ -82,7 +99,11 @@ class LinkDispatcher:
         if not self._released.wait(self._release_wait_s):
             log.warning("Anzeige nach %.1f s nicht freigegeben", self._release_wait_s)
         self._link.reply(msg, "OK")
-        self._on_shutdown()
+        try:
+            self._on_shutdown()
+        except Exception:
+            log.exception("Herunterfahren fehlgeschlagen")
+        self.shutdown_done.set()
 
     def send_done(self, timeout_s: float = 30.0) -> bool:
         deadline = self._clock() + timeout_s
