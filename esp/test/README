@@ -12,6 +12,7 @@ Suiten:
 - test_text_layout: Umbruch und Segmentschrift der Anzeige.
 - test_pi_power: Pi-Speisung ueber das Flipflop (Puls pro Umschalten).
 - test_pi_link: Nummern, Wiederholung, Fristen und doppelte Nachrichten in PiLink.
+- test_pi_session: Sitzung mit dem Pi (Ein- und Ausschalten, PING, Tasten, Herunterfahren, Reset).
 
 Hilfen in support/:
 - MemoryFs: Dateisystem im Speicher statt LittleFS.
