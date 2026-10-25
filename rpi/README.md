@@ -8,7 +8,7 @@ Alles startet im Ordner `rpi/`.
 
 Am PC: `python -m app.main --pc`. Die Anzeige erscheint als Text im Terminal. Die Tasten tippst du als Ziffer 1 bis 6, danach Enter.
 
-An der Wand: `python -m app.main`. Das Programm öffnet die Anzeigen über I²C und die Verbindung zum ESP. Den Handschlag mit dem ESP (`READY`, `SESSION`, Herunterfahren) bringt erst Teil 2. Bis dahin ist der Wandstart nicht vollständig.
+An der Wand: `python -m app.main`. Das Programm öffnet die Anzeigen über I²C und die Verbindung zum ESP. Im Betrieb startet es als Dienst, siehe Abschnitt Dienst einrichten. Der Handschlag mit dem ESP ist umgesetzt, aber ungeprüft bis zur Abnahme.
 
 Die Zugangsdaten (`GROQ_API_KEY`, Datenbank, `AUTO_AUS_MINUTEN`) liest das Programm beim Start aus der Datei `.env`. Chat, Quiz und Reflection brauchen den Groq-Schlüssel. Die Datenbank braucht nur das Quiz.
 
@@ -35,7 +35,7 @@ Im PC-Modus stehen die Ziffern 6, 5 und 4 für diese Tasten.
 
 Beim ersten Eintritt in CHAT lädt das Programm das Modell für die Spracherkennung. Dabei zeigt die Wand `MIKROFON WIRD VORBEREITET`. Danach bleibt das Modell geladen.
 
-RADAR zeigt an der Wand vorerst `FEHLER IN RADAR`. Die ESP-Firmware beantwortet `MODE` heute mit `ERROR|UNKNOWN`. Das ändert sich erst, wenn der ESP `MODE` versteht (Teil 2).
+RADAR funktioniert mit der ESP-Firmware dieses Stands. Der ESP versteht `MODE|RADAR` und `MODE|NORMAL`. Der Pi schaltet die Leitung um und wieder zurück (`app/link/radar_switch.py`). Das ist ungeprüft bis zur Abnahme am Gerät. Nach 55 min endet das Radar, siehe Ablauf mit dem ESP.
 
 Stürzt eine Anwendung ab, zeigt die Wand `FEHLER IN <NAME>` und `BT4 ZURUECK`. Den Grund schreibt das Programm ins Log.
 
@@ -55,7 +55,7 @@ Läuft gerade das Radar, beendet das Programm zuerst das Radar. Danach schickt e
 
 Unter EINSTELLUNGEN, THEMA AENDERN startet eine kleine Webseite. Dort änderst du die Themen. Die Felder zeigen den Inhalt der beiden Dateien. Ist ein Feld leer, zeigt es das geltende Ersatzthema grau an. Speichern mit leerem Feld lässt die Datei leer, damit das Ersatzthema weiter gilt. Die Seite nimmt ein Speichern nur von sich selbst an, nicht von einer fremden Seite. Sie schliesst sich nach 15 Minuten ohne Speichern.
 
-Die Webseite läuft auf Port 80. Dafür braucht der Dienst das Recht `CAP_NET_BIND_SERVICE`, zum Beispiel mit `AmbientCapabilities=CAP_NET_BIND_SERVICE` in der systemd-Unit (ungeprüft).
+Die Webseite läuft auf Port 80. Dafür setzt die systemd-Unit `AmbientCapabilities=CAP_NET_BIND_SERVICE` (ungeprüft bis zur Abnahme).
 
 ## Treiber (`app/driver`)
 
@@ -78,9 +78,37 @@ Das Prüfwerkzeug startet im Ordner `rpi/`:
 python -m app.link.probe [--port /dev/ttyAMA0] [--baud 74880] [--seconds N] [--no-gpio]
 ```
 
-Es sendet `READY`, bis der ESP antwortet, und gibt die Antwort aus. Danach beantwortet es die Anfragen des ESP: `BUTTON` mit `OK`, `SHUTDOWN` mit `BUSY` und alles andere mit `ERROR|PROBE`. Der Pi wird dabei nie heruntergefahren. `--seconds 0` läuft bis Ctrl+C. Mit `--no-gpio` bleibt GPIO23 unberührt.
+Es sendet `READY`, bis der ESP antwortet, und gibt die Antwort aus. Danach beantwortet es die Anfragen des ESP: `BUTTON` mit `OK`, `SHUTDOWN` mit `BUSY` und alles andere mit `ERROR|PROBE`. Der Pi wird dabei nie heruntergefahren. `--seconds 0` läuft bis Ctrl+C. Mit `--no-gpio` bleibt GPIO23 unberührt. Läuft der Dienst, hält man ihn vorher an: `sudo systemctl stop reflection-wall`. Sonst teilen sich zwei Programme die UART.
 
 Das Prüfwerkzeug und die Radar-Anwendung (Menüpunkt RADAR) dürfen nicht gleichzeitig laufen. Beide schalten GPIO23, und damit den CD4053. Der CD4053 legt fest, ob die UART des Pi mit dem ESP oder mit dem Radar spricht (Spezifikation F1, Abschnitt 6.4).
+
+## Ablauf mit dem ESP
+
+Dieser Abschnitt ist ungeprüft bis zur Abnahme am Gerät.
+
+Nach dem Start schickt der Pi `READY`, etwa alle 3 s, bis der ESP mit `OK` antwortet. Der ESP kann dabei noch booten. Danach wartet der Pi auf die Sitzung des ESP:
+
+- `SESSION|HAND`: BT2 hat den Pi eingeschaltet. Das Menü erscheint. Erst jetzt schreibt der Pi die Anzeige.
+- `SESSION|NACHT`: Der Tagestimer hat den Pi eingeschaltet. Die Anzeige bleibt unberührt.
+
+Kommt kein `SESSION`, schickt der Pi etwa alle 10 s noch einmal `READY`.
+
+Bei `SHUTDOWN` des ESP beendet der Pi die laufende Anwendung und schreibt die Anzeige nicht mehr. Er wartet bis zu 45 s, bis die Anzeige frei ist. Dann antwortet er `OK` und ruft `sudo -n /usr/bin/systemctl poweroff` auf. Den Strom schaltet der ESP `T_halt` später ab.
+
+Nach diesem `OK` bedient der Dienst die Verbindung weiter, bis systemd ihn beim Herunterfahren beendet, und wegen `ExecStop` noch 3 s länger. Sendet der ESP nach einem Reset `SHUTDOWN` noch einmal, bekommt es so sein `OK`. Kommt das neue `SHUTDOWN`, während das erste noch auf die Anzeige wartet, bekommt nur das neue ein `OK`, und erst danach fährt der Pi herunter. `poweroff` ruft der Pi nur einmal auf. Auch `systemctl stop` dauert deshalb 3 s länger.
+
+Der Pi schickt `DONE`, wenn die Leerlaufzeit abläuft, die Shell abstürzt oder das Radar 55 min gelaufen ist. Beim Radar endet die Anwendung zuerst selbst und schaltet die UART zurück auf den ESP (GPIO23 LOW, 74 880 Baud, `MODE|NORMAL`). Erst dann schickt der Pi `DONE`. Danach schickt der ESP `SHUTDOWN`. Kommt nach einem bestätigten `DONE` innerhalb von 120 s kein `SHUTDOWN`, fährt der Pi sich selbst herunter.
+
+## Regel B (I²C-Bus)
+
+Dieser Abschnitt ist ungeprüft bis zur Abnahme am Gerät.
+
+ESP und Pi teilen sich den I²C-Bus. Darum wartet der Pi vor jeder Übertragung:
+
+- solange INT_GPIO_EXP (GPIO4) LOW ist, und danach 5 ms, wenn der Pin HIGH wird;
+- 250 ms nach einer steigenden Flanke an INT_HLK (GPIO22, Radar).
+
+Er wartet höchstens 1 s. Dann schreibt er trotzdem und schreibt eine Warnung ins Log. Eine Übertragung, die dabei abreißt, wiederholt er einmal. GPIO22 liest der Pi nur über diese Wache. Die Anwesenheit für das automatische Aus kommt ebenfalls von dort.
 
 ## Installation
 
@@ -96,6 +124,38 @@ pip install -r requirements.txt
 `pyserial` braucht die UART-Verbindung. Das Paket `piper-tts` liefert den Befehl `piper`, den die Sprachausgabe aufruft (Paketname ungeprüft). Zum Abspielen braucht es außerdem `aplay` (`sudo apt install alsa-utils`).
 
 Die einzelnen Komponenten lassen sich in `tests/<Komponente>/` getrennt testen (`chatbot_groq`, `ht16k33`, `ioExpander`, `ld2410s`, `lichtsensor`, `microphone`, `mysql`, `speechrecognition`, `wakeWord`); dort steht jeweils eine `installation.txt`. `tests/ld2410s` nutzt den App-Treiber und startet im Ordner `rpi/` mit `python -m tests.ld2410s.test [--simulation] [--seconds N]`; auf dem PC mit `--simulation` (Windows: `python -X utf8 …`, sonst scheitert die Konsole an den Zeichen für Balken und Pfeile). `tests/microphone` nimmt auf und legt die Aufnahmen in `tests/microphone/recordings/` ab (nicht im Repository).
+
+## Dienst einrichten
+
+Dieser Abschnitt ist ungeprüft bis zur Abnahme am Gerät. Teil 0 (Einrichtung des Pi) richtet die Gruppen und die sudoers-Regel am Gerät ein.
+
+Die Unit liegt unter `rpi/systemd/reflection-wall.service`. Sie startet `python -m app.main` ohne `--pc`. Im Repository-Ordner auf dem Pi:
+
+```bash
+sudo cp rpi/systemd/reflection-wall.service /etc/systemd/system/
+sudo nano /etc/systemd/system/reflection-wall.service   # Benutzer und Pfade anpassen
+sudo systemctl daemon-reload
+sudo systemctl enable --now reflection-wall
+journalctl -u reflection-wall -f                         # Log mitlesen
+```
+
+Die Unit erwartet das venv unter `/home/pi/.venvs/reflection-wall-rpi`. Liegt es woanders, passt `ExecStart` an. Das venv aus dem Abschnitt Installation (`rpi/.venv`) funktioniert ebenso, wenn `ExecStart` darauf zeigt.
+
+Der Benutzer braucht die Gruppen `dialout` (UART), `i2c` und `gpio`:
+
+```bash
+sudo usermod -aG dialout,i2c,gpio <benutzer>
+```
+
+Danach einmal neu anmelden.
+
+Der Pi schaltet sich über `sudo -n` aus. Dafür braucht der Benutzer eine Regel ohne Passwort. Sie kommt mit `sudo visudo -f /etc/sudoers.d/reflection-wall` in die Datei:
+
+```
+<benutzer> ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff
+```
+
+Beim Start prüft der Dienst diese Regel mit `sudo -n -l /usr/bin/systemctl poweroff`. Fehlt sie, schreibt er einen ERROR ins Log. Ohne die Regel kann sich der Pi nicht selbst herunterfahren, und am Ende jeder Sitzung trennt ihn der ESP hart.
 
 ## Tests auf dem PC
 
@@ -130,4 +190,5 @@ Weitere Befehle in `doc/commands.txt`.
 
 ## Bekannte Baustellen
 
+- Der Dienst, der Ablauf mit dem ESP (READY, SESSION, SHUTDOWN, DONE) und Regel B sind ungeprüft bis zur Abnahme am Gerät.
 - Der alte Anzeigetreiber (`display.py`, `display_grid.py`, `ht16k33_driver.py`, `displayGraph.py`) adressiert die Module als `0x70 + Index`. Das Menü und die Anwendungen nutzen ihn nicht mehr. Sie schreiben über `WallDisplay`, und `WallDisplay` erreicht alle 12 Module, auch die hinter den LTC4316 (0x7F, 0x79, 0x7B, 0x7D).

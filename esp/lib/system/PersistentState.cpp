@@ -13,6 +13,10 @@ static_assert(sizeof(DisplayState) == 1, "DisplayState muss ein Byte bleiben");
 static_assert(sizeof(PersistentState::Data) % 4 == 0,
               "RTC-Speicher wird in 4-Byte-Bloecken gelesen und geschrieben");
 
+// 20 Byte Wand, 28 Byte Sitzung, 4 Byte Speisung und Nummern. Aendert sich
+// die Groesse, muss auch MAGIC sich aendern.
+static_assert(sizeof(PersistentState::Data) == 52, "Layout von Data geaendert: MAGIC anpassen");
+
 
 void PersistentState::setDefaults(Data& data)
 {
@@ -25,6 +29,14 @@ void PersistentState::setDefaults(Data& data)
     data.wakeCount = 0;
     data.shownIndex = 0;
     memset(data.shownDate, 0, sizeof(data.shownDate));
+
+    // Nach einem Kaltstart ist auch das Flipflop zurueckgesetzt,
+    // der Pi also aus (Spec 7).
+    PiSession::reset(data.session);
+    data.piPowered = 0;
+    data.txSeq = 0;
+    data.rxSeq = 0;
+    data.rxValid = 0;
 }
 
 
@@ -73,7 +85,7 @@ void PersistentState::save(const Data& data)
 
 
 // Standard-CRC32 (Polynom 0xEDB88320), bitweise gerechnet.
-// Bei 20 Byte Nutzdaten lohnt keine Tabelle.
+// Bei 52 Byte Nutzdaten lohnt keine Tabelle.
 
 uint32_t PersistentState::crc32(const uint8_t* data, size_t length)
 {

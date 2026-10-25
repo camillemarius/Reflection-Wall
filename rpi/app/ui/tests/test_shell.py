@@ -178,3 +178,14 @@ class ShellTest(unittest.TestCase):
         stop.set("shutdown")
         shell.run()
         self.assertTrue(shell.display_released.is_set())
+
+    def test_shell_uses_given_display_released(self):
+        # Wand-Modus: main() gibt das Event des LinkDispatchers mit
+        released = threading.Event()
+        stop = StopSignal()
+        shell = Shell(FakeDisplay(), QueueButtons(), [FakeApp("A")], [], Activity(), stop,
+                      display_released=released)
+        self.assertIs(shell.display_released, released)
+        stop.set("shutdown")
+        shell.run()
+        self.assertTrue(released.is_set())

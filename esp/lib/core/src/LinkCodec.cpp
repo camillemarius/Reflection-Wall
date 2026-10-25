@@ -128,7 +128,7 @@ Error decode(const std::string& line, Message& msg)
 
 Role roleOf(const std::string& command)
 {
-    if (command == "PING" || command == "GET" || command == "BUTTON" || command == "SHUTDOWN")
+    if (command == "PING" || command == "GET" || command == "BUTTON" || command == "SHUTDOWN" || command == "SESSION")
         return Role::EspRequest;
     if (command == "READY" || command == "DONE" || command == "MODE")
         return Role::PiRequest;

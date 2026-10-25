@@ -140,9 +140,9 @@ void test_request_from_pi_is_delivered_and_answered()
 void test_duplicate_gets_previous_answer_again()
 {
     MemorySerial s; PiLink l(s);
-    s.rx = "$05:READY*74\n";
+    s.rx = "$05:DONE*3F\n";
     l.poll(0); l.reply("OK"); s.takeTx();
-    s.rx = "$05:READY*74\n";
+    s.rx = "$05:DONE*3F\n";
     TEST_ASSERT_TRUE(l.poll(10).kind == K::None);
     TEST_ASSERT_EQUAL_STRING("\n$05:OK*3B\n", s.takeTx().c_str());
 }
@@ -150,7 +150,7 @@ void test_duplicate_gets_previous_answer_again()
 void test_duplicate_before_reply_is_ignored()
 {
     MemorySerial s; PiLink l(s);
-    s.rx = "$05:READY*74\n$05:READY*74\n";
+    s.rx = "$05:DONE*3F\n$05:DONE*3F\n";
     TEST_ASSERT_TRUE(l.poll(0).kind == K::Request);
     TEST_ASSERT_TRUE(l.poll(0).kind == K::None);
     TEST_ASSERT_EQUAL_STRING("", s.takeTx().c_str());
@@ -232,7 +232,7 @@ void test_state_survives_restore()
 {
     MemorySerial sa; PiLink a(sa);
     a.send("PING", "", 0); sa.takeTx();
-    sa.rx = "$00:PONG*2C\n$05:READY*74\n";
+    sa.rx = "$00:PONG*2C\n$05:DONE*3F\n";
     TEST_ASSERT_TRUE(a.poll(10).kind == K::Response);
     TEST_ASSERT_TRUE(a.poll(10).kind == K::Request);
     a.reply("OK");
@@ -245,8 +245,8 @@ void test_state_survives_restore()
     b.restore(st);
     b.send("PING", "", 0);
     TEST_ASSERT_EQUAL_STRING("\n$01:PING*2B\n", sb.takeTx().c_str());
-    sb.rx = "$05:READY*74\n";
-    TEST_ASSERT_TRUE(b.poll(10).kind == K::None);
+    sb.rx = "$05:DONE*3F\n";
+    TEST_ASSERT_TRUE(b.poll(10).kind == K::Request);
     TEST_ASSERT_EQUAL_STRING("", sb.takeTx().c_str());
 }
 
@@ -256,6 +256,39 @@ void test_state_reports_next_number_while_request_open()
     l.send("PING", "", 0);
     TEST_ASSERT_TRUE(l.busy());
     TEST_ASSERT_EQUAL_UINT8(1, l.state().txSeq);
+}
+
+void test_ready_with_same_number_is_reported_again()
+{
+    MemorySerial s; PiLink l(s);
+    s.rx = "$00:READY*71\n";
+    TEST_ASSERT_TRUE(l.poll(0).kind == K::Request);
+    TEST_ASSERT_TRUE(l.reply("OK"));
+    s.rx = "$00:READY*71\n";
+    TEST_ASSERT_TRUE(l.poll(10).kind == K::Request);
+    TEST_ASSERT_TRUE(l.reply("OK"));
+    TEST_ASSERT_EQUAL_UINT32(2, countOf(s.takeTx(), "$00:OK*3E"));
+}
+
+void test_done_with_same_number_is_still_a_duplicate()
+{
+    MemorySerial s; PiLink l(s);
+    s.rx = "$01:DONE*3B\n";
+    TEST_ASSERT_TRUE(l.poll(0).kind == K::Request);
+    TEST_ASSERT_TRUE(l.reply("OK"));
+    s.takeTx();
+    s.rx = "$01:DONE*3B\n";
+    TEST_ASSERT_TRUE(l.poll(10).kind == K::None);
+    TEST_ASSERT_EQUAL_STRING("\n$01:OK*3F\n", s.takeTx().c_str());
+}
+
+void test_repeat_after_restore_is_reported_again()
+{
+    MemorySerial s; PiLink l(s);
+    LinkState st; st.txSeq = 5; st.rxSeq = 1; st.rxValid = true;
+    l.restore(st);
+    s.rx = "$01:DONE*3B\n";
+    TEST_ASSERT_TRUE(l.poll(0).kind == K::Request);
 }
 
 int main(int, char**)
@@ -284,5 +317,8 @@ int main(int, char**)
     RUN_TEST(test_reply_without_request_is_refused);
     RUN_TEST(test_state_survives_restore);
     RUN_TEST(test_state_reports_next_number_while_request_open);
+    RUN_TEST(test_ready_with_same_number_is_reported_again);
+    RUN_TEST(test_done_with_same_number_is_still_a_duplicate);
+    RUN_TEST(test_repeat_after_restore_is_reported_again);
     return UNITY_END();
 }

@@ -15,7 +15,8 @@ _STOPPED = -2
 
 class Shell:
     def __init__(self, display, buttons, apps: Sequence[App], settings: Sequence[App],
-                 activity, stop_event: StopSignal) -> None:
+                 activity, stop_event: StopSignal,
+                 display_released: Optional[threading.Event] = None) -> None:
         self._display = display
         self._buttons = buttons
         self._apps = list(apps)
@@ -23,7 +24,11 @@ class Shell:
         self._activity = activity
         self._stop = stop_event
         self._ctx = AppContext(display, buttons, activity, stop_event)
-        self.display_released = threading.Event()
+        # Gesetzt, sobald die Bildschirmfolge die Anzeige nicht mehr anfasst. Im Wand-Modus
+        # kommt es von main(): der LinkDispatcher wartet darauf vor dem OK auf SHUTDOWN.
+        if display_released is None:
+            display_released = threading.Event()
+        self.display_released = display_released
 
     def run(self) -> str:
         try:

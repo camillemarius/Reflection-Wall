@@ -139,7 +139,7 @@ void test_command_vectors()
             TEST_ASSERT_EQUAL_INT_MESSAGE(v.num("deadline_ms"), static_cast<long>(LinkCodec::deadlineMs(v.str("command"))), name.c_str());
         }
     }
-    TEST_ASSERT_EQUAL(13, n);
+    TEST_ASSERT_EQUAL(14, n);
 }
 
 int main(int, char**)

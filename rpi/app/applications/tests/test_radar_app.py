@@ -3,10 +3,11 @@ import unittest
 
 from app.applications.radar_app import RadarApp
 from app.link.radar_switch import RadarSwitchError
-from app.ui.app_host import AppContext, StopSignal, run_app
+from app.ui.app_host import AppContext, StopApp, StopSignal, run_app
 from app.ui.buttons import BT1, BT2, BT4, BT5, BT6, ExpanderError, QueueButtons
 
 NO_RADAR = ["RADAR ANTWORTET NICHT", "BT4 ZURUECK"]
+RADAR_LIMIT_S = 55 * 60  # R15
 
 
 class Clock:
@@ -198,6 +199,31 @@ class RadarAppTest(unittest.TestCase):
         with self.assertLogs("app.applications.radar_app", "ERROR"):
             self.assertEqual(run_app(app, self.ctx), "back")
         self.assertEqual(self.events, ["enter", "buttons.start", "leave"])
+
+    def app_jumping_to(self, now, presses):
+        """Der erste Frame endet auf der Uhr der Anwendung bei now; Radar-Daten kommen laufend."""
+        def jump(gets):
+            if gets == 1:
+                self.clock.now = now
+        self.sensor = FakeSensor([100] * 5)
+        app = self.app(presses, on_get=jump)
+        self.expander.clock = Clock()  # nur der Sprung bestimmt die Zeit
+        return app
+
+    def test_after_55_min_switches_back_clears_and_ends_idle(self):
+        # R15: nach 55 min Radar endet die Anwendung selbst, damit der Pi ums Ausschalten bittet
+        app = self.app_jumping_to(RADAR_LIMIT_S, [None, BT4])
+        with self.assertRaises(StopApp) as stopped:
+            app.run(self.ctx)
+        self.assertEqual(stopped.exception.reason, "idle")
+        self.assertEqual(self.events[-2:], ["leave", "clear"])
+        self.assertEqual(self.expander.gets, 1)
+
+    def test_just_under_55_min_keeps_running(self):
+        app = self.app_jumping_to(RADAR_LIMIT_S - 0.1, [None, BT4])
+        self.assertEqual(run_app(app, self.ctx), "back")
+        self.assertEqual(self.expander.gets, 2)
+        self.assertEqual(self.events[-1], "leave")
 
     def test_failed_switch_shows_the_error_screen_without_reading_buttons(self):
         self.switch = FakeSwitch(self.events, error=RadarSwitchError("kein OK auf MODE|RADAR"))

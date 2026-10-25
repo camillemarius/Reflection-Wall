@@ -8,7 +8,7 @@ MAX_LINE = 256  # Bytes ohne b"\n"
 
 _DIGITS = "0123456789ABCDEF"
 
-_ESP_REQUESTS = frozenset({"PING", "GET", "BUTTON", "SHUTDOWN"})
+_ESP_REQUESTS = frozenset({"PING", "GET", "BUTTON", "SHUTDOWN", "SESSION"})
 _PI_REQUESTS = frozenset({"READY", "DONE", "MODE"})
 _RESPONSES = frozenset({"PONG", "QUOTE", "OK", "BUSY", "ERROR"})
 

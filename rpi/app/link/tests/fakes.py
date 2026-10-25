@@ -27,6 +27,11 @@ class FakePort:
         with self._lock:
             self._rx += data
 
+    def unread(self) -> int:
+        """So viele Bytes hat der Link noch nicht gelesen."""
+        with self._lock:
+            return len(self._rx)
+
     def read_available(self) -> bytes:
         self.reads += 1
         if self.fail is not None:

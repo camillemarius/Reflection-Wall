@@ -13,9 +13,13 @@
 #include "PowerSwitchPin.h"
 #include "UartPort.h"
 #include "PiLink.h"
+#include "PiSession.h"
 
 #include "PCF8575.h"
 #include "InputManager.h"
+
+#include <string>
+#include <vector>
 
 // ---------------------------------------------------------
 // Ablauf
@@ -30,6 +34,10 @@
 // liest den Radar (runWallLoop), bevor es schlafen geht. Die
 // Funktion kehrt nicht zurueck. Auch der Radar (INT_HLK) weckt
 // den ESP, nicht nur die Taster.
+//
+// Laeuft eine Sitzung mit dem Pi (PiSession), bleibt run() wach,
+// bis sie zu Ende ist (runSession). Ein Reset mittendrin macht
+// im selben Zustand weiter; die Wand-Regeln ruhen so lange.
 //
 // Alles, was ueber einen Tastendruck hinaus bestehen bleiben
 // muss, liegt in PersistentState im RTC-Speicher. Objekt-
@@ -54,8 +62,24 @@ private:
     // behalten ihren Inhalt ueber den Reset hinweg.
     void ensureDisplayReady();
 
-    // Zentrale Zuweisung Taster -> Aktion
-    void handleInput(InputEvent button);
+    // Zentrale Zuweisung Taster -> Aktion. Was die Sitzung daraus
+    // macht, landet in actions.
+    void handleInput(InputEvent button, std::vector<SessionAction>& actions);
+
+    // Bleibt wach, solange die Sitzung aktiv ist: Leitung lesen,
+    // Takt, Aktionen ausfuehren, Zustand sichern
+    void runSession(std::vector<SessionAction>& actions);
+
+    // Fuehrt die Aktionen der Sitzung der Reihe nach aus und
+    // leert die Liste
+    void executeActions(std::vector<SessionAction>& actions);
+
+    // Anzeigetexte der Sitzung (PI STARTET ...) und Anzeige aus
+    void showSessionText(const std::string& text);
+    void sessionDisplayOff();
+
+    // Nummern der Verbindung in _state uebernehmen und sichern
+    void saveState();
 
     // Zeigt ein Zitat aus der Liste im FRAM; welches, bestimmt
     // die Aktion (neuestes, aktuelles, naechstes)
@@ -109,6 +133,10 @@ private:
     UartPort _port;
     PiLink _link;
 
-    // BT3 wurde in diesem Durchlauf gedrueckt: Verbindungstest nach dem Sichern des Tastenstands
+    // Sitzung mit dem Pi; ihr Zustand liegt in _state.session
+    // (Reihenfolge: nach _state)
+    PiSession _session;
+
+    // BT3 ohne Sitzung in diesem Durchlauf: Verbindungstest nach dem Sichern des Tastenstands
     bool _linkTestRequested;
 };
