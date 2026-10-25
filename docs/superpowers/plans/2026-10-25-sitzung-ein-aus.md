@@ -491,7 +491,8 @@ Diese Abnahme folgt erst, wenn der Pi eingerichtet ist (Teil 0) und der Owner fl
 | 9 | Dienst-Ablauf in `app.main`; Radar endet nach 55 min (R15); `OK` auf `SHUTDOWN` erst nach freier Anzeige | c4a9631, 086b2b2, e0a96cf |
 | 10 | systemd-Dienst und README | 7a9a78c, e0df19e |
 | 11 | Abnahme am Gerät | offen bis Teil 0 |
-| Abschluss | Korrekturen aus der Schlussprüfung: der Pi bedient nach dem `OK` auf `SHUTDOWN` weiter (I-1); `READY` noch einmal ohne `SESSION` (M-3); nach `DONE` ohne `SHUTDOWN` selbst aus, sudoers-Regel beim Start geprüft (M-4); Warnung von Regel B höchstens alle 10 s; `StartLimitIntervalSec=0`; der ESP sichert vor den Aktionen und nach jedem Senden, ein nicht gesendetes Send gilt als Frist (I-1, M-1, M-2); Spezifikationen nachgeführt (M-7, M-8) | 01e74d1, eb60844, 1cf05df, fcedbb6, fc05086, 9e1c2f6, 71dfbac und der Commit mit diesem Abschnitt |
+| Abschluss | Korrekturen aus der Schlussprüfung: der Pi bedient nach dem `OK` auf `SHUTDOWN` weiter (I-1); `READY` noch einmal ohne `SESSION` (M-3); nach `DONE` ohne `SHUTDOWN` selbst aus, sudoers-Regel beim Start geprüft (M-4); Warnung von Regel B höchstens alle 10 s; `StartLimitIntervalSec=0`; der ESP sichert vor den Aktionen und nach jedem Senden, ein nicht gesendetes Send gilt als Frist (I-1, M-1, M-2); Spezifikationen nachgeführt (M-7, M-8) | 01e74d1, eb60844, 1cf05df, fcedbb6, fc05086, 9e1c2f6, 71dfbac, 5a86f97 |
+| Nachtrag | Doppeldruck auf BT2 nach Option A: `ExecStop=/bin/sleep 3`; geht das `OK` auf ein `SHUTDOWN` nicht raus, fährt das neuere `SHUTDOWN` nach seinem `OK` herunter, sonst ein Rückfall nach 3 s; README zum neuen Verhalten des Dienstes | 4320601 und der Commit mit dieser Zeile |
 
 ### Entscheide während der Umsetzung
 
@@ -510,13 +511,13 @@ Jeder Entscheid sagt, was gilt, und was es kostet, wenn er falsch ist.
 - **Offene Punkte in Task 6:**
   - `announce_ready` wartet auf jede Antwort nur begrenzt und versucht es bei jeder Antwort ausser `OK` neu.
   - `session_reason` bleibt `None` bis zum ersten gültigen `SESSION`.
-  - `shutdown_done` wird nach dem `OK` und nach `on_shutdown` gesetzt, auch wenn `on_shutdown` wirft, nie bei `BUSY`. Seit der Schlussprüfung läuft `on_shutdown` höchstens einmal.
+  - `shutdown_done` wird nach dem `OK` und nach `on_shutdown` gesetzt, auch wenn `on_shutdown` wirft, nie bei `BUSY`. Seit der Schlussprüfung läuft `on_shutdown` höchstens einmal. `shutdown_done` kommt auch auf dem Weg von M-4 (bestätigtes `DONE`, 120 s kein `SHUTDOWN`). Geht das `OK` nicht raus, weil ein neueres `SHUTDOWN` es ersetzt hat, kommt `shutdown_done` nach dem `OK` auf das neuere, sonst nach dem Rückfall von 3 s.
 
   Kostet: kleine Änderungen am Verhalten des Pi; Task 9 baut darauf.
 - **Offene Punkte in Task 8:**
   - Der Guard wartet, indem er mit der eingespeisten Uhr und `sleep` nachschaut.
   - `free_s` zählt ab der letzten steigenden Flanke an GPIO4, die Radar-Pause ab der letzten an GPIO22. Beides muss erfüllt sein.
-  - `max_wait_s` begrenzt ein Warten, mit einer Warnung.
+  - `max_wait_s` begrenzt ein Warten. Seit der Schlussprüfung kommt die Warnung dazu höchstens alle 10 s, mit der Zahl der ausgelassenen.
   - Fehlt lgpio oder scheitert `start()`, wartet der Guard nie, mit einem Eintrag im Log.
   - `stop()` darf mehrmals laufen.
 
@@ -524,12 +525,20 @@ Jeder Entscheid sagt, was gilt, und was es kostet, wenn er falsch ist.
 - **Wer `DONE` schickt:** Mit dem Dispatcher von `main()` schickt `run_wall` kein `DONE`. `main()` schickt es genau einmal, bei „idle“ und „error“. R15 bringt einen zweiten Grund für „idle“, und zwei Stellen hätten `DONE` doppelt geschickt. Kostet: ein `DONE` mehr auf der Leitung, ohne Schaden.
 - **Task 9, 45 s für die Anzeige:** Im Wand-Modus wartet der Dispatcher bis zu 45 s (`RELEASE_WAIT_S`) auf die freie Anzeige, bevor er `SHUTDOWN` mit `OK` beantwortet, statt 2 s. Das bleibt unter den 60 s des ESP und deckt ein ganzes Bild bei hängendem INT_GPIO_EXP (12 × 1 s). Die stärkere Lösung (`BUSY` bei Ablauf) hätte Task 6 geändert. Kostet: Im Fehlerfall antwortet der Pi bis zu 45 s später. Ist die Anzeige nach 45 s noch nicht frei, bleibt das alte Risiko.
 - **Eine Runde für alle Korrekturen der Schlussprüfung:** I-1 auf beiden Seiten, M-1 bis M-4, M-7, M-8, die Warnung von Regel B, `StartLimitIntervalSec=0`, die zusätzlichen Schritte in Task 11 und dieser Abschnitt. Die Prüfung wollte I-1, M-1 und M-7 vor dem Merge, den Rest vor der Abnahme. Alles ist klein, eine Runde ist billiger als eine spätere. Kostet: ein grösserer Diff für die nächste Prüfung.
-- **Rest von I-1 bleibt:** Kommt ein neu gesendetes `SHUTDOWN` erst an, wenn systemd den Dienst schon beendet hat, läuft es ab, und der ESP schaltet hart aus. Das wird nicht gebaut. Der Pi bedient jetzt bis zum Ende des Prozesses, und der ESP sichert vor dem langsamen Show. Das Fenster sind damit nur noch die Sekunden, die systemd zum Beenden braucht. Ein anderes Verhalten beim harten Aus bräuchte einen Entscheid des Owners. Kostet: selten ein hartes Aus am Ende eines Herunterfahrens, das schon läuft.
+- **Rest von I-1, Option A des Owners (2026-10-25):** Ohne Schonfrist endet der Dienst gleich nach `poweroff`. systemd stoppt ihn, und SIGTERM beendet Python sofort. Ein neu gesendetes `SHUTDOWN` braucht 0,1 s oder mehr und fände meist keinen Dienst mehr, der antwortet. Kam es, während das erste noch auf die Anzeige wartete, lief `power_off` sogar vor seinem `OK`. Der Owner hat am 2026-10-25 Option A gewählt, und sie ist gebaut:
+  - `ExecStop=/bin/sleep 3`: Beim Herunterfahren bedient der Dienst noch 3 s weiter, erst dann kommt SIGTERM.
+  - Geht das `OK` auf ein `SHUTDOWN` nicht raus, weil ein neueres es ersetzt hat, ruft der Pi `power_off` nicht gleich. Das neuere `SHUTDOWN` bekommt sein `OK` und fährt dann herunter. Tut es das nicht innerhalb von 3 s, fährt ein Rückfall herunter.
+
+  Ein abgelaufenes, neu gesendetes `SHUTDOWN` endet weiter mit einem harten Aus. Task 11 prüft den Doppeldruck auf BT2 (Schritte 9, 10 und 12). Kostet: Jedes Stoppen des Dienstes dauert 3 s länger. Kommt ein neues `SHUTDOWN` erst nach diesen 3 s, schaltet der ESP nach `T_shutdown` hart aus.
 - **M-5 und M-6 bleiben:** M-5 ist fast unmöglich, M-6 nur kosmetisch (siehe unten). Kostet: wie dort beschrieben.
 
 ### R15 vom Owner bestätigt
 
 Der Owner hat R15 am 2026-10-25 bestätigt: „55 min passt“.
+
+### Doppeldruck auf BT2: Option A vom Owner gewählt
+
+Der Owner hat am 2026-10-25 Option A gewählt: 3 s Schonfrist mit `ExecStop`, und `power_off` überlässt der Pi dem neueren `SHUTDOWN` (siehe „Rest von I-1“ oben).
 
 ### Offen
 
@@ -552,6 +561,9 @@ Der Owner hat R15 am 2026-10-25 bestätigt: „55 min passt“.
 - Unterbricht ein Reset das Schreiben eines Sitzungstexts, zeigt `resume` ihn nicht neu. Die Anzeige bleibt für diesen Zustand dunkel oder halb geschrieben.
 - Ein Zustandswechsel am Anfang des Durchlaufs (durch `resume` oder eine Taste, vor der Sitzungsschleife) wird nicht als `[SESSION] A -> B` geloggt. Ein Kommentar in `PiSession.h` ist nicht ausgerichtet.
 - M-5: Eine Sitzung mit gültiger CRC, aber unbrauchbaren Werten wird zurückgesetzt, `piPowered` bleibt. Der Pi kann dann noch an sein, während der ESP wieder Zitate zeigt.
+- Zwischen dem Sichern des Zustands AUS und dem Sichern von `piPowered = 0` vor dem Puls liegen einige µs. Ein Reset genau dort lässt die Speisung an und `piPowered` auf 1. Die nächste Sitzung pulst dann nicht und endet nach `T_boot` mit einem harten Aus. Doppelt gepulst wird nie.
+- Die Sicherung vor den Aktionen und nach jedem Senden (I-1, M-1) und das nicht gesendete Send (M-2) haben keinen automatischen Test, denn `Application` hat keinen nativen Prüfstand. Task 11 prüft sie am Gerät (Schritte 9 und 10).
+- R14 ging davon aus, dass der ESP den Bus heute bis zum Deep Sleep hält. Das stimmte nicht: `I2CMasterControl::begin()` gibt den Bus schon beim Start ab, und jeder Zugriff gibt ihn danach wieder frei. Das schadet nicht.
 
 **Pi-Dienst**
 
@@ -572,3 +584,4 @@ Der Owner hat R15 am 2026-10-25 bestätigt: „55 min passt“.
 
 - README: Für den Dienst gelten neue Gruppen nach einem Neustart des Dienstes. „Neu anmelden“ braucht es nur für die eigene Shell.
 - README: einmal sagen, ob Teil 0 oder die Befehle von Hand gemeint sind; „man“ und „du“ vereinheitlichen.
+- README, Regel B: „schreibt eine Warnung ins Log“ sagt nicht, dass die Warnung höchstens alle 10 s kommt.

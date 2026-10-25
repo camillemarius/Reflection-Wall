@@ -91,9 +91,13 @@ Nach dem Start schickt der Pi `READY`, etwa alle 3 s, bis der ESP mit `OK` antwo
 - `SESSION|HAND`: BT2 hat den Pi eingeschaltet. Das Menü erscheint. Erst jetzt schreibt der Pi die Anzeige.
 - `SESSION|NACHT`: Der Tagestimer hat den Pi eingeschaltet. Die Anzeige bleibt unberührt.
 
+Kommt kein `SESSION`, schickt der Pi etwa alle 10 s noch einmal `READY`.
+
 Bei `SHUTDOWN` des ESP beendet der Pi die laufende Anwendung und schreibt die Anzeige nicht mehr. Er wartet bis zu 45 s, bis die Anzeige frei ist. Dann antwortet er `OK` und ruft `sudo -n /usr/bin/systemctl poweroff` auf. Den Strom schaltet der ESP `T_halt` später ab.
 
-Der Pi schickt `DONE`, wenn die Leerlaufzeit abläuft, die Shell abstürzt oder das Radar 55 min gelaufen ist. Beim Radar endet die Anwendung zuerst selbst und schaltet die UART zurück auf den ESP (GPIO23 LOW, 74 880 Baud, `MODE|NORMAL`). Erst dann schickt der Pi `DONE`. Danach schickt der ESP `SHUTDOWN`.
+Nach diesem `OK` bedient der Dienst die Verbindung weiter, bis systemd ihn beim Herunterfahren beendet, und wegen `ExecStop` noch 3 s länger. Sendet der ESP nach einem Reset `SHUTDOWN` noch einmal, bekommt es so sein `OK`. Kommt das neue `SHUTDOWN`, während das erste noch auf die Anzeige wartet, bekommt nur das neue ein `OK`, und erst danach fährt der Pi herunter. `poweroff` ruft der Pi nur einmal auf. Auch `systemctl stop` dauert deshalb 3 s länger.
+
+Der Pi schickt `DONE`, wenn die Leerlaufzeit abläuft, die Shell abstürzt oder das Radar 55 min gelaufen ist. Beim Radar endet die Anwendung zuerst selbst und schaltet die UART zurück auf den ESP (GPIO23 LOW, 74 880 Baud, `MODE|NORMAL`). Erst dann schickt der Pi `DONE`. Danach schickt der ESP `SHUTDOWN`. Kommt nach einem bestätigten `DONE` innerhalb von 120 s kein `SHUTDOWN`, fährt der Pi sich selbst herunter.
 
 ## Regel B (I²C-Bus)
 
@@ -150,6 +154,8 @@ Der Pi schaltet sich über `sudo -n` aus. Dafür braucht der Benutzer eine Regel
 ```
 <benutzer> ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff
 ```
+
+Beim Start prüft der Dienst diese Regel mit `sudo -n -l /usr/bin/systemctl poweroff`. Fehlt sie, schreibt er einen ERROR ins Log. Ohne die Regel kann sich der Pi nicht selbst herunterfahren, und am Ende jeder Sitzung trennt ihn der ESP hart.
 
 ## Tests auf dem PC
 
