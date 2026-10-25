@@ -75,6 +75,32 @@ class LoadFramesTest(unittest.TestCase):
             frames = load_frames(tmp)
         self.assertEqual(frames[0][0][0], 3)
 
+    def test_non_positive_frame_time_falls_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "a.py").write_text("VIDEO_FRAMES = [{(0, 0): 1}]\nFRAME_TIME = 0\n")
+            Path(tmp, "b.py").write_text("VIDEO_FRAMES = [{(0, 0): 1}]\nFRAME_TIME = -2.5\n")
+            frames = load_frames(tmp)
+        self.assertEqual([d for _, d in frames], [0.4, 0.4])
+
+    def test_malformed_file_is_skipped_with_warning(self):
+        bad = ["VIDEO_FRAMES = [", "VIDEO_FRAMES = [{(0, 0): foo()}]",
+               "VIDEO_FRAMES = [[1, 2]]", "VIDEO_FRAMES = [{'a': 1}]",
+               "VIDEO_FRAMES = [{(0, 0): 1}]\nFRAME_TIME = 'x'"]
+        for text in bad:
+            with self.subTest(text=text), tempfile.TemporaryDirectory() as tmp:
+                Path(tmp, "a_bad.py").write_text(text)
+                Path(tmp, "b_good.py").write_text("VIDEO_FRAMES = [{(0, 0): 4}]\n")
+                with self.assertLogs("app.applications.stickman_app", "WARNING"):
+                    frames = load_frames(tmp)
+                self.assertEqual(len(frames), 1)
+                self.assertEqual(frames[0][0][0], 4)
+
+    def test_bom_file_is_read(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "a.py").write_bytes(b"\xef\xbb\xbfVIDEO_FRAMES = [{(0, 0): 6}]\n")
+            frames = load_frames(tmp)
+        self.assertEqual(frames[0][0][0], 6)
+
     def test_missing_folder_gives_no_frames(self):
         self.assertEqual(load_frames(Path(tempfile.gettempdir()) / "gibt-es-nicht-xyz"), [])
 
@@ -86,19 +112,43 @@ class StickmanAppTest(unittest.TestCase):
     def test_shows_frames_in_turn_and_ends_on_bt4(self):
         frames = [([1] * 96, 0.001), ([2] * 96, 0.001)]
         display = FakeDisplay()
-        buttons = Buttons(BT4, after=5)
+        buttons = Buttons(BT4, after=40)
+        now = [0.0]
+
+        def clock():
+            now[0] += 0.0004
+            return now[0]
+
         with self.assertRaises(StopApp):
-            StickmanApp(frames=frames).run(ctx_for(display, buttons))
+            StickmanApp(frames=frames, clock=clock).run(ctx_for(display, buttons))
         shown = [c[0] for c in display.cells]
         self.assertGreaterEqual(len(shown), 3)
         self.assertEqual(shown[:3], [1, 2, 1])
 
-    def test_other_buttons_are_ignored(self):
+    def test_other_buttons_do_not_shorten_a_frame(self):
+        now = [0.0]
         display = FakeDisplay()
-        buttons = Buttons(BT4, after=3, extra=[BT5, BT5])
+        seen = []
+
+        class Clocked:
+            polls = 0
+
+            def get(self, timeout):
+                self.polls += 1
+                seen.append(len(display.cells))
+                now[0] += 0.25
+                if self.polls == 1:
+                    return BT5
+                return BT4 if self.polls > 60 else None
+
+            def drain(self):
+                pass
+
+        app = StickmanApp(frames=[([7] * 96, 1.0)], clock=lambda: now[0])
         with self.assertRaises(StopApp):
-            StickmanApp(frames=[([7] * 96, 0.001)]).run(ctx_for(display, buttons))
-        self.assertGreaterEqual(len(display.cells), 2)
+            app.run(ctx_for(display, Clocked()))
+        self.assertEqual(seen[:4], [1, 1, 1, 1])
+        self.assertIn(2, seen)
 
     def test_no_frames_shows_message_and_waits_for_bt4(self):
         display = FakeDisplay()
