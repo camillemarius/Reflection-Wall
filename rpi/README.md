@@ -10,7 +10,7 @@ Am PC: `python -m app.main --pc`. Die Anzeige erscheint als Text im Terminal. Di
 
 An der Wand: `python -m app.main`. Das Programm öffnet die Anzeigen über I²C und die Verbindung zum ESP. Den Handschlag mit dem ESP (`READY`, `SESSION`, Herunterfahren) bringt erst Teil 2. Bis dahin ist der Wandstart nicht vollständig.
 
-Die Zugangsdaten (`GROQ_API_KEY`, Datenbank, `AUTO_AUS_MINUTEN`) liest das Programm beim Start aus der Datei `.env`. Chat, Quiz und Reflection brauchen den Groq-Schlüssel und die Datenbank.
+Die Zugangsdaten (`GROQ_API_KEY`, Datenbank, `AUTO_AUS_MINUTEN`) liest das Programm beim Start aus der Datei `.env`. Chat, Quiz und Reflection brauchen den Groq-Schlüssel. Die Datenbank braucht nur das Quiz.
 
 ## Tasten
 
@@ -26,12 +26,18 @@ Im PC-Modus stehen die Ziffern 6, 5 und 4 für diese Tasten.
 
 | Punkt | Was er tut | Datei |
 |---|---|---|
-| CHAT | Sprachassistent: Spracherkennung, Groq-LLM, Anzeige und Sprachausgabe | `applications/chat_app.py` |
+| CHAT | Sprachassistent: BT5 startet und beendet die Aufnahme (nach 60 s endet sie von selbst), Spracherkennung, Groq-LLM, Anzeige und Sprachausgabe. Die Antwort bleibt stehen, bis BT5 wieder `BT5 UND SPRECHEN` zeigt. | `applications/chat_app.py` |
 | QUIZ | Quiz mit KI-generierten Fragen | `applications/quiz_app.py` |
-| REFLECTION | Reflexionsfrage zum eingestellten Thema | `applications/reflection_app.py` |
+| REFLECTION | Ein Gedanke zum Thema aus `thema_hand.txt`. BT5 holt den nächsten, er baut auf dem vorigen auf. Nichts wird gespeichert. | `applications/reflection_app.py` |
 | RADAR | Radar-Anzeige mit dem HLK LD2410S, nur an der Wand | `applications/radar_app.py` |
 | STRICHMAENNCHEN | Strichmännchen-Animation | `applications/stickman_app.py` |
 | EINSTELLUNGEN | THEMA AENDERN und RADAR EINRICHTEN (kommt später) | `applications/settings_apps.py` |
+
+Beim ersten Eintritt in CHAT lädt das Programm das Modell für die Spracherkennung. Dabei zeigt die Wand `MIKROFON WIRD VORBEREITET`. Danach bleibt das Modell geladen.
+
+RADAR zeigt an der Wand vorerst `FEHLER IN RADAR`. Die ESP-Firmware beantwortet `MODE` heute mit `ERROR|UNKNOWN`. Das ändert sich erst, wenn der ESP `MODE` versteht (Teil 2).
+
+Stürzt eine Anwendung ab, zeigt die Wand `FEHLER IN <NAME>` und `BT4 ZURUECK`. Den Grund schreibt das Programm ins Log.
 
 Die alten Anwendungen, die mit Enter im Terminal liefen, gibt es nicht mehr. Dazu gehören `VoiceAssistant`, `QuizGame`, `Reflection` und die alten Klassen `Radar` und `Stickman`. Die Dateien `prompt.py` und `prompt_template.py` in `applications/ReflectionAI` bleiben als Vorlage für Teil 3b.
 
@@ -39,15 +45,15 @@ Die alten Anwendungen, die mit Enter im Terminal liefen, gibt es nicht mehr. Daz
 
 Der Schalter `AUTO_AUS_MINUTEN` steht in `.env`. Der Wert 0 schaltet das automatische Aus aus. Das ist die Voreinstellung. Ein Wert wie 15 schaltet die Wand nach 15 Minuten ohne Aktivität aus.
 
-Aktivität ist ein Tastendruck, das Speichern auf der Webseite, eine laufende Anfrage an die KI oder eine Person vor dem Radar. Eine Animation allein zählt nicht.
+Aktivität ist ein Tastendruck, das Speichern auf der Webseite, eine Person vor dem Radar oder eine Arbeit des Pi: eine Anfrage an die KI, eine Aufnahme, die Spracherkennung oder die Sprachausgabe. Eine Animation allein zählt nicht.
 
 Läuft gerade das Radar, beendet das Programm zuerst das Radar. Danach schickt es `DONE` an den ESP.
 
 ## Thema und Webseite
 
-Das Thema für Reflection steht in `app/config/thema.txt`, das Thema für den Handbetrieb in `app/config/thema_hand.txt`. Ein Thema ist eine Zeile mit höchstens 120 Zeichen. Fehlt `thema.txt`, gilt „Was ist der Sinn des Lebens“. Fehlt `thema_hand.txt`, gilt das Thema aus `thema.txt`.
+`app/config/thema.txt` enthält das Thema der täglichen Reflexion um Mitternacht. `app/config/thema_hand.txt` enthält das Thema für REFLECTION im Menü. Ein Thema ist eine Zeile mit höchstens 120 Zeichen. Ist `thema.txt` leer oder fehlt sie, gilt „Was ist der Sinn des Lebens“. Ist `thema_hand.txt` leer oder fehlt sie, gilt das Thema aus `thema.txt`.
 
-Unter EINSTELLUNGEN, THEMA AENDERN startet eine kleine Webseite. Dort änderst du die Themen. Die Seite schliesst sich nach 15 Minuten ohne Speichern.
+Unter EINSTELLUNGEN, THEMA AENDERN startet eine kleine Webseite. Dort änderst du die Themen. Die Felder zeigen den Inhalt der beiden Dateien. Ist ein Feld leer, zeigt es das geltende Ersatzthema grau an. Speichern mit leerem Feld lässt die Datei leer, damit das Ersatzthema weiter gilt. Die Seite nimmt ein Speichern nur von sich selbst an, nicht von einer fremden Seite. Sie schliesst sich nach 15 Minuten ohne Speichern.
 
 Die Webseite läuft auf Port 80. Dafür braucht der Dienst das Recht `CAP_NET_BIND_SERVICE`, zum Beispiel mit `AmbientCapabilities=CAP_NET_BIND_SERVICE` in der systemd-Unit (ungeprüft).
 
@@ -55,12 +61,12 @@ Die Webseite läuft auf Port 80. Dafür braucht der Dienst das Recht `CAP_NET_BI
 
 | Ordner | Inhalt |
 |---|---|
-| `display/` | HT16K33-Treiber, DisplayGrid, Textlayout, Graphen |
+| `display/` | `wall_display.py` (Wandanzeige, alle 12 Module), `cells.py` (Text zu Segmentmustern), `text_layout.py` (Umbruch wie beim ESP), `terminal_display.py` (Anzeige im PC-Modus), Graphen, dazu der alte HT16K33-Treiber mit DisplayGrid |
 | `uart/` | UART zum Radar LD2410S und Umschaltung per GPIO23 (HIGH = Radar, LOW = ESP); die Verbindung zum ESP liegt in `app/link/` |
 | `chatbot/` | Groq-API |
 | `speechRecognition/` | faster-whisper (lokal) bzw. Groq-Spracherkennung |
 | `speech/` | Sprachausgabe |
-| `database/` | MariaDB/MySQL für Reflexionen und Quiz |
+| `database/` | MariaDB/MySQL für das Quiz (die Tabelle `reflections` liest REFLECTION nicht mehr) |
 
 ## Verbindung zum ESP (`app/link`)
 
@@ -116,12 +122,12 @@ DB_PASSWORD=...
 
 ```
 sudo mariadb
-USE reflection_db;
-SELECT * FROM reflections;
+USE quiz_db;
+SELECT * FROM questions;
 ```
 
 Weitere Befehle in `doc/commands.txt`.
 
 ## Bekannte Baustellen
 
-- Der Python-Treiber adressiert die Module als `0x70 + Index` und nutzt standardmässig nur 2 Zeilen (6 Module). Die Adressen hinter den LTC4316 (0x7F, 0x79, 0x7B, 0x7D) fehlen noch.
+- Der alte Anzeigetreiber (`display.py`, `display_grid.py`, `ht16k33_driver.py`, `displayGraph.py`) adressiert die Module als `0x70 + Index`. Das Menü und die Anwendungen nutzen ihn nicht mehr. Sie schreiben über `WallDisplay`, und `WallDisplay` erreicht alle 12 Module, auch die hinter den LTC4316 (0x7F, 0x79, 0x7B, 0x7D).
