@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Protocol
 
 from app.driver.display.cells import normalize
+from app.driver.display.text_layout import wrap
 from app.ui.buttons import BT4, BT5
 from app.ui.pages import paginate
 
@@ -110,19 +111,27 @@ class AppContext:
             threading.Thread(target=work, name="run-blocking", daemon=True).start()
             while True:
                 try:
-                    ok, value = done.get(timeout=POLL_S)
+                    outcome = done.get(timeout=POLL_S)
                 except queue.Empty:
-                    pass
-                else:
-                    if ok:
-                        return value
-                    raise value
+                    outcome = None
+                # Auch nach dem Ende der Arbeit: Tasten aus dem letzten Intervall
+                # wirken nicht auf den naechsten Bildschirm.
                 self._check_stop()
-                while True:
-                    button = self.buttons.get(0)
-                    if button is None:
-                        break
-                    self._press(button)  # BT4 wirft, der Rest wird verworfen
+                self._drop_presses()
+                if outcome is None:
+                    continue
+                ok, value = outcome
+                if ok:
+                    return value
+                raise value
+
+    def _drop_presses(self) -> None:
+        """Wartende Tasten verwerfen; BT4 wirft StopApp("back")."""
+        while True:
+            button = self.buttons.get(0)
+            if button is None:
+                return
+            self._press(button)
 
     def show_pages(self, text: str) -> None:
         pages = paginate(normalize(text))
@@ -140,6 +149,12 @@ class App(Protocol):
     def run(self, ctx: AppContext) -> None: ...
 
 
+def _error_title(name: str) -> list[str]:
+    """FEHLER IN <NAME>, an Wortgrenzen auf hoechstens zwei Zeilen umgebrochen."""
+    rows, _ = wrap("FEHLER IN " + normalize(name))
+    return [row.rstrip() for row in rows if row.strip()][:2]
+
+
 def run_app(app: App, ctx: AppContext) -> str:
     """Startet app. Rueckgabe: "back", "shutdown", "idle" oder "error"."""
     try:
@@ -150,7 +165,7 @@ def run_app(app: App, ctx: AppContext) -> str:
     except Exception:
         log.exception("Anwendung %s ist abgestuerzt", app.name)
     try:
-        ctx.display.show_lines([("FEHLER IN " + normalize(app.name))[:24], "BT4 ZURUECK"])
+        ctx.display.show_lines(_error_title(app.name) + ["BT4 ZURUECK"])
         while True:
             ctx.wait_button()
     except StopApp as stop:
