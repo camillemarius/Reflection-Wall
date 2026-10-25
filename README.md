@@ -40,6 +40,7 @@ rpi/      Python-Anwendung für den Raspberry Pi
   app/    Hauptprogramm, Anwendungen und Treiber
   tests/  Einzeltests pro Komponente (mit installation.txt), auch tests/microphone
   doc/    Notizen, z. B. Datenbankbefehle
+tests/    gemeinsame Testfälle für ESP und Pi (Verbindung, Anzeige)
 ```
 
 ## Auf einem neuen Rechner weiterarbeiten

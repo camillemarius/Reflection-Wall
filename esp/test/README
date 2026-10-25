@@ -8,7 +8,14 @@ Suiten:
 - test_wall_logic: Ablauf der Wand (Aufwachen, naechstes Zitat, Ausschalten nach 1 Minute).
 - test_slot_store: Plaetze A und B im FRAM mit Kennung, Nummer, Laenge und CRC-32.
 - test_fram_quote_store: FramQuoteStore, auch Briefkasten /quotes.txt und Abbruch beim Schreiben.
+- test_link_codec: Zeilenformat der Verbindung zum Pi (gemeinsame Testfaelle aus tests/).
+- test_text_layout: Umbruch und Segmentschrift der Anzeige.
+- test_pi_power: Pi-Speisung ueber das Flipflop (Puls pro Umschalten).
+- test_pi_link: Nummern, Wiederholung, Fristen und doppelte Nachrichten in PiLink.
 
 Hilfen in support/:
 - MemoryFs: Dateisystem im Speicher statt LittleFS.
 - MemoryBytes: FRAM im Speicher statt am Bus.
+- VectorFile: liest die gemeinsamen Testfaelle aus tests/.
+- RecordingPin: zeichnet die Pegel eines Pins auf.
+- MemorySerial: serielle Leitung im Speicher statt UART.

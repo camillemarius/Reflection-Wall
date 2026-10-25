@@ -1,4 +1,4 @@
-from .uart_switch import UARTSwitch
+from app.driver.uart.uart_switch import UARTSwitch
 
 class UARTDevice:
 

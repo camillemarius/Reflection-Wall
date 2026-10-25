@@ -9,6 +9,10 @@
 #include "FramQuoteStore.h"
 #include "FramBus.h"
 #include "WallLogic.h"
+#include "PiPower.h"
+#include "PowerSwitchPin.h"
+#include "UartPort.h"
+#include "PiLink.h"
 
 #include "PCF8575.h"
 #include "InputManager.h"
@@ -41,9 +45,6 @@ public:
     void run();
 
 private:
-    void togglePowerSwitch();
-    void configurePowerSwitchPin();
-
     // Liest den Expander und gibt damit die INT-Leitung frei
     uint16_t readExpander();
 
@@ -100,6 +101,14 @@ private:
     // aufgerufen?
     bool _displayReady;
 
-    // rpi Power Switch (Clock-Puls auf das Flipflop)
-    uint8_t _pulseIdle;
+    // Pi-Speisung (Clock-Puls auf das Flipflop); Reihenfolge: _piPower haelt eine Referenz auf _powerPin
+    PowerSwitchPin _powerPin;
+    PiPower _piPower;
+
+    // Verbindung zum Pi; Reihenfolge: _link haelt eine Referenz auf _port
+    UartPort _port;
+    PiLink _link;
+
+    // BT3 wurde in diesem Durchlauf gedrueckt: Verbindungstest nach dem Sichern des Tastenstands
+    bool _linkTestRequested;
 };

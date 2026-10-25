@@ -1,6 +1,6 @@
-from driver.chatbot.groqAPI import write_to_ai
-from driver.database.mysql import get_previous_answers, save_answer
-from applications.Quiz.prompt import PROMPT_TEMPLATE
+from app.driver.chatbot.groqAPI import write_to_ai
+from app.driver.database.mysql import get_previous_answers, save_answer
+from app.applications.Quiz.prompt import PROMPT_TEMPLATE
 
 import re
 

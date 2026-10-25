@@ -8,8 +8,6 @@ from dotenv import load_dotenv
 
 # Lade Umgebungsvariablen
 load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-client = Groq(api_key=GROQ_API_KEY)
 
 def record_and_transcribe():
     """
@@ -17,6 +15,8 @@ def record_and_transcribe():
     und transkribiert es mit Groq API.
     Rückgabe: transkribierter Text (str)
     """
+
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
     samplerate = 16000  # Funktioniert meist auf Linux
     channels = 1

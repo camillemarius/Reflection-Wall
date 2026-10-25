@@ -2,6 +2,8 @@
 #include "I2CMasterControl.h"
 #include "pinMapping.h"
 #include "features.h"
+#include "TextLayout.h"
+#include "LinkTest.h"
 
 #include "DebugLogger.h"
 
@@ -19,7 +21,11 @@ Application::Application()
       _state(),
       _coldBoot(false),
       _displayReady(false),
-      _pulseIdle(HIGH)
+      _powerPin(),
+      _piPower(_powerPin),
+      _port(Serial),
+      _link(_port),
+      _linkTestRequested(false)
 {
 }
 
@@ -29,9 +35,6 @@ namespace
     // steht sie in /quotes.txt im LittleFS (QuoteStore). Ist die Liste leer
     // oder nicht lesbar, zeigt die Wand diesen Hinweis statt dunkel zu bleiben.
     constexpr char NO_TEXT[] = "KEIN TEXT";
-
-    // 12 Module x 8 Zeichen
-    constexpr unsigned int DISPLAY_CHARS = 96;
 
     const char* buttonName(InputEvent button)
     {
@@ -61,9 +64,6 @@ namespace
             default: return "keine";
         }
     }
-
-    // Breite des Clock-Pulses fuer das Flipflop am Relais
-    constexpr unsigned long PULSE_MS = 50;
 
     // Beim Aufwachen bleibt das Funkteil aus (Features::WAKE_RF_ENABLED = false):
     // es kostet rund 70 mA und etwa 200 ms Bootzeit, die hier niemand braucht.
@@ -101,7 +101,9 @@ void Application::run()
     WiFi.mode(WIFI_OFF);
     WiFi.forceSleepBegin();
 
-    DebugSerial.begin(74880);  // same baud as the ESP8266 boot ROM -> boot log readable
+    // Eine Zeile der Verbindung hat bis 257 Bytes; der Standardpuffer fasst 256.
+    Serial.setRxBufferSize(1024);
+    DebugSerial.begin(Features::LINK_BAUD);  // same baud as the ESP8266 boot ROM -> boot log readable
 
     // -----------------------------------------------------
     // 2. Weckgrund
@@ -144,7 +146,7 @@ void Application::run()
     // Deshalb loesen sie nichts aus.
     _inputs.setTrigger(InputEvent::BT1, InputTrigger::ANY_EDGE);
     _inputs.setTrigger(InputEvent::BT2, InputTrigger::ANY_EDGE);
-    _inputs.setTrigger(InputEvent::BT3, InputTrigger::NONE);
+    _inputs.setTrigger(InputEvent::BT3, InputTrigger::ANY_EDGE);
     _inputs.setTrigger(InputEvent::BT4, InputTrigger::NONE);
     _inputs.setTrigger(InputEvent::BT5, InputTrigger::NONE);
     _inputs.setTrigger(InputEvent::BT6, InputTrigger::NONE);
@@ -201,6 +203,10 @@ void Application::run()
     // Tastenstand jetzt sichern: ein Druck waehrend der Warteschleife setzt den ESP zurueck
     PersistentState::save(_state);
 
+    // Tastenstand ist gesichert: ein Reset im Test wiederholt ihn nicht
+    if (_linkTestRequested)
+        runLinkTest(_link, 3000);
+
     // Was die Wand zeigt, entscheiden die Wand-Regeln
     // (Name bewusst nicht radarHigh: das ist die Methode)
     const bool radarNow = radarHigh();
@@ -239,48 +245,6 @@ void Application::run()
     PersistentState::save(_state);
 
     enterDeepSleep();
-}
-
-// ---------------------------------------------------------
-// rpi Power Switch
-// ---------------------------------------------------------
-// GPIO12 taktet ein Flipflop, das den Relaiszustand auch ohne
-// den ESP haelt. Der Ruhepegel wird gemessen statt angenommen:
-// uebernimmt der Pin beim Wechsel auf Ausgang exakt den Pegel,
-// den die Leitung ohnehin fuehrt, entsteht keine Flanke und
-// das Relais bleibt unberuehrt.
-//
-// Aufgerufen wird das nur aus togglePowerSwitch(), also nur
-// dann, wenn BT2 tatsaechlich gedrueckt wurde. In jedem
-// anderen Durchlauf bleibt GPIO12 Eingang und damit hochohmig:
-// der ESP haengt sich nicht bei jedem Boot an die Taktleitung
-// des Flipflops.
-
-void Application::configurePowerSwitchPin()
-{
-    pinMode(Pins::ESP_GPIO12_PS, INPUT);
-    _pulseIdle = digitalRead(Pins::ESP_GPIO12_PS);
-
-    // digitalWrite() setzt beim ESP8266 das Ausgangsregister
-    // schon im Eingangsmodus. In der umgekehrten Reihenfolge
-    // wuerde pinMode(OUTPUT) den Pin kurz auf LOW ziehen.
-    digitalWrite(Pins::ESP_GPIO12_PS, _pulseIdle);
-    pinMode(Pins::ESP_GPIO12_PS, OUTPUT);
-}
-
-// Ein Puls gegen den Ruhepegel kippt das Flipflop. Den
-// resultierenden Relaiszustand kennt der ESP nicht - er liegt
-// im Flipflop und ueberlebt auch dessen Stromausfall.
-//
-// Der Pin wird erst hier eingerichtet - vorher ist er Eingang.
-
-void Application::togglePowerSwitch()
-{
-    configurePowerSwitchPin();
-
-    digitalWrite(Pins::ESP_GPIO12_PS, _pulseIdle ? LOW : HIGH);
-    delay(PULSE_MS);
-    digitalWrite(Pins::ESP_GPIO12_PS, _pulseIdle);
 }
 
 // ---------------------------------------------------------
@@ -396,9 +360,9 @@ void Application::showQuote(WallAction action)
         date = list.at(index).date;
     }
 
-    if (text.length() > DISPLAY_CHARS)
-        DebugSerial.printf("[TEXT] Warnung: %u Zeichen, die Anzeige fasst %u\n",
-                           (unsigned)text.length(), DISPLAY_CHARS);
+    if (!TextLayout::wrap(text).fits)
+        DebugSerial.printf("[TEXT] Warnung: passt nicht auf die Anzeige (4 x 24, Umbruch an Wortgrenzen): \"%s\"\n",
+                           text.c_str());
 
     DebugSerial.printf("[WALL] %s -> #%u %s \"%s\"\n",
                        actionName(action),
@@ -494,11 +458,12 @@ void Application::handleInput(InputEvent button)
 
         case InputEvent::BT2:
             DebugSerial.println("Power Switch umschalten");
-            togglePowerSwitch();
+            _piPower.toggle();
             break;
 
         case InputEvent::BT3:
-            DebugSerial.println("(keine Aktion)");
+            DebugSerial.println("Verbindungstest zum Pi");
+            _linkTestRequested = true;
             break;
 
         case InputEvent::BT4:

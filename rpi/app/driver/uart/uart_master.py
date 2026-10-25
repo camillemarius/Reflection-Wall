@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import time
 
-from .uart import UART
-from .uart_switch import UARTSwitch
+from app.driver.uart.uart import UART
+from app.driver.uart.uart_switch import UARTSwitch
 
 
 class UARTMaster:

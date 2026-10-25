@@ -5,7 +5,7 @@ Grafische Abstraktion für ein 4x24 16-Segment-Display.
 X = 0..23, Y = 0..3
 """
 
-from rpi.app.driver.display.ht16k33_driver import (
+from app.driver.display.ht16k33_driver import (
     TestModule, I2CModule, CHARS_PER_MODULE,
     init_ht16k33, clear_all, write_buffer
 )

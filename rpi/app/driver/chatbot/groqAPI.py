@@ -7,13 +7,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not GROQ_API_KEY:
-    raise ValueError("GROQ_API_KEY fehlt")
+_client_instance = None
 
-logging.basicConfig(level=logging.INFO)
 
-client = Groq(api_key=GROQ_API_KEY)
+def _client():
+    """Legt den Groq-Client beim ersten Aufruf an (nicht beim Import)."""
+    global _client_instance
+    if _client_instance is None:
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise ValueError("GROQ_API_KEY fehlt")
+        _client_instance = Groq(api_key=api_key)
+    return _client_instance
 
 # Global Rate Limit Schutz (thread-safe)
 LAST_REQUEST_TIME = 0
@@ -54,11 +59,13 @@ def write_to_ai(messages, retries: int = 4) -> str:
 
     print("Frage an AI:", messages)
 
+    _client()  # fehlender Schluessel soll wie bisher als ValueError herauskommen
+
     for attempt in range(retries):
         try:
             rate_limit()
 
-            completion = client.chat.completions.create(
+            completion = _client().chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=messages,
                 temperature=0.7,
@@ -98,7 +105,7 @@ def fallback_non_stream(messages) -> str:
 
         rate_limit()
 
-        completion = client.chat.completions.create(
+        completion = _client().chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=messages,
             max_completion_tokens=512,

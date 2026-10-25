@@ -9,6 +9,7 @@ Gib mir:
 2. Die richtige Antwort
 3. Zwei Hinweise von schwer bis mittelleicht
 Der letzte Hinweis darf die Antwort NICHT direkt verraten.
+Jede Angabe (Frage, Lösung, Hinweise) höchstens 96 Zeichen.
 Format:
 FRAGE: ...
 LÖSUNG: ...
