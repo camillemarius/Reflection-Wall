@@ -1,7 +1,7 @@
 # ESP als Master über den Raspberry Pi – Entwurf
 
 Stand: 2026-10-19 · Status: **vom Owner angenommen** (2026-10-19), ergänzt um
-Runde 6 (Zitate im FRAM, 2026-10-19)
+Runde 6 (Zitate im FRAM, 2026-10-19) und um Teil 4 (Menü, 2026-10-25)
 
 Dieses Dokument sammelt, was in sechs Entscheidungsrunden festgelegt wurde, und
 ergänzt, was für die Umsetzung noch fehlt. Abschnitt 2 listet die Entscheide.
@@ -45,9 +45,9 @@ Pi nimmt keinen Schaden, und keine Nachricht geht unbemerkt verloren.
 | E4-a | Nach `OK` wartet der ESP eine feste, bei der Inbetriebnahme gemessene Zeit, dann trennt er die Speisung | 1 |
 | E5-c | Der ESP liest die Tasten immer zuerst (er holt sich kurz den I²C-Bus), reagiert auf das, was ihn betrifft, und schickt den Rest an den Pi | 1 |
 | Regel | Jede Nachricht wird bestätigt; der Absender wiederholt sie bis zur Bestätigung oder bis zur Frist | 2 |
-| S1-a | Eine Sitzung von Hand endet mit der Ein/Aus-Taste oder wenn der Pi `DONE` meldet (Anwendung fertig oder 15 min ohne Taste); Obergrenze 3 h; 10 min nach dem ersten `SHUTDOWN` hart aus | 2 |
+| S1-a | Eine Sitzung von Hand endet mit der Ein/Aus-Taste oder wenn der Pi `DONE` meldet (Anwendung fertig oder 15 min ohne Taste); ~~Obergrenze 3 h~~ (entfällt, Teil 4 D1); `DONE` nach 15 min ohne Aktivität nur, wenn der Schalter an ist (Teil 4 D2, F6); 10 min nach dem ersten `SHUTDOWN` hart aus | 2 |
 | S2-a | Die Ein/Aus-Taste gehört dem ESP, die anderen Tasten gehen als `BUTTON` an den Pi; die Pi-Anwendungen auf Tasten umzustellen ist ein eigener Teil 4 | 2 |
-| S3-a | Radar-Debug nur zum Einstellen: Der Pi meldet ihn an und ab, der ESP pausiert solange, höchstens 60 min | 2 |
+| S3-a | Radar-Debug ~~nur zum Einstellen~~: Der Pi meldet ihn an und ab, der ESP pausiert solange, höchstens 60 min. Die Anwendung Radar nutzt ihn auch (Teil 4 D8, V6) | 2 |
 | S4-a | Ein systemd-Dienst, ein Prozess besitzt die UART, eigener Thread für die Verbindung | 2 |
 | M1-d | Ohne Person ist die Wand dunkel. Radar erkennt jemanden → Zitat an, ESP bleibt wach, solange INT_HLK HIGH ist, danach Anzeige aus und schlafen. BT1 → Zitat an, nach 1 min aus | 4 |
 | M2-c | Ein Thema steht in einer Datei auf dem Pi (Anfangsinhalt „Was ist der Sinn des Lebens“); der ESP schickt den Text vom Vortag mit; neues Thema = neue Kette | 4 |
@@ -55,8 +55,8 @@ Pi nimmt keinen Schaden, und keine Nachricht geht unbemerkt verloren.
 | M3-a | Weckplan mit Terminen (00:00, 01:00, 02:00), höchstens 3 h am Stück, Ortszeit samt Sommerzeit. WLAN nur zum Zeitabgleich: um Mitternacht und nach einem Kaltstart, höchstens 15 s, nie das Einrichtungsportal (ausser nach Kaltstart ohne Zugangsdaten, 3 min). Kennt der ESP nach einem Kaltstart die Zeit nicht, versucht er den Abgleich bei jedem Weckvorgang wieder und lässt bis dahin den Mitternachts-Auftrag aus | 3 |
 | M4-a | Bei Fehlern in der Nacht bleibt das alte Zitat; neue Versuche um 01:00 und 02:00, danach erst in der nächsten Nacht; läuft gerade eine Sitzung, wird das Zitat darin geholt; endet sie vorher, gilt das als Fehlversuch | 3 |
 | — | Die zwölf festen Texte sind entfallen; die Wand zeigt `/text.txt` aus dem Flash | nach Runde 4 |
-| — | BT1–BT3 laufen über Toggle-Flipflops; BT1 zeigt das Zitat, BT2 schaltet den Pi, BT3 ist frei | nach Runde 4 |
-| T1-a | Während einer Sitzung gehen alle Tasten ausser BT2 an den Pi (BT1, BT3–BT6); BT1 schaltet dann kein Zitat weiter; BT4–BT6 verlieren kurze Drücke, bis Flipflops nachgerüstet sind | 5 |
+| — | BT1–BT3 laufen über Toggle-Flipflops; BT1 zeigt das Zitat, BT2 schaltet den Pi, BT3 ist frei. Seit 2026-10-23 haben alle sechs Tasten Flipflops | nach Runde 4 |
+| T1-a | Während einer Sitzung gehen alle Tasten ausser BT2 an den Pi (BT1, BT3–BT6); BT1 schaltet dann kein Zitat weiter; ~~BT4–BT6 verlieren kurze Drücke, bis Flipflops nachgerüstet sind~~. Der Pi beachtet BT1 und BT3 nicht (Teil 4 D5) | 5 |
 | T2-a | Der Flash hält bis zu 30 Zitate (neuestes zuerst). Wand dunkel + Radar oder BT1 → neuestes Zitat. Wand leuchtet + BT1 → nächstälteres, nach dem ältesten wieder das neueste. Wand aus, wenn INT_HLK LOW und der letzte BT1-Druck 1 min zurückliegt. Beim nächsten Einschalten wieder das neueste | 5 |
 | Z1–Z15 | Die Zusatzpunkte aus Abschnitt 3 sind angenommen, ausser Z3 (ersetzt durch T1-a) und Z5, Z8 (ersetzt durch T2-a) | 5 |
 | — | Die Zitate liegen im FRAM (MB85RC256V, 32 KB, I²C 0x50) statt im Flash des ESP | nach Runde 5 |
@@ -68,6 +68,7 @@ Pi nimmt keinen Schaden, und keine Nachricht geht unbemerkt verloren.
 | — | Das FRAM ist bestückt (2026-10-20). `FRAM_INSTALLED` steht auf `true`; die Abnahme mit FRAM gehört zu Teil 3a-2 | nach Runde 6 |
 | — | Für FRAM-Zugriffe schaltet der ESP den Bus auf 100 kHz und danach zurück auf 10 kHz | nach Runde 6 |
 | B | I²C in einer Sitzung: Der Pi pausiert den Bus bei jedem Tastendruck und jeder Radar-Flanke, bis der ESP den Expander gelesen hat. Niemand fragt vorher. Gilt, sofern die Messung genug Reserve zeigt; sonst kommt die Frage zurück zum Owner (Abschnitt 10) | 2026-10-22 |
+| Teil 4 | Menü und Pi-Anwendungen an der Wand: Entscheide D1–D17, Vorschläge V1–V7 und Festlegungen F1–F7 in `2026-10-23-menue-und-anwendungen-design.md` | 2026-10-25 |
 
 A1–A6 waren in Runde 1 als Annahmen formuliert; du hast sie bestätigt. Die
 Begründungen und Gegenprüfungen standen in den Rundendateien der
@@ -115,7 +116,7 @@ Quelle: Schaltplan „Schematic PDF [No Variations]“ vom 08.03.2026.
 | F6 | Der Pi ist ein Raspberry Pi 5. Er sieht INT_GPIO_EXP (GPIO4) und INT_HLK (GPIO22) ebenfalls. | 7 |
 | F7 | Den I²C-Bus hat der Pi, solange ESP-GPIO15 LOW ist. | 17 |
 | F8 | INT_HLK (Radar-Ausgang, ESP-GPIO13) ist HIGH, solange jemand erkannt wird, und bleibt danach noch einige Zeit HIGH (Werkseinstellung etwa 60 s). | 18 |
-| F9 | BT1–BT3 laufen über Toggle-Flipflops: jeder Druck kippt den Pegel am Expander, und der bleibt stehen. BT4–BT6 hängen direkt am Expander. | 10, 11; am Gerät gemessen |
+| F9 | Alle sechs Tasten laufen über Toggle-Flipflops: jeder Druck kippt den Pegel am Expander, und der bleibt stehen. BT4–BT6 hat der Owner nachgerüstet (2026-10-22/23). | 10, 11; am Gerät gemessen |
 
 Was am Gerät noch zu prüfen ist, steht in Abschnitt 15.
 
@@ -205,6 +206,7 @@ Was passiert, wenn die Frist ohne Antwort abläuft:
 | `DONE` | Pi | alle 10 s erneut senden |
 | `MODE\|RADAR` | Pi | nicht umschalten, Radar-Debug startet nicht |
 | `MODE\|NORMAL` | Pi | weiter senden, bis `OK` kommt |
+| `SESSION` | ESP | den Pi herunterfahren wie nach BT2 (Teil 4) |
 
 ### 6.3 Befehle
 
@@ -212,7 +214,8 @@ Was passiert, wenn die Frist ohne Antwort abläuft:
 |---|---|---|---|
 | ESP → Pi | `PING` | `PONG` | Lebt der Pi? |
 | ESP → Pi | `GET\|QUOTE\|<Text vom Vortag>` | `QUOTE\|<Text>` oder `ERROR\|<Grund>` | Neues Zitat holen. Leerer Vortag = neue Kette. |
-| ESP → Pi | `BUTTON\|<n>` | `OK` | Taste BT1 oder BT3 während einer Sitzung |
+| ESP → Pi | `SESSION\|HAND` oder `SESSION\|NACHT` | `OK` | Warum der ESP den Pi eingeschaltet hat: BT2 oder der tägliche Timer (Teil 4 F1) |
+| ESP → Pi | `BUTTON\|<n>` | `OK` | Taste BT1 oder BT3–BT6 während einer Sitzung |
 | ESP → Pi | `SHUTDOWN` | `OK` oder `BUSY` | Darf ich ausschalten? Nach `OK` fährt der Pi herunter. |
 | Pi → ESP | `READY` | `OK` | Der Dienst läuft. |
 | Pi → ESP | `DONE` | `OK` | Der Pi ist fertig und will ausgeschaltet werden. |
@@ -247,7 +250,7 @@ Frage, die die Zeichnung beantwortet: *In welchen Zuständen ist der ESP, währe
         │ ◄── 3 PING ohne Antwort (hart aus) ───── │    BETRIEB    │ ───────────► │ RADAR-DEBUG │
         │                                          │ PING alle 10 s│ ◄─────────── │ kein PING   │
         │                                          └───────┬───────┘ MODE|NORMAL  └─────────────┘
-        │                                                  │ BT2 · DONE · 3 h · Auftrag erledigt
+        │                                                  │ BT2 · DONE · Auftrag erledigt
         │                                                  │ (aus RADAR-DEBUG: nach 60 min)
         │                                                  ▼
         │ ◄── keine Antwort bis T_shutdown ─────── ┌───────────────┐
@@ -260,11 +263,15 @@ Frage, die die Zeichnung beantwortet: *In welchen Zuständen ist der ESP, währe
                       (Speisung aus)               └───────────────┘
 ```
 
-*Gezeichnet 2026-10-19 aus den Entscheiden A3, E3, E4-a, S1-a, S3-a.
+*Gezeichnet 2026-10-19 aus den Entscheiden A3, E3, E4-a, S1-a, S3-a; „3 h“ entfernt nach Teil 4 D1.
 „Hart aus“ heisst: Speisung trennen ohne Herunterfahren, mit Eintrag im Log.*
 
 Regeln, die die Zeichnung nicht zeigt:
 
+- **Startgrund (Teil 4 F1):** Nach `READY` schickt der ESP `SESSION|HAND`, wenn BT2 den
+  Pi eingeschaltet hat, sonst `SESSION|NACHT`. Nur bei `HAND` zeigt der Pi das Menü.
+  BT2 während EINSCHALTEN merkt sich der ESP und fährt den Pi nach `READY` gleich
+  wieder herunter.
 - **PING (E3)** läuft im Zustand BETRIEB. In EINSCHALTEN übernimmt das wiederholte
   PING bis `READY` diese Rolle, in HERUNTERFAHREN die Wiederholung von `SHUTDOWN`
   mit ihrer Frist. In RADAR-DEBUG ist es nach S3-a ausgesetzt.
@@ -326,8 +333,8 @@ ihn verlieren, und die Wand geht aus.
   am Zustand „Anzeige wird geschrieben“ im RTC-Speicher und schreibt neu.
 - Ob die Anzeige an ist, steht im RTC-Speicher. Damit unterscheidet der ESP einen
   neuen Radar-Treffer von einem Reset, der nichts Neues bringt – der Weckgrund
-  allein taugt dafür nicht (am Gerät gemessen: kurze Taps auf BT4–BT6 werden als
-  Radar gemeldet).
+  allein taugt dafür nicht (am Gerät gemessen, als BT4–BT6 noch keine Flipflops
+  hatten: kurze Taps wurden als Radar gemeldet).
 
 ---
 
@@ -395,16 +402,18 @@ RTC-Speicher und erscheint beim nächsten Weckvorgang im Log.
 
 | Taste | Ohne Sitzung | Während einer Sitzung |
 |---|---|---|
-| BT1 | Zitat anzeigen bzw. weiterschalten (Abschnitt 8) | `BUTTON\|1` an den Pi |
+| BT1 | Zitat anzeigen bzw. weiterschalten (Abschnitt 8) | `BUTTON\|1` an den Pi; der Pi beachtet ihn nicht (Teil 4 D5) |
 | BT2 | Sitzung von Hand starten | Sitzung beenden (`SHUTDOWN`, der Pi darf `BUSY` antworten) |
-| BT3 | – | `BUTTON\|3` an den Pi |
-| BT4–BT6 | – | `BUTTON\|4` bis `BUTTON\|6` an den Pi – nur gehaltene Drücke kommen an (F9; gemessen: 5 von 5 kurzen Taps verloren, 6 von 6 gehaltenen Drücken erkannt) |
+| BT3 | Verbindungstest (Teil 1) | `BUTTON\|3` an den Pi; der Pi beachtet ihn nicht (Teil 4 D5) |
+| BT4–BT6 | – | `BUTTON\|4` bis `BUTTON\|6` an den Pi; Menü und Anwendungen (Teil 4) |
 
 Ein Druck während der Sitzung setzt den ESP zurück. Er bootet, liest seinen
 Sitzungszustand aus dem RTC-Speicher, liest den Expander und schickt `BUTTON|n`.
-BT4–BT6 werten dabei die fallende Flanke aus, BT1–BT3 jeden Wechsel.
+Was der ESP in den anderen Zuständen mit einer Taste tut, steht in Teil 4,
+Tabelle 5.2.
 
-Jeder Pegelwechsel an BT1–BT3 ist ein Druck (`InputTrigger::ANY_EDGE`).
+Jeder Pegelwechsel an einer der sechs Tasten ist ein Druck (`InputTrigger::ANY_EDGE`).
+Bis Teil 4 stehen BT4–BT6 in der Firmware noch auf `InputTrigger::NONE`.
 **I²C während einer Sitzung (Entscheid B, 2026-10-22).** Ein Tastendruck oder
 eine Radar-Flanke setzt den ESP zurück. Danach holt er sich sofort den I²C-Bus
 (GPIO15 HIGH), liest den Expander und gibt den Bus zurück. Der Pi sieht dieselben
@@ -437,7 +446,7 @@ Stromausfall). Das Layout ändert sich, deshalb neue `MAGIC`.
 | `wakeCount` | wie heute: Anzahl Weckvorgänge, im Log |
 | `session` | Zustand aus Abschnitt 7 |
 | `piPowered` | ob der ESP die Speisung zuletzt eingeschaltet hat |
-| `sessionSeconds` | verstrichene Sitzungszeit (für 3 h), alle 10 s gesichert |
+| `sessionSeconds` | verstrichene Sitzungszeit, alle 10 s gesichert; nur noch fürs Log, die 3 h entfallen (Teil 4 D1) |
 | `pendingShutdown` | BT2 während RADAR-DEBUG gedrückt |
 | `display` | aus / an / wird geschrieben |
 | `shownIndex`, `shownDate` | Platz und Datum des Zitats, das gerade zu sehen ist (T2-a); massgeblich ist das Datum, der Platz hilft bei gleichen Daten |
@@ -513,7 +522,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | Name | Wert | Wofür | Herkunft |
 |---|---|---|---|
 | Wiederholabstand | 250 ms | jede unbeantwortete Nachricht | Entscheid (E3) |
-| Frist einfache Anfrage | 3 s | `PING`, `BUTTON`, `READY`, `DONE`, `MODE` | Entwurf |
+| Frist einfache Anfrage | 3 s | `PING`, `BUTTON`, `READY`, `DONE`, `MODE`, `SESSION` | Entwurf |
 | Frist `GET\|QUOTE` | 120 s | KI-Antwort kann dauern | Entwurf |
 | PING-Abstand | 10 s | im Zustand BETRIEB | Entscheid (E3) |
 | PING-Aussetzer bis hart aus | 3 | | Entscheid (E3) |
@@ -522,8 +531,9 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | BUSY-Wiederholung | 30 s | | Entwurf |
 | BUSY höchstens | 10 min | ab erstem `SHUTDOWN` | Entscheid (S1-a) |
 | `T_halt` | 30 s | **wird bei der Inbetriebnahme gemessen** und auf das Doppelte gesetzt | Entscheid (E4-a) |
-| Sitzung höchstens | 3 h | | Entscheid (S1-a) |
-| Pi ohne Taste bis `DONE` | 15 min | | Entscheid (S1-a) |
+| ~~Sitzung höchstens~~ | ~~3 h~~ | entfällt | Teil 4 D1 |
+| Pi ohne Aktivität bis `DONE` | 15 min | nur wenn der Schalter an ist, Standard aus | Teil 4 D2, F6 |
+| Webseite ohne Speichern höchstens | 15 min | | Teil 4 D11 |
 | Radar-Debug höchstens | 60 min | | Entscheid (S3-a) |
 | BT1-Anzeige | 60 s | | Entscheid (M1-d) |
 | INT_HLK abfragen | alle 200 ms | | Entwurf |
@@ -603,12 +613,13 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | COM8 zeitweise blockiert, Datenmüll im Schlaf | Ursache unbekannt | nur Entwicklung; beobachten |
 | Ruhig stehende Person | Radar kann sie verlieren | Radar-Parameter im Radar-Debug einstellen |
 | Kette driftet vom Thema ab | nicht beobachtet | Themenwechsel startet neu |
-| BT4–BT6 | ohne Flipflop | nur bei Bedarf in der Hardware nachrüsten |
-| Pi per Taste bedienen | Bis Teil 4 warten die Pi-Anwendungen auf ENTER; ein per BT2 gestarteter Pi lässt sich nur über SSH bedienen (S2-a) | Teil 4 |
+| ~~BT4–BT6 ohne Flipflop~~ | erledigt: nachgerüstet (2026-10-22/23) | – |
+| Pi per Taste bedienen | Bis Teil 4 warten die Pi-Anwendungen auf ENTER; ein per BT2 gestarteter Pi lässt sich nur über SSH bedienen (S2-a) | wird mit Teil 4 erledigt (`2026-10-23-menue-und-anwendungen-design.md`) |
+| Zeichen `:` | Die Schrift zeigt `:` wie `/` | eigenes Muster suchen; Teil 4 umgeht es mit Port 80 (V5) |
 | Nachlaufzeit des Radars | Werkseinstellung etwa 60 s, nicht gemessen; bestimmt, wie lange die Wand nach dem Gehen an bleibt | im Radar-Debug messen und einstellen |
 | Boot-Modus 7 nach dem Bestücken | Nach dem Bestücken des FRAM (2026-10-20) antworteten die Anzeigen nicht, und der ESP startete bei jedem Reset mit `boot mode:(7,7)` (GPIO15 HIGH). Ein vollständiger Stromunterbruch hat beides behoben; die Ursache ist unbekannt | tritt es wieder auf: Spannung an GPIO15 im Reset messen, Speisung des Pi und der Anzeigen prüfen |
 | Zeit für die I²C-Pause (Entscheid B) | gerechnet: ESP braucht 60–100 ms bis zum Bus, Pi unter 20 ms bis zur Pause; nicht gemessen | Mit dem Logikanalysator den Abstand von der INT_GPIO_EXP-Flanke bis zur ersten SCL-Flanke des ESP messen; in Teil 2 die Reaktionszeit des Pi messen. Reicht die Reserve nicht: zurück zum Owner |
-| Flipflops ohne Strom, ESP mit Strom | Speist der Flasher den ESP weiter, während die Platine keinen Strom hat, laufen die Flipflops von BT1–BT3 in einem anderen Zustand an. Der ESP liest das als Tastendruck (beobachtet: BT2 schaltete die Speisung des Pi um) | nur in der Entwicklung mit Flasher; beobachten |
+| Flipflops ohne Strom, ESP mit Strom | Speist der Flasher den ESP weiter, während die Platine keinen Strom hat, laufen die Flipflops aller sechs Tasten in einem anderen Zustand an. Der ESP liest das als Tastendruck (beobachtet: BT2 schaltete die Speisung des Pi um) | nur in der Entwicklung mit Flasher; beobachten |
 
 ---
 
@@ -622,7 +633,8 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | 3a | Anzeige, Radar und Zitatliste (Abschnitte 8 und 11): Anzeige aus/an, Zitatliste `/quotes.txt` mit Umstieg, BT1 weiterschalten, wach bleiben solange INT_HLK HIGH | – |
 | 3a-2 | Zitate im FRAM (Abschnitt 11): FRAM-Speicher mit zwei Plätzen, Briefkasten im Flash, Schalter `FRAM_INSTALLED` | – |
 | 3b | Mitternacht: WakePlan, Clock, Zitat, QuoteStore | 1, 2 |
-| 4 | Pi-Anwendungen von ENTER auf Tasten umstellen (wie in S2-a) | 2 |
+| 4 | Menü und Pi-Anwendungen an der Wand, einschliesslich Radar-Einrichtung (`2026-10-23-menue-und-anwendungen-design.md`) | 0, 1, 2 |
+| 5 | Tanz-Show, Animationen, Spiel; Vorlage in `docs/werkstatt/wand-werkstatt.html`; eigener Entwurf | 4 |
 
 Teil 3a und Teil 3a-2 hängen nicht am Pi und kommen als Erstes. Jeder Teil bekommt einen
 eigenen Plan und endet mit Tests und einer Abnahme am Gerät.
@@ -631,7 +643,7 @@ eigenen Plan und endet mit Tests und einer Abnahme am Gerät.
 
 ## 17. Nicht Teil dieses Entwurfs
 
-- OTA-Updates, eine Weboberfläche.
+- OTA-Updates. Eine Weboberfläche gibt es nur für die beiden Themen (Teil 4).
 - Scrollen zu langer Texte (verworfen in Runde 4).
 - Was die Pi-Anwendungen inhaltlich tun (Sprachassistent, Quiz, Reflection AI).
-- Neue Hardware (Flipflops für BT4–BT6).
+- Neue Hardware. Die Flipflops für BT4–BT6 hat der Owner inzwischen selbst nachgerüstet.
