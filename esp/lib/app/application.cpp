@@ -25,7 +25,7 @@ Application::Application()
       _piPower(_powerPin),
       _port(Serial),
       _link(_port),
-      _session(_state.session),
+      _session(_state.session, _state.night),
       _linkTestRequested(false)
 {
 }
@@ -543,6 +543,10 @@ void Application::executeActions(std::vector<SessionAction>& actions)
 
             case SessionAction::Kind::Log:
                 DebugSerial.printf("[SESSION] %s\n", action.command.c_str());
+                break;
+
+            case SessionAction::Kind::QuoteReady:
+                // Kommt erst mit requestQuote; die Anzeige nach Z11 folgt mit dem Nacht-Auftrag.
                 break;
         }
     }

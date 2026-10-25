@@ -1,16 +1,17 @@
 #pragma once
-// Sitzung des ESP mit dem Pi: einschalten, PING, Tasten, herunterfahren (Spec 7).
-// Der ganze Zustand liegt in SessionData; nach einem Reset macht eine neue
-// PiSession auf denselben Daten weiter. Ohne Arduino; die Application fuehrt
-// die Aktionen aus.
+// Sitzung des ESP mit dem Pi: einschalten, PING, Tasten, Zitat der Nacht,
+// herunterfahren (Spec 7, 9). Der ganze Zustand liegt in SessionData und
+// NightData; nach einem Reset macht eine neue PiSession auf denselben Daten
+// weiter. Ohne Arduino; die Application fuehrt die Aktionen aus.
 #include <cstdint>
 #include <string>
 #include <vector>
+#include "NightData.h"
 #include "PiLink.h"
 
 enum class SessionState : uint8_t { Off = 0, Starting = 1, Running = 2, RadarDebug = 3, ShuttingDown = 4, Halting = 5 };
 enum class StartReason : uint8_t { Hand = 0, Night = 1 };
-enum class Awaiting : uint8_t { None = 0, Ping = 1, Session = 2, Shutdown = 3, Button = 4 };
+enum class Awaiting : uint8_t { None = 0, Ping = 1, Session = 2, Shutdown = 3, Button = 4, Get = 5 };
 
 // Liegt im RTC-Speicher (Task 4): nur feste Typen, die Zahlenwerte der enums bleiben.
 struct SessionData
@@ -39,9 +40,9 @@ constexpr uint8_t ShowingNoAnswer = 8;   // PI ANTWORTET NICHT steht noch
 
 struct SessionAction
 {
-    enum class Kind { PowerOn, PowerOff, Send, Reply, Show, DisplayOff, Log };
+    enum class Kind { PowerOn, PowerOff, Send, Reply, Show, DisplayOff, Log, QuoteReady };
     Kind kind;
-    std::string command;   // Send/Reply: Befehl; Show/Log: der Text
+    std::string command;   // Send/Reply: Befehl; Show/Log/QuoteReady: der Text
     std::string data;      // Send/Reply: Daten
 };
 
@@ -61,17 +62,21 @@ constexpr unsigned long NO_ANSWER_MS = 10000;      // PI ANTWORTET NICHT sichtba
 class PiSession
 {
 public:
-    explicit PiSession(SessionData& data);
+    PiSession(SessionData& data, NightData& night);
     static void reset(SessionData& data);                  // Kaltstart: Off, alles 0
     static bool valid(const SessionData& data);            // false: enum ausserhalb seiner Werte, buttonCount > 6
     bool active() const;                                  // nicht Off, oder PI ANTWORTET NICHT noch sichtbar
     void resume(std::vector<SessionAction>& out);          // einmal nach jedem Reset, wenn active() (R8)
     void startHand(std::vector<SessionAction>& out);       // BT2 im Zustand Off
-    void startNight(std::vector<SessionAction>& out);      // fuer Teil 3b, hier nur getestet
-    void onButton(int button, std::vector<SessionAction>& out);           // Tabelle 5.2, ausser Off
+    void startNight(std::vector<SessionAction>& out);      // Mitternacht; danach requestQuote
+    // Auftrag der Nacht in dieser Sitzung (M4-a), nur in EINSCHALTEN und BETRIEB.
+    // Datum und Vortag setzt die Application vorher. true: neuer Auftrag (Wanted).
+    bool requestQuote();
+    void onButton(int button, std::vector<SessionAction>& out);           // Tabelle 5.2, ausser Off; NACHT: N2, N3
     void onLink(const LinkEvent& event, std::vector<SessionAction>& out); // Antworten sofort als Reply
     void onTick(unsigned long elapsedMs, bool linkBusy, std::vector<SessionAction>& out);  // nur hier Send
 
 private:
     SessionData& m_d;
+    NightData& m_n;
 };
