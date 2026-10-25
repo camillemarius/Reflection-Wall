@@ -365,7 +365,16 @@ void Application::saveState()
 // und die Verdrahtung. Jeder Takt holt alles ab, was auf der
 // Leitung wartet, und beantwortet eine Anfrage des Pi, bevor er
 // die naechste Zeile liest. Danach zaehlt onTick die Zeit und
-// schickt, was ansteht, und der Zustand wird gesichert.
+// schickt, was ansteht.
+//
+// Gesichert wird, bevor die Aktionen laufen: nach onLink und nach
+// onTick. Ein neuer Zustand (BETRIEB nach READY, RADAR-DEBUG,
+// HERUNTERFAHREN, HALT-WARTEN) steht so im RTC-Speicher, bevor
+// die Antwort an den Pi geht und bevor ein langsames Show die CPU
+// fuer 0,3-0,5 s festhaelt. Ein Reset faellt danach in den neuen
+// Zustand zurueck. Was dabei noch einmal geschieht, schadet nicht:
+// jede Anfrage des Pi darf zweimal beantwortet werden, SESSION und
+// SHUTDOWN gehen mit neuer Nummer noch einmal raus (R8).
 //
 // R14: Der Pi schreibt jetzt auf den Bus. Der ESP gibt ihn hier
 // frei und nimmt ihn nur noch fuer seine eigenen Anzeigetexte
@@ -412,6 +421,9 @@ void Application::runSession(std::vector<SessionAction>& actions)
 
             _session.onLink(ev, actions);
 
+            // Erst sichern, dann antworten (M-1, I-1)
+            saveState();
+
             // Die Antwort (Reply) muss raus, bevor poll weiterliest
             executeActions(actions);
         }
@@ -429,16 +441,21 @@ void Application::runSession(std::vector<SessionAction>& actions)
         _session.onTick(now - lastTick, _link.busy(), actions);
         lastTick = now;
 
+        // In jedem Takt sichern, auch ohne neuen Zustand: die
+        // Zeitzaehler aendern sich in jedem Takt. Ein Reset verliert
+        // so ausser sich selbst nur die Zeit seit diesem Takt (R1),
+        // und auch eine schnelle Folge von Resets laesst die Fristen
+        // weiterlaufen. Jede Sicherung kostet eine CRC ueber 52 Byte
+        // und 15 Woerter RTC-Speicher.
+        saveState();
+
         executeActions(actions);
 
         if (_state.session.state != before)
             DebugSerial.printf("[SESSION] %s -> %s\n", stateName(before), stateName(_state.session.state));
 
-        // In jedem Takt sichern: die Zeitzaehler aendern sich in
-        // jedem Takt. Ein Reset verliert so ausser sich selbst nur
-        // die Zeit seit diesem Takt (R1), und auch eine schnelle
-        // Folge von Resets laesst die Fristen weiterlaufen. Kostet
-        // eine CRC ueber 52 Byte und 15 Woerter RTC-Speicher.
+        // Am Ende des Takts noch einmal: Show und DisplayOff
+        // aendern displayState
         saveState();
 
         const unsigned long spent = millis() - tickStart;
@@ -457,6 +474,9 @@ void Application::runSession(std::vector<SessionAction>& actions)
 
 void Application::executeActions(std::vector<SessionAction>& actions)
 {
+    // Was die Sitzung auf ein nicht gesendetes Send hin ausloest
+    std::vector<SessionAction> followUp;
+
     for (const SessionAction& action : actions)
     {
         switch (action.kind)
@@ -484,10 +504,28 @@ void Application::executeActions(std::vector<SessionAction>& actions)
             case SessionAction::Kind::Send:
                 // awaiting hat die Sitzung schon gesetzt
                 if (_link.send(action.command, action.data, millis()))
+                {
                     DebugSerial.printf("[LINK] -> %s%s%s\n", action.command.c_str(),
                                        action.data.empty() ? "" : "|", action.data.c_str());
+
+                    // Die Nummer ist verbraucht: gleich sichern. Sonst ginge
+                    // nach einem Reset die naechste Anfrage mit derselben
+                    // Nummer raus, und der Pi hielte sie fuer eine
+                    // Wiederholung (M-1).
+                    saveState();
+                }
                 else
+                {
                     DebugSerial.printf("[LINK] FEHLER: %s nicht gesendet\n", action.command.c_str());
+
+                    // Ohne Send kommt weder Antwort noch Frist, und awaiting
+                    // bliebe stehen. Die Sitzung bekommt die Frist gleich (M-2).
+                    LinkEvent expired;
+                    expired.kind = LinkEvent::Kind::Expired;
+                    expired.message.command = action.command;
+                    expired.message.data = action.data;
+                    _session.onLink(expired, followUp);
+                }
                 break;
 
             case SessionAction::Kind::Reply:
@@ -510,6 +548,15 @@ void Application::executeActions(std::vector<SessionAction>& actions)
     }
 
     actions.clear();
+
+    // Wie nach onLink: erst sichern, dann ausfuehren. Eine Frist
+    // loest nie ein Send aus (das kommt nur aus onTick), die
+    // Rekursion endet also hier.
+    if (!followUp.empty())
+    {
+        saveState();
+        executeActions(followUp);
+    }
 }
 
 // Die Texte werden wie ein Zitat gesetzt (R11). Der Bus ist nur

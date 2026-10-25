@@ -829,6 +829,22 @@ void test_answer_without_own_request_is_only_logged()
     TEST_ASSERT_EQUAL_MEMORY(&before, &d, sizeof d);
 }
 
+// M-2: Geht ein Send nicht raus, meldet die Application der Sitzung gleich
+// eine Frist fuer diesen Befehl. Danach ist awaiting frei, und es geht weiter.
+void test_expired_right_after_send_frees_awaiting()
+{
+    PiSession s(d); toRunning(s);
+    s.onButton(6, out); s.onButton(5, out);
+    s.onTick(0, false, out);
+    TEST_ASSERT_TRUE(has(A::Send, "BUTTON", "6"));
+    TEST_ASSERT_EQUAL(static_cast<int>(Awaiting::Button), static_cast<int>(d.awaiting));
+    out.clear(); s.onLink(ev(K::Expired, "BUTTON", "6"), out);
+    TEST_ASSERT_EQUAL(static_cast<int>(Awaiting::None), static_cast<int>(d.awaiting));
+    TEST_ASSERT_FALSE(has(A::Send));
+    out.clear(); s.onTick(0, false, out);
+    TEST_ASSERT_TRUE(has(A::Send, "BUTTON", "5"));
+}
+
 // Daten aus dem RTC-Speicher: MAGIC und CRC stimmen, die Werte trotzdem nicht
 void test_valid_rejects_values_outside_the_enums()
 {
@@ -967,6 +983,7 @@ int main(int, char**)
     RUN_TEST(test_any_answer_to_ping_resets_missed_pings);
     RUN_TEST(test_expired_ping_outside_running_is_not_a_miss);
     RUN_TEST(test_answer_without_own_request_is_only_logged);
+    RUN_TEST(test_expired_right_after_send_frees_awaiting);
     RUN_TEST(test_valid_rejects_values_outside_the_enums);
     RUN_TEST(test_huge_tick_while_starting_still_hard_off);
     RUN_TEST(test_huge_ticks_saturate_in_every_state);
