@@ -41,6 +41,7 @@ class WallDisplay:
         if self._bus is None:
             import smbus2
             self._bus = smbus2.SMBus(1)
+        # Ergebnisse der Init-Uebertragungen werden ignoriert (fehlende Module loggt _transfer)
         for addr in MODULE_ADDRESSES:
             for value in (CMD_SYSTEM_SETUP | 0x01, CMD_DISPLAY_SETUP | 0x01, CMD_BRIGHTNESS | 0x0F):
                 self._transfer(lambda a=addr, v=value: self._bus.write_byte(a, v), addr)
@@ -79,6 +80,7 @@ class WallDisplay:
             ok = self._transfer(lambda a=addr, d=data: self._bus.write_i2c_block_data(a, 0x00, d), addr)
             self._sent[module] = cells if ok else None
 
+    # show_lines/show_text lassen die Zeichenflaeche unberuehrt
     def show_lines(self, lines: Sequence[str], dots_own_cell: bool = False) -> None:
         self.show_cells(lines_to_cells(lines, dots_own_cell))
 
@@ -92,6 +94,10 @@ class WallDisplay:
         self.show_cells(self._canvas)
 
     # Zeichenflaeche (Strichmaennchen des Radars)
+    def clear_canvas(self) -> None:
+        """Leert nur den Puffer der Zeichenflaeche; schreibt nichts (kein Flackern)."""
+        self._canvas = [0] * TOTAL_CELLS
+
     def set_segments(self, x: int, y: int, mask: int) -> None:
         if 0 <= x < self.WIDTH and 0 <= y < self.HEIGHT:
             self._canvas[y * self.WIDTH + x] = mask

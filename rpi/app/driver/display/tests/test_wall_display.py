@@ -142,6 +142,18 @@ class WallDisplayTest(unittest.TestCase):
         self.assertEqual([c.addr for c in self.bus.block_writes], [0x70])
         self.assertEqual(self.bus.block_writes[0].data, [0] * 16)
 
+    def test_clear_canvas_writes_nothing_and_refresh_sends_only_diff(self):
+        self.d.set_segments(0, 0, 0x1111)
+        self.d.set_segments(0, 3, 0x2222)
+        self.d.refresh()
+        self.bus.clear()
+        self.d.clear_canvas()
+        self.assertEqual(self.bus.block_writes, [])
+        self.d.set_segments(0, 0, 0x1111)
+        self.d.set_segments(1, 3, 0x2222)
+        self.d.refresh()
+        self.assertEqual([c.addr for c in self.bus.block_writes], [0x79])
+
     def test_show_lines_and_text(self):
         self.d.show_lines(["HALLO"])
         w = [c for c in self.bus.block_writes if c.addr == 0x70][0]
@@ -167,6 +179,17 @@ class TerminalDisplayTest(unittest.TestCase):
         with contextlib.redirect_stdout(out):
             d.show_cells([0x7777] + [0] * 95)
         self.assertIn("#", out.getvalue())
+
+    def test_clear_canvas_prints_nothing(self):
+        d = TerminalDisplay()
+        d.set_segments(0, 0, 0x0840)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            d.clear_canvas()
+        self.assertEqual(out.getvalue(), "")
+        with contextlib.redirect_stdout(out):
+            d.refresh()
+        self.assertNotIn(">", out.getvalue())
 
     def test_canvas_api(self):
         d = TerminalDisplay()

@@ -50,6 +50,10 @@ class TerminalDisplay:
         self._canvas = [0] * (CHARS_PER_ROW * ROWS)
         self.show_cells(self._canvas)
 
+    def clear_canvas(self) -> None:
+        """Leert nur den Puffer der Zeichenflaeche; schreibt nichts (kein Flackern)."""
+        self._canvas = [0] * (CHARS_PER_ROW * ROWS)
+
     def set_segments(self, x: int, y: int, mask: int) -> None:
         if 0 <= x < self.WIDTH and 0 <= y < self.HEIGHT:
             self._canvas[y * self.WIDTH + x] = mask
