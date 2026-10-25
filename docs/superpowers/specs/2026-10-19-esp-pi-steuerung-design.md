@@ -74,6 +74,10 @@ Pi nimmt keinen Schaden, und keine Nachricht geht unbemerkt verloren.
 | L3 | Der ESP behandelt `READY` nie als Wiederholung (gleiche Nummer nach einem Neustart des Pi-Dienstes). Kommt `READY` in einer Sitzung, antwortet er `OK` und schickt das `SESSION\|…` noch einmal | 2026-10-25 |
 | L4 | Teil 4b (die ESP-Seite von Teil 4: `SESSION`, BT4–BT6, Tasten je Zustand, Anzeigen beim Start und Ausschalten, `MODE`) wird Teil von Teil 2, mit einem gemeinsamen Plan | 2026-10-25 |
 | R15 | Die Anwendung Radar des Pi endet nach 55 min von selbst. Der Pi schaltet die UART zurück (`MODE\|NORMAL`) und schickt `DONE`. Grund: Im Radar-Debug gehört die UART dem Radar, ein `SHUTDOWN` des ESP käme nie an. Die 60 min des ESP bleiben als Rückfall für einen Pi, der im Radar-Debug hängt (Plan Teil 2, vom Owner bestätigt) | 2026-10-25 |
+| N1 | Weckt eine Taste oder das Radar den ESP vor der geplanten Zeit, nimmt er an, die geplante Strecke sei ganz abgelaufen. Seine Uhr geht dann höchstens vor (bis zu 3 h), nie nach. Vor dem Mitternachts-Auftrag gleicht er per NTP ab; ist es dann noch vor 00:00, schläft er den Rest. Grund: Der RTC-Zähler des ESP8266 übersteht das Wecken nicht verlässlich | 2026-10-25 |
+| N2 | In einer Sitzung `NACHT` laufen die Wand-Regeln (§8) weiter; BT1, BT3–BT6 gehen nicht an den Pi. Ist das neue Zitat da und die Anzeige an, zeigt der ESP es sofort aus dem RTC-Speicher (Z11). Die Wand hält den Pi nie an: Ist das Zitat da, fährt der ESP den Pi herunter | 2026-10-25 |
+| N3 | BT2 in einer Sitzung `NACHT` macht daraus eine Sitzung von Hand: `PI STARTET`, dann `SESSION\|HAND`, der Pi zeigt das Menü; das Zitat holt der ESP weiter in dieser Sitzung (M4-a). Bootet der Pi noch, heisst BT2 „danach HAND“. Läuft `GET\|QUOTE` gerade, wartet `SESSION\|HAND`, bis es beantwortet ist. Ist das Zitat da, gilt die Nacht als gelungen, wie auch immer die Sitzung endet. Auf dem Pi startet ein zweites `SESSION\|HAND` nach `NACHT` das Menü (ändert Teil 2) | 2026-10-25 |
+| N4 | Zum Testen: ein Schalter in `features.h`, ab Werk aus. Nach dem ersten NTP-Abgleich nach einem Kaltstart stellt der ESP seine Uhr einmal so, dass in 2 min Mitternacht ist; ist der Schalter an, steht das bei jedem Wecken im Log | 2026-10-25 |
 
 A1–A6 waren in Runde 1 als Annahmen formuliert; du hast sie bestätigt. Die
 Begründungen und Gegenprüfungen standen in den Rundendateien der
@@ -376,6 +380,10 @@ Kaltstart ist der Funk ohnehin an. Dazwischen zählt der ESP seine Schlafzeiten
 zusammen. Kennt er die Zeit nach einem Kaltstart nicht, versucht er den Abgleich
 bei jedem Timer-Weckvorgang (höchstens alle 3 h, dafür schläft er vorher mit
 Funk ein) und lässt bis dahin den Mitternachts-Auftrag aus (M3-a).
+Die Uhr zählt in UTC; Ortszeit und Sommerzeit rechnet der ESP daraus. Weckt
+eine Taste oder das Radar den ESP vor der geplanten Zeit, gilt die geplante
+Strecke als ganz abgelaufen (N1): Die Uhr geht danach höchstens vor, und der
+Abgleich vor Mitternacht korrigiert sie.
 
 **Kaltstart in der Nacht.** Kommt der Strom zwischen 00:00 und 03:00 zurück und
 ist die Uhrzeit bekannt, vergleicht der ESP das Datum des neuesten Eintrags der Liste mit dem
@@ -398,6 +406,10 @@ aus ist (P1-a; Abschnitt 11; das älteste fällt bei mehr als 30 weg). Fällt de
 Strom vorher aus, holt die Regel „Kaltstart in der Nacht“ das Zitat neu. Passt es
 nicht, fragt er noch einmal, höchstens dreimal (Z6). Gescrollt wird nie.
 
+**Die Wand in der Nacht** (N2, N3). Während der Nacht-Sitzung gelten die
+Wand-Regeln aus §8, und die Tasten bleiben beim ESP. BT2 macht aus der
+Nacht-Sitzung eine Sitzung von Hand; das Zitat wird darin weiter geholt.
+
 **Fehler in der Nacht** (kein `READY`, keine Antwort, `ERROR`, drei abgelehnte
 Zitate, Sitzung vorher beendet): Pi aus, sauber wenn möglich; altes Zitat bleibt;
 neue Versuche um 01:00 und 02:00. Scheitert auch 02:00, versucht der ESP es erst in
@@ -417,6 +429,7 @@ RTC-Speicher und erscheint beim nächsten Weckvorgang im Log.
 
 Ein Druck während der Sitzung setzt den ESP zurück. Er bootet, liest seinen
 Sitzungszustand aus dem RTC-Speicher, liest den Expander und schickt `BUTTON|n`.
+In einer Sitzung `NACHT` gelten N2 und N3 (Abschnitt 9).
 Was der ESP in den anderen Zuständen mit einer Taste tut, steht in Teil 4,
 Tabelle 5.2.
 
@@ -605,7 +618,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 2. `T_halt` messen.
 3. Sitzung von Hand: BT2 ein, BT1/BT3 kommen beim Pi an, BT2 aus, Pi fährt sauber herunter.
 4. Pi hängt (Dienst stoppen): ESP schaltet nach 3 PINGs ab.
-5. Mitternacht mit vorgestellter Uhr: Zitat kommt, wird gespeichert, Pi aus.
+5. Mitternacht mit vorgestellter Uhr (Schalter aus N4): Zitat kommt, wird gespeichert, Pi aus.
 6. Radar: Wand an, solange jemand davorsteht, danach dunkel.
 7. Stromaufnahme bei 100 % Helligkeit mit allen Segmenten an und laufendem Pi.
 
