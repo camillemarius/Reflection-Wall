@@ -61,9 +61,11 @@ bool PiLink::handleLine(const std::string& line, LinkEvent& ev)
         ev.message = m;
         return true;
     }
-    if (m_rxValid && m.seq == m_rxSeq)
+    // READY is never a repeat: the Pi service restarts at 00 (L3). Without a
+    // known answer (after a reset) a repeat is reported again (R8).
+    if (m_rxValid && m.seq == m_rxSeq && m.command != "READY" && (m_inProgress || !m_lastReply.empty()))
     {
-        if (!m_inProgress && !m_lastReply.empty()) writeLine(m_lastReply);
+        if (!m_inProgress) writeLine(m_lastReply);
         return false;
     }
     m_rxSeq = m.seq;
