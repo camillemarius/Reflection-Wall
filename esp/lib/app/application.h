@@ -225,6 +225,10 @@ private:
     // Ein Abgleich ist in diesem Durchlauf gescheitert (R16)
     bool _syncFailed;
 
+    // Dieser Durchlauf begann vor der Zeit (Taste, Reset) und ist
+    // kein Kaltstart: ohne Uhr gleicht er nicht ab (WakePlan::decide)
+    bool _earlyWake;
+
     // Das Portal lief in diesem Durchlauf schon
     bool _portalDone;
 

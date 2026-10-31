@@ -1237,6 +1237,42 @@ void test_bt2_at_night_running_becomes_hand_after_get()
     TEST_ASSERT_NIGHT(Got, Ok);                    // das Zitat zaehlt (N3)
 }
 
+// So laeuft N3 auf dem Geraet: BT2 setzt den ESP zurueck, Application::run ruft resume()
+// vor handleInput. resume() verwirft das offene GET; SESSION|HAND geht zuerst, dann das GET
+// noch einmal (eine neue Anfrage: PiLink gibt ihr eine neue Nummer). Der Pi gibt es dem
+// Arbeits-Thread, der noch rechnet, oder antwortet aus dem Ergebnis, das er schon hat.
+void test_bt2_at_night_with_get_open_after_reset_sends_hand_then_get_again()
+{
+    { PiSession before(d, n); toGet(before); }     // NACHT, GET offen; dann der Reset
+    PiSession s(d, n);
+    s.resume(out);
+    TEST_ASSERT_TRUE(out.empty());
+    TEST_ASSERT_EQUAL(static_cast<int>(Awaiting::None), static_cast<int>(d.awaiting));
+    TEST_ASSERT_NIGHT(Wanted, None);
+    s.onButton(2, out);
+    TEST_ASSERT_EQUAL(1, static_cast<int>(out.size()));
+    TEST_ASSERT_TRUE(has(A::Show, "PI STARTET"));
+    TEST_ASSERT_EQUAL(static_cast<int>(StartReason::Hand), static_cast<int>(d.reason));
+    TEST_ASSERT_STATE(Running);
+    out.clear(); s.onTick(0, false, out);
+    TEST_ASSERT_EQUAL(1, count(A::Send));
+    TEST_ASSERT_TRUE(has(A::Send, "SESSION", "HAND"));   // zuerst
+    s.onLink(ev(K::Response, "OK"), out);
+    out.clear(); s.onTick(0, false, out);
+    TEST_ASSERT_EQUAL(1, count(A::Send));
+    TEST_ASSERT_TRUE(has(A::Send, "GET", GET_DATA));      // dann das GET noch einmal
+    TEST_ASSERT_EQUAL_UINT8(0, n.rejects);                 // der Reset zaehlt nicht als Ablehnung
+    s.onLink(ev(K::Response, "QUOTE", QUOTE_OK), out);
+    TEST_ASSERT_NIGHT(Got, Ok);
+    TEST_ASSERT_TRUE(has(A::QuoteReady, QUOTE_OK));
+    TEST_ASSERT_EQUAL(static_cast<int>(StartReason::Hand), static_cast<int>(d.reason));
+    TEST_ASSERT_STATE(Running);                    // HAND: kein Herunterfahren
+    out.clear(); s.onTick(30000, false, out);
+    TEST_ASSERT_FALSE(has(A::Send, "SHUTDOWN"));
+    TEST_ASSERT_FALSE(has(A::PowerOff));
+    TEST_ASSERT_STATE(Running);
+}
+
 void test_bt2_at_night_starting_becomes_hand()
 {
     PiSession s(d, n); s.startNight(out);
@@ -1447,6 +1483,7 @@ int main(int, char**)
     RUN_TEST(test_reset_while_get_open_resends_without_counting);
     RUN_TEST(test_session_end_while_wanted_records_reason);
     RUN_TEST(test_bt2_at_night_running_becomes_hand_after_get);
+    RUN_TEST(test_bt2_at_night_with_get_open_after_reset_sends_hand_then_get_again);
     RUN_TEST(test_bt2_at_night_starting_becomes_hand);
     RUN_TEST(test_other_buttons_at_night_do_nothing);
     RUN_TEST(test_request_quote_only_in_starting_or_running);

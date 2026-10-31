@@ -33,12 +33,15 @@ namespace
 
 namespace WakePlan
 {
-    WakeDecision decide(const ClockData& clock, const NightData& night, bool radioOn, bool syncFailed)
+    WakeDecision decide(const ClockData& clock, const NightData& night, bool radioOn, bool syncFailed,
+                        bool earlyWake)
     {
-        // R14: ohne Uhr keine Nacht, Strecken von 3 h mit Funk
+        // R14: ohne Uhr keine Nacht, Strecken von 3 h mit Funk. Abgeglichen wird nur nach
+        // einem Kaltstart oder einem Timer-Wecken (Spec 9, Entscheid B vom 2026-10-31):
+        // eine Taste wartet so nicht 14 s auf das WLAN.
         if (!clock.valid)
         {
-            if (radioOn && !syncFailed)
+            if (radioOn && !syncFailed && !earlyWake)
             {
                 return act(WakeKind::SyncNow);
             }
@@ -128,7 +131,7 @@ namespace WakePlan
         return night.status == NightStatus::Idle || night.status == NightStatus::Failed;
     }
 
-    int32_t testOffset(uint32_t ntpUtc, uint32_t leadS)
+    int32_t testOffset(uint32_t ntpUtc, int32_t leadS)
     {
         const int64_t target = static_cast<int64_t>(CivilTime::nextLocalHour(ntpUtc, 0)) - leadS;
         return static_cast<int32_t>(target - static_cast<int64_t>(ntpUtc));

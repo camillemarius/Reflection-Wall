@@ -32,6 +32,7 @@ Application::Application()
       _linkTestRequested(false),
       _radioOn(false),
       _syncFailed(false),
+      _earlyWake(false),
       _portalDone(false),
       _fsReady(false),
       _listRead(false),
@@ -267,6 +268,7 @@ void Application::run()
     // letzte Schlafstrecke mit Funk geplant war. Abgeglichen wird
     // trotzdem nur, wenn der Weckplan es verlangt (plan).
     _radioOn = _coldBoot || _state.clock.radio != 0;
+    _earlyWake = early && !_coldBoot;
 
     // GET laeuft nur in einer Sitzung. Steht Wanted ohne Sitzung (die
     // Sitzung war ungueltig), ist der Versuch gescheitert wie nach goOff.
@@ -362,8 +364,8 @@ void Application::run()
 
     // N4, R4: bei jedem Wecken, solange der Schalter an ist
     if (Features::NIGHT_TEST)
-        DebugSerial.printf("[NIGHT] NIGHT_TEST AN: der erste Abgleich nach dem Kaltstart stellt die Uhr %lu s vor Mitternacht\n",
-                           (unsigned long)Features::NIGHT_TEST_LEAD_S);
+        DebugSerial.printf("[NIGHT] NIGHT_TEST AN: der erste Abgleich nach dem Kaltstart stellt die Uhr %ld s vor Mitternacht (negativ: danach)\n",
+                           (long)Features::NIGHT_TEST_LEAD_S);
 
     logClock(early ? "Start (vor der Zeit geweckt)" : "Start");
     logNight();
@@ -1191,7 +1193,7 @@ WakeDecision Application::plan()
         saveState();
 
         const WakeDecision decision = WakePlan::decide(_state.clock, _state.night,
-                                                       _radioOn, _syncFailed);
+                                                       _radioOn, _syncFailed, _earlyWake);
 
         const bool wantsSync = decision.kind == WakeKind::SyncNow ||
                                decision.kind == WakeKind::RestartWithRadio;

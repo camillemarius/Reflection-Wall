@@ -27,9 +27,12 @@ namespace Features
     // true: Testbetrieb der Nacht (N4, R4). Der erste Abgleich nach einem Kaltstart stellt
     // die Uhr so, dass NIGHT_TEST_LEAD_S spaeter Mitternacht ist; jeder weitere Abgleich
     // behaelt die Verschiebung. Der Auftrag der Nacht startet so kurz nach dem Einschalten.
+    // Ein negativer Vorlauf stellt die Uhr hinter das falsche Mitternacht: -5400 heisst, sie
+    // zeigt nach dem ersten Abgleich 01:30, 90 min nach Mitternacht (Kaltstart in der Nacht,
+    // T10 Schritt 7).
     // false: Normalbetrieb.
     constexpr bool NIGHT_TEST = false;
-    constexpr uint32_t NIGHT_TEST_LEAD_S = 120;
+    constexpr int32_t NIGHT_TEST_LEAD_S = 120;
 
     // So lange bleibt der Pi mindestens aus, bevor der ESP ihn wieder einschaltet, etwa
     // fuer einen Versuch der Nacht gleich nach dem Ende einer Sitzung. Sonst startet ein
