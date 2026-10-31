@@ -149,6 +149,7 @@ class DispatchTest(unittest.TestCase):
         self.assertTrue(wait_for(lambda: len(self.link.replies) == 2))
         self.assertEqual(self.link.replies, [(11, "OK", ""), (12, "OK", "")])
         self.assertEqual(self.d.session_reason, "HAND")
+        self.assertFalse(self.d.hand_requested.is_set())
 
     def test_session_bad_data_is_error(self):
         self.link.incoming.put(Message(13, "SESSION", "X"))
@@ -207,16 +208,180 @@ class DispatchTest(unittest.TestCase):
         self.assertFalse(self.d.shutdown_done.is_set())
 
     def test_other_requests_kept(self):
-        m = Message(5, "GET", "X")
+        m = Message(5, "PING", "")  # beantwortet sonst PiLink selbst
         self.link.incoming.put(m)
         self.assertTrue(wait_for(lambda: not self.d.other.empty()))
         self.assertIs(self.d.other.get_nowait(), m)
         self.assertEqual(self.link.replies, [])
 
+    def test_session_hand_after_nacht_sets_hand_requested(self):
+        # N3: BT2 in der Nacht. Aus NACHT wird HAND, main() startet dann das Menue.
+        self.link.incoming.put(Message(11, "SESSION", "NACHT"))
+        self.assertTrue(self.d.session_event.wait(1.0))
+        self.assertTrue(wait_for(lambda: self.link.replies))
+        self.assertFalse(self.d.hand_requested.is_set())
+        self.link.incoming.put(Message(12, "SESSION", "HAND"))
+        self.assertTrue(self.d.hand_requested.wait(1.0))
+        self.assertEqual(self.d.session_reason, "HAND")
+        self.assertEqual(self.link.replies, [(11, "OK", ""), (12, "OK", "")])
+
+    def test_second_nacht_or_hand_after_hand_keeps_the_old_rule(self):
+        for seq, data in ((11, "NACHT"), (12, "NACHT"), (13, "HAND"), (14, "HAND"), (15, "NACHT")):
+            self.link.incoming.put(Message(seq, "SESSION", data))
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 5))
+        self.assertTrue(all(r[1] == "OK" for r in self.link.replies))
+        self.assertEqual(self.d.session_reason, "HAND")  # nur das erste HAND nach NACHT zaehlt
+        self.assertTrue(self.d.hand_requested.is_set())
+
     def test_stop_ends_thread_quickly(self):
         t0 = time.monotonic()
         self.d.stop()
         self.assertLess(time.monotonic() - t0, 0.5)
+
+
+class SlowQuote:
+    """quote_maker des Tests: meldet den Aufruf und rechnet, bis der Test release() ruft."""
+
+    def __init__(self, result=("QUOTE", "DER WEG IST DAS ZIEL.")):
+        self.result = result
+        self.calls = []  # (yesterday, Name des Threads)
+        self.entered = threading.Event()
+        self._release = threading.Event()
+
+    def __call__(self, yesterday):
+        self.calls.append((yesterday, threading.current_thread().name))
+        self.entered.set()
+        self._release.wait(5)
+        return self.result
+
+    def release(self):
+        self._release.set()
+
+
+class GetTest(unittest.TestCase):
+    """GET|QUOTE|<Text vom Vortag>: das Zitat der Nacht rechnet ein Arbeits-Thread (R10)."""
+
+    def setUp(self):
+        self.link = FakeLink()
+        self.buttons = QueueButtons()
+
+    def make(self, quote_maker):
+        d = LinkDispatcher(self.link, self.buttons, Activity(), StopSignal(), threading.Event(),
+                           quote_maker=quote_maker)
+        d.start()
+        self.addCleanup(d.stop)
+        return d
+
+    def put(self, seq, command, data=""):
+        self.link.incoming.put(Message(seq, command, data))
+
+    def test_get_answers_quote_from_worker(self):
+        maker = SlowQuote()
+        maker.release()
+        self.make(maker)
+        self.put(20, "GET", "QUOTE|GESTERN WAR ES SO.")
+        self.assertTrue(wait_for(lambda: self.link.replies))
+        self.assertEqual(self.link.replies, [(20, "QUOTE", "DER WEG IST DAS ZIEL.")])
+        self.put(21, "GET", "QUOTE|")  # leer: eine neue Kette; nach der Antwort ein neuer Thread
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 2))
+        self.assertEqual(self.link.replies[1], (21, "QUOTE", "DER WEG IST DAS ZIEL."))
+        self.assertEqual([y for y, _ in maker.calls], ["GESTERN WAR ES SO.", ""])
+        self.assertNotIn("link-dispatch", [name for _, name in maker.calls])
+
+    def test_get_answers_error_from_worker(self):
+        for seq, code in ((22, "ZU_LANG"), (23, "KI")):
+            maker = SlowQuote(("ERROR", code))
+            maker.release()
+            d = self.make(maker)
+            self.put(seq, "GET", "QUOTE|")
+            self.assertTrue(wait_for(lambda: (seq, "ERROR", code) in self.link.replies))
+            d.stop()
+
+    def test_get_does_not_block_buttons(self):
+        maker = SlowQuote()
+        self.make(maker)
+        self.put(20, "GET", "QUOTE|")
+        self.assertTrue(maker.entered.wait(1.0))
+        self.put(21, "BUTTON", "3")
+        self.assertEqual(self.buttons.get(1.0), 3)
+        self.assertTrue(wait_for(lambda: self.link.replies))
+        self.assertEqual(self.link.replies, [(21, "OK", "")])  # GET rechnet noch
+        maker.release()
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 2))
+        self.assertEqual(self.link.replies[1], (20, "QUOTE", "DER WEG IST DAS ZIEL."))
+
+    def test_repeated_get_one_worker_answer_to_newest(self):
+        # Review Focus 4: ein Reset des ESP, waehrend GET offen ist, sendet GET noch einmal mit
+        # neuer Nummer (R8). Kein zweiter Thread; die Antwort geht an das neueste GET.
+        maker = SlowQuote()
+        self.make(maker)
+        self.put(20, "GET", "QUOTE|GESTERN")
+        self.assertTrue(maker.entered.wait(1.0))
+        self.put(21, "GET", "QUOTE|GESTERN")
+        self.put(0x7F, "BUTTON", "1")  # der Dispatcher arbeitet der Reihe nach
+        self.assertTrue(wait_for(lambda: (0x7F, "OK", "") in self.link.replies))
+        maker.release()
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 2))
+        self.assertEqual(self.link.replies, [(0x7F, "OK", ""),
+                                             (21, "QUOTE", "DER WEG IST DAS ZIEL.")])
+        self.assertEqual(len(maker.calls), 1)
+
+    def test_get_bad_data(self):
+        maker = SlowQuote()
+        maker.release()
+        self.make(maker)
+        for seq, data in ((30, "X"), (31, ""), (32, "QUOTE"), (33, "quote|A")):
+            self.put(seq, "GET", data)
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 4))
+        self.assertEqual(self.link.replies, [(seq, "ERROR", "BAD_GET") for seq in (30, 31, 32, 33)])
+        self.assertEqual(maker.calls, [])
+
+    def test_get_without_maker_is_ki_error(self):
+        self.make(None)
+        self.put(34, "GET", "QUOTE|")
+        self.assertTrue(wait_for(lambda: self.link.replies))
+        self.assertEqual(self.link.replies, [(34, "ERROR", "KI")])
+
+    def test_get_maker_raises_is_ki_error(self):
+        # Wirft quote_maker (auch OSError beim Schreiben von .thema_zuletzt), bleibt GET nicht
+        # offen: ERROR|KI. Danach startet das naechste GET einen neuen Thread.
+        calls = []
+
+        def failing(yesterday):
+            calls.append(yesterday)
+            if len(calls) == 1:
+                raise OSError("Platte voll")
+            return ("QUOTE", "WIEDER DA.")
+
+        self.make(failing)
+        with self.assertLogs("app.ui.link_dispatch", "ERROR"):
+            self.put(35, "GET", "QUOTE|")
+            self.assertTrue(wait_for(lambda: self.link.replies))
+        self.assertEqual(self.link.replies, [(35, "ERROR", "KI")])
+        self.put(36, "GET", "QUOTE|")
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 2))
+        self.assertEqual(self.link.replies[1], (36, "QUOTE", "WIEDER DA."))
+
+    def test_worker_that_cannot_start_is_ki_error(self):
+        maker = SlowQuote()
+        maker.release()
+        self.make(maker)  # der Dispatcher laeuft schon; nur der Arbeits-Thread scheitert
+        with mock.patch.object(link_dispatch.threading, "Thread") as thread, \
+                self.assertLogs("app.ui.link_dispatch", "ERROR"):
+            thread.return_value.start.side_effect = RuntimeError("can't start new thread")
+            self.put(38, "GET", "QUOTE|")
+            self.assertTrue(wait_for(lambda: self.link.replies))
+        self.assertEqual(self.link.replies, [(38, "ERROR", "KI")])
+        self.put(39, "GET", "QUOTE|")  # kein GET gilt mehr als offen: ein neuer Thread
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 2))
+        self.assertEqual(self.link.replies[1], (39, "QUOTE", "DER WEG IST DAS ZIEL."))
+
+    def test_bad_result_from_maker_is_ki_error(self):
+        self.make(lambda yesterday: None)
+        with self.assertLogs("app.ui.link_dispatch", "ERROR"):
+            self.put(37, "GET", "QUOTE|")
+            self.assertTrue(wait_for(lambda: self.link.replies))
+        self.assertEqual(self.link.replies, [(37, "ERROR", "KI")])
 
 
 class RealLinkShutdownTest(unittest.TestCase):
