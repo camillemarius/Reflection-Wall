@@ -25,6 +25,13 @@ class TopicsTest(unittest.TestCase):
         self.assertEqual(topics.CONFIG_DIR.name, "config")
         self.assertEqual(topics.CONFIG_DIR.parent.name, "app")
 
+    def test_last_daily_roundtrip_and_missing(self):
+        self.assertEqual(topics.read_last_daily(self.dir), "")
+        topics.save_last_daily(self.dir, "Mut")
+        self.assertEqual(topics.read_last_daily(self.dir), "Mut")
+        self.assertEqual((self.dir / ".thema_zuletzt").read_text(encoding="utf-8"), "Mut\n")
+        self.assertEqual([p.name for p in self.dir.iterdir()], [".thema_zuletzt"])
+
     def test_daily_read(self):
         self.write("thema.txt", "Mut\n")
         self.assertEqual(topics.read_daily(self.dir), "Mut")
