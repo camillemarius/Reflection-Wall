@@ -2,6 +2,7 @@ import concurrent.futures
 import contextlib
 import queue
 import sys
+import tempfile
 import threading
 import time
 import types
@@ -9,6 +10,7 @@ import unittest
 from unittest import mock
 
 from app import main as app_main
+from app import topics
 from app.applications import settings_apps
 from app.driver.display.wall_display import WallDisplay
 from app.link.codec import Message, decode, encode, role_of
@@ -226,7 +228,13 @@ class WallRun:
         test.addCleanup(self._stack.close)
         smbus2 = types.SimpleNamespace(SMBus=mock.Mock(side_effect=self._open_bus))
         self.smbus = smbus2.SMBus
-        self._stack.enter_context(mock.patch.dict(sys.modules, {"smbus2": smbus2}))
+        # Die KI des Tests: main() importiert write_to_ai spaet, aus diesem Modul; nie Groq.
+        self.ai = mock.Mock(return_value="Der Weg ist das Ziel.")
+        groq_api = types.SimpleNamespace(write_to_ai=self.ai)
+        self._stack.enter_context(mock.patch.dict(
+            sys.modules, {"smbus2": smbus2, "app.driver.chatbot.groqAPI": groq_api}))
+        self.config_dir = self._stack.enter_context(tempfile.TemporaryDirectory())
+        self.patch("CONFIG_DIR", self.config_dir)  # .thema_zuletzt nie in app/config
         self.patch("load_dotenv")
         self.patch("idle_minutes_from_env", return_value=0)
         self.patch("open_esp_port", side_effect=self._open_port)
@@ -651,6 +659,102 @@ class MainTest(unittest.TestCase):
         wall.power_off.assert_called_once_with()
         self.assertEqual(wall.display_writes(), [])
         self.assertEqual(wall.requests(), ["READY"])
+
+    def test_night_get_and_shutdown(self):
+        # NACHT: der ESP holt das Zitat mit GET; die Anzeige bleibt beim ESP (N2). Der Pi
+        # beendet die Sitzung nicht selbst (kein DONE), sie endet mit dem SHUTDOWN des ESP.
+        wall = WallRun(self)
+        self.assertTrue(wall.start())
+        wall.put("SESSION", "NACHT")
+        wall.put("GET", "QUOTE|")
+        self.assertTrue(wait_for(lambda: wall.replies("GET") == ["QUOTE"]))
+        wall.ai.assert_called_once()
+        # make_night_quote mit dem Ordner aus CONFIG_DIR: das Thema des gelungenen Zitats
+        self.assertEqual(topics.read_last_daily(wall.config_dir), topics.DEFAULT_TOPIC)
+        time.sleep(0.2)
+        self.assertFalse(wall.serving.is_set())  # wartet weiter auf SHUTDOWN
+        wall.put("SHUTDOWN")
+        self.assertTrue(wall.wait_serving())
+        wall.power_off.assert_called_once_with()
+        self.assertEqual(wall.display_writes(), [])
+        self.assertEqual(wall.shown(), [])
+        self.assertEqual(wall.requests(), ["READY"])
+
+    def _night_until_hand(self, wall, asked):
+        """NACHT, dann GET; der Arbeits-Thread rechnet. BT2 setzt den ESP zurueck, das GET
+        verfaellt, SESSION|HAND startet das Menue. Gibt die Nummer des ersten GET zurueck."""
+        night = wall.put("SESSION", "NACHT")
+        self.assertTrue(wait_for(lambda: (night, "OK") in wall.answers()))
+        first_get = wall.put("GET", "QUOTE|")
+        self.assertTrue(asked.wait(2))
+        time.sleep(0.2)  # Zeit, in der main() in der Nacht nichts schreiben darf
+        self.assertEqual(wall.display_writes(), [])
+        hand = wall.put("SESSION", "HAND")
+        self.assertTrue(wait_for(lambda: wall.shown()))
+        self.assertIn((hand, "OK"), wall.answers())
+        self.assertEqual(wall.shown()[0][:2], ["> A", "  B"])
+        self.assertGreater(min(wall.display_writes()), wall.position(("put", "SESSION", "HAND")))
+        return first_get
+
+    def _slow_ai(self, wall):
+        asked, answer = threading.Event(), threading.Event()
+
+        def slow_ai(messages):
+            asked.set()
+            answer.wait(5)
+            return "Der Weg ist das Ziel."
+
+        self.addCleanup(answer.set)  # vor dem Aufraeumen von WallRun: der Arbeits-Thread endet
+        wall.ai.side_effect = slow_ai
+        return asked, answer
+
+    def _menu_then_shutdown(self, wall):
+        wall.put("BUTTON", "6")
+        self.assertTrue(wait_for(lambda: wall.shown()[-1][:2] == ["  A", "> B"]))
+        shutdown = wall.put("SHUTDOWN")
+        self.assertTrue(wall.wait_serving())
+        self.assertIn((shutdown, "OK"), wall.answers())
+        wall.power_off.assert_called_once_with()
+        self.assertEqual([m.command for m in wall.port.sent() if role_of(m.command) != "response"],
+                         ["READY"])
+
+    def test_night_then_hand_starts_menu(self):
+        # N3 auf dem echten PiLink, in der Reihenfolge des Geraets: SESSION|HAND zuerst, dann
+        # das GET noch einmal mit neuer Nummer. Die Antwort des Arbeits-Threads, der noch
+        # rechnet, geht an dieses neue GET; das alte bekommt keine (PiLink nimmt sie nicht an).
+        wall = WallRun(self, real_link=True)
+        asked, answer = self._slow_ai(wall)
+        self.assertTrue(wall.start())
+        first_get = self._night_until_hand(wall, asked)
+        with self.assertLogs("app.ui.link_dispatch", "INFO") as logs:
+            get = wall.put("GET", "QUOTE|")
+            self.assertTrue(wait_for(lambda: any("GET #%02X, waehrend" % get in line
+                                                 for line in logs.output)))
+        self.assertEqual(wall.sent("QUOTE"), [])  # GET rechnet noch
+        answer.set()
+        self.assertTrue(wait_for(lambda: (get, "QUOTE") in wall.answers()))
+        self.assertNotIn((first_get, "QUOTE"), wall.answers())
+        wall.ai.assert_called_once()
+        self._menu_then_shutdown(wall)
+
+    def test_night_then_hand_worker_done_before_resent_get(self):
+        # Fall C: der Arbeits-Thread wird fertig, nachdem SESSION|HAND kam und bevor das GET
+        # noch einmal kommt. Seine Antwort auf das alte GET nimmt PiLink nicht an; das neue GET
+        # bekommt das Ergebnis, das der Pi schon hat, ohne zweite KI-Runde.
+        wall = WallRun(self, real_link=True)
+        asked, answer = self._slow_ai(wall)
+        self.assertTrue(wall.start())
+        first_get = self._night_until_hand(wall, asked)
+        with self.assertLogs("app.ui.link_dispatch", "INFO") as logs:
+            answer.set()
+            self.assertTrue(wait_for(lambda: any("GET #%02X nicht gesendet" % first_get in line
+                                                 for line in logs.output)))
+        get = wall.put("GET", "QUOTE|")
+        self.assertTrue(wait_for(lambda: (get, "QUOTE") in wall.answers()))
+        self.assertNotIn((first_get, "QUOTE"), wall.answers())
+        wall.ai.assert_called_once()
+        self.assertEqual(topics.read_last_daily(wall.config_dir), topics.DEFAULT_TOPIC)
+        self._menu_then_shutdown(wall)
 
     def test_shutdown_before_session_powers_off_without_display(self):
         # R9: BT2 waehrend EINSCHALTEN, der ESP schickt SHUTDOWN gleich nach READY

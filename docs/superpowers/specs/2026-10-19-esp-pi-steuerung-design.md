@@ -52,7 +52,7 @@ Pi nimmt keinen Schaden, und keine Nachricht geht unbemerkt verloren.
 | M1-d | Ohne Person ist die Wand dunkel. Radar erkennt jemanden → Zitat an, ESP bleibt wach, solange INT_HLK HIGH ist, danach Anzeige aus und schlafen. BT1 → Zitat an, nach 1 min aus | 4 |
 | M2-c | Ein Thema steht in einer Datei auf dem Pi (Anfangsinhalt „Was ist der Sinn des Lebens“); der ESP schickt den Text vom Vortag mit; neues Thema = neue Kette | 4 |
 | — | Kein Scrollen: Der Auftrag an die KI verbietet ausdrücklich Texte, die länger sind als die Anzeige; Pi und ESP prüfen zusätzlich | 4 |
-| M3-a | Weckplan mit Terminen (00:00, 01:00, 02:00), höchstens 3 h am Stück, Ortszeit samt Sommerzeit. WLAN nur zum Zeitabgleich: um Mitternacht und nach einem Kaltstart, höchstens 15 s, nie das Einrichtungsportal (ausser nach Kaltstart ohne Zugangsdaten, 3 min). Kennt der ESP nach einem Kaltstart die Zeit nicht, versucht er den Abgleich bei jedem Weckvorgang wieder und lässt bis dahin den Mitternachts-Auftrag aus | 3 |
+| M3-a | Weckplan mit Terminen (00:00, 01:00, 02:00), höchstens 3 h am Stück, Ortszeit samt Sommerzeit. WLAN nur zum Zeitabgleich: um Mitternacht und nach einem Kaltstart, höchstens 15 s, nie das Einrichtungsportal (ausser nach Kaltstart ohne Zugangsdaten, 3 min). Kennt der ESP nach einem Kaltstart die Zeit nicht, versucht er den Abgleich bei jedem ~~Weckvorgang~~ Timer-Weckvorgang (höchstens alle 3 h) wieder, nicht nach einer Taste, und lässt bis dahin den Mitternachts-Auftrag aus | 3, 2026-10-31 |
 | M4-a | Bei Fehlern in der Nacht bleibt das alte Zitat; neue Versuche um 01:00 und 02:00, danach erst in der nächsten Nacht; läuft gerade eine Sitzung, wird das Zitat darin geholt; endet sie vorher, gilt das als Fehlversuch | 3 |
 | — | Die zwölf festen Texte sind entfallen; die Wand zeigt `/text.txt` aus dem Flash | nach Runde 4 |
 | — | BT1–BT3 laufen über Toggle-Flipflops; BT1 zeigt das Zitat, BT2 schaltet den Pi, BT3 ist frei. Seit 2026-10-23 haben alle sechs Tasten Flipflops | nach Runde 4 |
@@ -74,6 +74,10 @@ Pi nimmt keinen Schaden, und keine Nachricht geht unbemerkt verloren.
 | L3 | Der ESP behandelt `READY` nie als Wiederholung (gleiche Nummer nach einem Neustart des Pi-Dienstes). Kommt `READY` in einer Sitzung, antwortet er `OK` und schickt das `SESSION\|…` noch einmal | 2026-10-25 |
 | L4 | Teil 4b (die ESP-Seite von Teil 4: `SESSION`, BT4–BT6, Tasten je Zustand, Anzeigen beim Start und Ausschalten, `MODE`) wird Teil von Teil 2, mit einem gemeinsamen Plan | 2026-10-25 |
 | R15 | Die Anwendung Radar des Pi endet nach 55 min von selbst. Der Pi schaltet die UART zurück (`MODE\|NORMAL`) und schickt `DONE`. Grund: Im Radar-Debug gehört die UART dem Radar, ein `SHUTDOWN` des ESP käme nie an. Die 60 min des ESP bleiben als Rückfall für einen Pi, der im Radar-Debug hängt (Plan Teil 2, vom Owner bestätigt) | 2026-10-25 |
+| N1 | Weckt eine Taste oder das Radar den ESP vor der geplanten Zeit, nimmt er an, die geplante Strecke sei ganz abgelaufen. Seine Uhr geht dann höchstens vor (bis zu 3 h), nie nach. Vor dem Mitternachts-Auftrag gleicht er per NTP ab; ist es dann noch vor 00:00, schläft er den Rest. Grund: Der RTC-Zähler des ESP8266 übersteht das Wecken nicht verlässlich | 2026-10-25 |
+| N2 | In einer Sitzung `NACHT` laufen die Wand-Regeln (§8) weiter; BT1, BT3–BT6 gehen nicht an den Pi. Ist das neue Zitat da und die Anzeige an, zeigt der ESP es sofort aus dem RTC-Speicher (Z11). Die Wand hält den Pi nie an: Ist das Zitat da, fährt der ESP den Pi herunter | 2026-10-25 |
+| N3 | BT2 in einer Sitzung `NACHT` macht daraus eine Sitzung von Hand: `PI STARTET`, dann `SESSION\|HAND`, der Pi zeigt das Menü; das Zitat holt der ESP weiter in dieser Sitzung (M4-a). Bootet der Pi noch, heisst BT2 „danach HAND“. BT2 setzt den ESP zurück (§10): Ein offenes `GET\|QUOTE` verfällt, `SESSION\|HAND` geht zuerst, dann sendet der ESP das `GET` noch einmal mit neuer Nummer. Der Pi gibt es dem Arbeits-Thread, der noch rechnet, oder antwortet mit dem Zitat, das er schon hat. Ist das Zitat da, gilt die Nacht als gelungen, wie auch immer die Sitzung endet. Auf dem Pi startet ein zweites `SESSION\|HAND` nach `NACHT` das Menü (ändert Teil 2) | 2026-10-25 |
+| N4 | Zum Testen: ein Schalter in `features.h`, ab Werk aus. Nach dem ersten NTP-Abgleich nach einem Kaltstart stellt der ESP seine Uhr einmal so, dass in 2 min Mitternacht ist; ist der Schalter an, steht das bei jedem Wecken im Log | 2026-10-25 |
 
 A1–A6 waren in Runde 1 als Annahmen formuliert; du hast sie bestätigt. Die
 Begründungen und Gegenprüfungen standen in den Rundendateien der
@@ -376,6 +380,10 @@ Kaltstart ist der Funk ohnehin an. Dazwischen zählt der ESP seine Schlafzeiten
 zusammen. Kennt er die Zeit nach einem Kaltstart nicht, versucht er den Abgleich
 bei jedem Timer-Weckvorgang (höchstens alle 3 h, dafür schläft er vorher mit
 Funk ein) und lässt bis dahin den Mitternachts-Auftrag aus (M3-a).
+Die Uhr zählt in UTC; Ortszeit und Sommerzeit rechnet der ESP daraus. Weckt
+eine Taste oder das Radar den ESP vor der geplanten Zeit, gilt die geplante
+Strecke als ganz abgelaufen (N1): Die Uhr geht danach höchstens vor, und der
+Abgleich vor Mitternacht korrigiert sie.
 
 **Kaltstart in der Nacht.** Kommt der Strom zwischen 00:00 und 03:00 zurück und
 ist die Uhrzeit bekannt, vergleicht der ESP das Datum des neuesten Eintrags der Liste mit dem
@@ -398,6 +406,13 @@ aus ist (P1-a; Abschnitt 11; das älteste fällt bei mehr als 30 weg). Fällt de
 Strom vorher aus, holt die Regel „Kaltstart in der Nacht“ das Zitat neu. Passt es
 nicht, fragt er noch einmal, höchstens dreimal (Z6). Gescrollt wird nie.
 
+**Die Wand in der Nacht** (N2, N3). Während der Nacht-Sitzung gelten die
+Wand-Regeln aus §8, und die Tasten bleiben beim ESP. BT2 macht aus der
+Nacht-Sitzung eine Sitzung von Hand; das Zitat wird darin weiter geholt.
+BT2 setzt den ESP zurück: Ein offenes `GET` verfällt, `SESSION|HAND` geht
+zuerst, dann das `GET` noch einmal mit neuer Nummer. Der Pi gibt es dem
+Arbeits-Thread, der noch rechnet, oder antwortet mit dem Zitat, das er schon hat.
+
 **Fehler in der Nacht** (kein `READY`, keine Antwort, `ERROR`, drei abgelehnte
 Zitate, Sitzung vorher beendet): Pi aus, sauber wenn möglich; altes Zitat bleibt;
 neue Versuche um 01:00 und 02:00. Scheitert auch 02:00, versucht der ESP es erst in
@@ -417,6 +432,7 @@ RTC-Speicher und erscheint beim nächsten Weckvorgang im Log.
 
 Ein Druck während der Sitzung setzt den ESP zurück. Er bootet, liest seinen
 Sitzungszustand aus dem RTC-Speicher, liest den Expander und schickt `BUTTON|n`.
+In einer Sitzung `NACHT` gelten N2 und N3 (Abschnitt 9).
 Was der ESP in den anderen Zuständen mit einer Taste tut, steht in Teil 4,
 Tabelle 5.2.
 
@@ -449,22 +465,25 @@ nicht, kommt die Frage zurück zum Owner.
 **RTC-Speicher** (`PersistentState`, überlebt Resets und Deep Sleep, nicht einen
 Stromausfall). Das Layout ändert sich, deshalb neue `MAGIC`.
 
+Der Zustand ist `PersistentState::Data` mit 300 Bytes, `MAGIC` ist „RWL4“
+(`0x52574C34`). Die Felder, wie sie gebaut sind:
+
 | Feld | Inhalt |
 |---|---|
 | `lastExpanderState` | wie heute: Referenz für die Tasten-Auswertung |
-| `wakeCount` | wie heute: Anzahl Weckvorgänge, im Log |
-| `session` | Zustand aus Abschnitt 7 |
-| `piPowered` | ob der ESP die Speisung zuletzt eingeschaltet hat |
-| `sessionSeconds` | verstrichene Sitzungszeit, in jedem Takt der Sitzung gesichert (etwa alle 20 ms); nur noch fürs Log, die 3 h entfallen (Teil 4 D1) |
-| `pendingShutdown` | BT2 während RADAR-DEBUG gedrückt |
-| `display` | aus / an / wird geschrieben |
-| `shownIndex`, `shownDate` | Platz und Datum des Zitats, das gerade zu sehen ist (T2-a); massgeblich ist das Datum, der Platz hilft bei gleichen Daten |
+| `displayState` | aus / an / wird geschrieben |
 | `button1Active` | die BT1-Minute läuft. Sie zählt ab dem Start des Durchlaufs, denn jeder BT1-Druck setzt den ESP zurück |
-| `clockEpoch`, `clockValid` | geschätzte Uhrzeit beim Einschlafen, ob sie aus einem NTP-Abgleich stammt |
-| `sleepSeconds` | geplante Schlafdauer, zum Weiterzählen |
-| `nightAttempts`, `nightResult` | Versuche und Ergebnis der letzten Nacht |
-| `nightQuote` | das geprüfte Zitat der Nacht, bis es nach dem Ausschalten des Pi in der Liste steht (P1-a) |
-| `txSeq`, `rxSeq` | laufende Nummern der Verbindung (Z1) |
+| `wakeCount` | wie heute: Anzahl Weckvorgänge, im Log |
+| `shownIndex`, `shownDate` | Platz und Datum des Zitats, das gerade zu sehen ist (T2-a); massgeblich ist das Datum, der Platz hilft bei gleichen Daten |
+| `session` (`SessionData`, 28 Bytes) | Zustand aus Abschnitt 7: `state`, `reason`, `awaiting`, `flags`, `missedPings`, `buttonCount`, `buttons[6]`, `inStateMs`, `sincePingMs`, `sinceBusyMs`, `sessionMs`. Das Flag `PendingShutdown` in `flags` ist BT2 während RADAR-DEBUG. `sessionMs` ist die verstrichene Sitzungszeit (im Entwurf `sessionSeconds`), in jedem Takt der Sitzung gesichert (etwa alle 20 ms); nur noch fürs Log, die 3 h entfallen (Teil 4 D1) |
+| `piPowered` | ob der ESP die Speisung zuletzt eingeschaltet hat |
+| `txSeq`, `rxSeq`, `rxValid` | laufende Nummern der Verbindung (Z1): nächste eigene Nummer, letzte Nummer des Pi, ob sie gilt |
+| `clock` (`ClockData`, 24 Bytes) | `utc` (UTC-Sekunden seit 1970), `plannedS` (geplante Strecke des letzten Deep Sleep), `lastSyncUtc` (`utc` beim letzten Abgleich), `testOffsetS` (Verschiebung des Testschalters `NIGHT_TEST`), `ms` (Rest unter einer Sekunde), `valid` (Zeit bekannt, nur durch einen Abgleich), `exact` (seit dem Abgleich nie vor der Zeit geweckt), `radio` (Funk beim nächsten Start) |
+| `night` (`NightData`, 224 Bytes) | `status` (Idle, Wanted, Got, Failed), `attempts` (Versuche der Nacht von `date`), `rejects` (abgelehnte Zitate im laufenden Versuch), `result` (Ergebnis der Nacht), `pendingWrite` (das Zitat fehlt noch in der Liste, P1-a), `date` (Nacht des laufenden Auftrags, `JJJJ-MM-TT`), `doneDate` (Nacht mit Zitat), `yesterday` (neuester Text der Liste, R6), `quote` (das geprüfte Zitat der Nacht, bis es nach dem Ausschalten des Pi in der Liste steht) |
+
+`yesterday` und `quote` sind je 97 Bytes (96 Zeichen und das Ende). `result` ist
+`None`, `Ok`, `NoReady`, `NoAnswer`, `Error`, `Rejected`, `SessionEnded`,
+`NoClock` oder `StoreFailed`.
 
 Das Feld `textIndex` entfällt.
 
@@ -550,6 +569,8 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | WLAN + NTP höchstens | 15 s | | Entscheid (M3-a) |
 | Einrichtungsportal | 3 min | nur Kaltstart ohne Zugangsdaten | Entscheid (M3-a) |
 | Längster Deep Sleep | 3 h | | Entscheid (M3-a) |
+| `PI_MIN_OFF_MS` | 5000 ms | so lange bleibt der Pi mindestens aus, bevor der ESP ihn wieder einschaltet; vorläufig, wird am Gerät geprüft (Task 10 des Plans Mitternacht) | Plan |
+| `NIGHT_TEST_LEAD_S` | 120 s | Testschalter `NIGHT_TEST`: so lange nach dem ersten Abgleich ist Mitternacht; negativ heisst danach (−5400: die Uhr zeigt 01:30) | Plan |
 | Nachtversuche | 00:00, 01:00, 02:00 | | Entscheid (M4-a) |
 | KI-Anfragen pro `GET\|QUOTE` | 3 | | Entscheid (M2-c) |
 
@@ -605,7 +626,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 2. `T_halt` messen.
 3. Sitzung von Hand: BT2 ein, BT1/BT3 kommen beim Pi an, BT2 aus, Pi fährt sauber herunter.
 4. Pi hängt (Dienst stoppen): ESP schaltet nach 3 PINGs ab.
-5. Mitternacht mit vorgestellter Uhr: Zitat kommt, wird gespeichert, Pi aus.
+5. Mitternacht mit vorgestellter Uhr (Schalter aus N4): Zitat kommt, wird gespeichert, Pi aus.
 6. Radar: Wand an, solange jemand davorsteht, danach dunkel.
 7. Stromaufnahme bei 100 % Helligkeit mit allen Segmenten an und laufendem Pi.
 

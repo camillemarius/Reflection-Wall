@@ -9,6 +9,7 @@ CONFIG_DIR = Path(__file__).resolve().parent / "config"
 MAX_LENGTH = 120
 DAILY_FILE = "thema.txt"
 HAND_FILE = "thema_hand.txt"
+LAST_DAILY_FILE = ".thema_zuletzt"
 
 
 def clean(text: str) -> str:
@@ -60,3 +61,14 @@ def save(config_dir, daily: str, hand: str) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     _write(directory, DAILY_FILE, clean(daily))
     _write(directory, HAND_FILE, clean(hand))
+
+
+def read_last_daily(config_dir=CONFIG_DIR) -> str:
+    """Das Thema, zu dem zuletzt ein Zitat der Nacht gelang ("" wenn leer oder fehlend)."""
+    return _read(config_dir, LAST_DAILY_FILE)
+
+
+def save_last_daily(config_dir, topic: str) -> None:
+    directory = Path(config_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    _write(directory, LAST_DAILY_FILE, clean(topic))

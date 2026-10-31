@@ -23,3 +23,8 @@ void PowerSwitchPin::waitMs(unsigned long ms)
 {
     delay(ms);
 }
+
+unsigned long PowerSwitchPin::nowMs()
+{
+    return millis();
+}

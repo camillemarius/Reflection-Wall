@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 // ---------------------------------------------------------
 // Bauschalter
 // ---------------------------------------------------------
@@ -19,10 +21,23 @@ namespace Features
     // Auf true stellen, sobald der Radar angeschlossen ist.
     constexpr bool RADAR_INSTALLED = false;
 
-    // true: Das Funkteil ist beim Aufwachen an. Auf true stellen, sobald WLAN oder OTA gebraucht wird.
-    // false: Es bleibt aus und spart rund 70 mA und 200 ms Bootzeit.
-    // Der Wert liegt im RTC-Speicher. Darum gilt er erst ab dem naechsten Start.
-    constexpr bool WAKE_RF_ENABLED = false;
+    // Ob das Funkteil beim Aufwachen an ist, legt jede Schlafstrecke selbst fest
+    // (Application::enterDeepSleep): nur fuer den Abgleich der Uhr.
+
+    // true: Testbetrieb der Nacht (N4, R4). Der erste Abgleich nach einem Kaltstart stellt
+    // die Uhr so, dass NIGHT_TEST_LEAD_S spaeter Mitternacht ist; jeder weitere Abgleich
+    // behaelt die Verschiebung. Der Auftrag der Nacht startet so kurz nach dem Einschalten.
+    // Ein negativer Vorlauf stellt die Uhr hinter das falsche Mitternacht: -5400 heisst, sie
+    // zeigt nach dem ersten Abgleich 01:30, 90 min nach Mitternacht (Kaltstart in der Nacht,
+    // T10 Schritt 7).
+    // false: Normalbetrieb.
+    constexpr bool NIGHT_TEST = false;
+    constexpr int32_t NIGHT_TEST_LEAD_S = 120;
+
+    // So lange bleibt der Pi mindestens aus, bevor der ESP ihn wieder einschaltet, etwa
+    // fuer einen Versuch der Nacht gleich nach dem Ende einer Sitzung. Sonst startet ein
+    // Pi im Halt vielleicht nicht neu (Relais, Netzteil). Vorlaeufig; am Geraet pruefen.
+    constexpr unsigned long PI_MIN_OFF_MS = 5000;
 
     // Baudrate der Leitung zum Pi, zugleich die der Debug-Ausgabe auf derselben UART.
     // 74880 wie das Boot-ROM des ESP8266 (E2-a). Z12: sonst 115200 hier und in rpi/app/link/serial_port.py.

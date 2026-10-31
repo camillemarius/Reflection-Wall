@@ -20,6 +20,7 @@ from app.link.pi_link import LinkBusy, PiLink
 from app.link.radar_switch import RadarSwitch
 from app.link.ready import announce_ready
 from app.link.serial_port import open_esp_port
+from app.night_quote import make_night_quote
 from app.system.power import can_power_off, power_off
 from app.ui.activity import Activity, idle_minutes_from_env
 from app.ui.app_host import DEFAULT_CONFIG_DIR, StopSignal
@@ -40,6 +41,7 @@ DONE_WAIT_S = 120.0       # nach DONE: so lange darf das SHUTDOWN des ESP brauch
 # (Regel B wartet vor jedem der 12 Module bis zu 1 s).
 RELEASE_WAIT_S = 45.0
 SERVE_POLL_S = 1.0        # Takt des Wartens auf das Prozessende (Ctrl+C bricht es ab)
+CONFIG_DIR = DEFAULT_CONFIG_DIR  # Themen und .thema_zuletzt fuer das Zitat der Nacht
 
 
 class RadarPcPlaceholder:
@@ -162,11 +164,23 @@ def _hand_session(start_menu, stop, released) -> str:
         released.set()
 
 
-def _night_session(stop) -> str:
-    """SESSION|NACHT: die Anzeige bleibt beim ESP (V1). Teil 3b holt hier GET|QUOTE."""
-    while not stop.wait(SESSION_POLL_S):
-        pass
+def _night_session(dispatcher, stop, start_menu, released) -> str:
+    """SESSION|NACHT: die Anzeige bleibt beim ESP (N2); GET|QUOTE beantwortet der Dispatcher.
+    Der Pi beendet die Nacht nicht selbst, auch nicht mit DONE: Das SHUTDOWN des ESP beendet
+    sie. Kommt vorher SESSION|HAND (BT2, N3), geht es weiter wie bei _hand_session; ein offenes
+    GET wird trotzdem beantwortet."""
+    while not stop.is_set():
+        if dispatcher.hand_requested.wait(SESSION_POLL_S):
+            return _hand_session(start_menu, stop, released)
     return stop.reason or "shutdown"
+
+
+def _night_quote(yesterday):
+    """quote_maker des Dispatchers; laeuft in dessen Arbeits-Thread. write_to_ai erst hier
+    importieren, wie in chat_app: ein Fehler beim Import wird so zu ERROR|KI."""
+    from app.driver.chatbot.groqAPI import write_to_ai
+
+    return make_night_quote(yesterday, write_to_ai, CONFIG_DIR)
 
 
 def _await_power_off(dispatcher, result) -> None:
@@ -226,7 +240,8 @@ def _serve_wall(stop, activity_minutes) -> None:
         released = threading.Event()
         released.set()  # noch laeuft keine Bildschirmfolge: SHUTDOWN bekommt sofort OK
         dispatcher = LinkDispatcher(link, buttons, activity, stop, released,
-                                    on_shutdown=power_off, release_wait_s=RELEASE_WAIT_S)
+                                    on_shutdown=power_off, release_wait_s=RELEASE_WAIT_S,
+                                    quote_maker=_night_quote)
         dispatcher.start()
 
         def radar_factory():
@@ -249,7 +264,7 @@ def _serve_wall(stop, activity_minutes) -> None:
             if reason == "HAND":
                 result = _hand_session(start_menu, stop, released)
             elif reason == "NACHT":
-                result = _night_session(stop)
+                result = _night_session(dispatcher, stop, start_menu, released)
             else:  # SHUTDOWN vor SESSION (R9): die Anzeige bleibt beim ESP
                 result = stop.reason or "shutdown"
             _await_power_off(dispatcher, result)

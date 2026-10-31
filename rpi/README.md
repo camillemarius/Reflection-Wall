@@ -68,6 +68,29 @@ Die Webseite läuft auf Port 80. Dafür setzt die systemd-Unit `AmbientCapabilit
 | `speech/` | Sprachausgabe |
 | `database/` | MariaDB/MySQL für das Quiz (die Tabelle `reflections` liest REFLECTION nicht mehr) |
 
+## Zitat der Nacht
+
+Dieser Abschnitt ist ungeprüft bis zur Abnahme am Gerät.
+
+Jede Nacht schaltet der ESP den Pi ein (`SESSION|NACHT`) und schickt `GET|QUOTE|<Text vom Vortag>`. Der Text vom Vortag ist leer, wenn es keinen gültigen gibt. Der Pi fragt die KI nach einem Gedanken zum Thema aus `thema.txt`. Der Gedanke baut auf dem Text vom Vortag auf (`app/night_quote.py`: `make_night_quote`, `build_night_messages`).
+
+- `clean_quote` ersetzt Umlaute, entfernt unerlaubte Zeichen und macht aus Leerraum ein Leerzeichen.
+- `quote_fits` prüft: 1 bis 96 erlaubte Zeichen, und der Text passt in die vier Zeilen der Wand.
+- Passt eine Antwort nicht, fragt der Pi noch einmal. Er nimmt höchstens 3 Antworten.
+
+`app/config/.thema_zuletzt` merkt sich das Thema der letzten gelungenen Nacht. Ist das Thema heute ein anderes, vergisst die KI den Gedanken von gestern und beginnt neu. Die Datei wird nur nach einem gelungenen Zitat geschrieben. Scheitert das Schreiben, etwa auf einer nur lesbaren SD-Karte, steht das im Log, und das Zitat gilt trotzdem.
+
+Der Pi antwortet mit einer dieser Zeilen:
+
+| Antwort | Bedeutung |
+|---|---|
+| `QUOTE\|<Text>` | das Zitat |
+| `ERROR\|ZU_LANG` | alle 3 Antworten waren zu lang oder unbrauchbar |
+| `ERROR\|KI` | Fehler der KI (auch „Leere Antwort“), kein Rechner für das Zitat angeschlossen, oder die Rechnung warf eine Ausnahme |
+| `ERROR\|BAD_GET` | `GET` ohne `QUOTE\|` in den Daten |
+
+Das Zitat rechnet ein eigener Thread (`app/ui/link_dispatch.py`). Tasten beantwortet der Pi währenddessen weiter. Zählen darf nur das neueste `GET`. Jede Taste setzt den ESP zurück; ein offenes `GET` sendet er danach noch einmal, mit neuer Nummer. Rechnet der Thread noch, geht seine Antwort an dieses neue `GET`. Ist er schon fertig und ging seine Antwort nicht mehr raus, bekommt es dasselbe Zitat ohne zweite KI-Runde. Gemerkt bleibt nur ein Zitat, kein `ERROR`, und nur, bis es zugestellt ist, höchstens bis zum Ende der Sitzung. In einer Sitzung `NACHT` schreibt der Pi die Anzeige nie und beendet die Sitzung nie selbst. Sie endet mit dem `SHUTDOWN` des ESP.
+
 ## Verbindung zum ESP (`app/link`)
 
 `codec.py` baut und liest die Zeilen der Verbindung (Nummer, Befehl, Daten, Prüfsumme). `PiLink` vergibt die Nummern, wiederholt Anfragen und erkennt doppelte Nachrichten. Dafür läuft ein eigener Thread. `serial_port.py` öffnet `/dev/ttyAMA0` mit 74 880 Baud und setzt GPIO23 auf LOW. Damit gehört die UART dem ESP.
@@ -89,7 +112,7 @@ Dieser Abschnitt ist ungeprüft bis zur Abnahme am Gerät.
 Nach dem Start schickt der Pi `READY`, etwa alle 3 s, bis der ESP mit `OK` antwortet. Der ESP kann dabei noch booten. Danach wartet der Pi auf die Sitzung des ESP:
 
 - `SESSION|HAND`: BT2 hat den Pi eingeschaltet. Das Menü erscheint. Erst jetzt schreibt der Pi die Anzeige.
-- `SESSION|NACHT`: Der Tagestimer hat den Pi eingeschaltet. Die Anzeige bleibt unberührt.
+- `SESSION|NACHT`: Der Auftrag der Nacht hat den Pi eingeschaltet. Die Anzeige bleibt unberührt, siehe Abschnitt Zitat der Nacht. Folgt auf `NACHT` noch `SESSION|HAND` (BT2 am ESP), startet das Menü.
 
 Kommt kein `SESSION`, schickt der Pi etwa alle 10 s noch einmal `READY`.
 

@@ -28,6 +28,7 @@ struct Vector
 
 constexpr char PROTOCOL_VECTORS[] = "../tests/protocol_vectors.json";   // pio test laeuft in esp/
 constexpr char DISPLAY_VECTORS[] = "../tests/display_vectors.json";
+constexpr char QUOTE_VECTORS[] = "../tests/quote_vectors.json";
 
 namespace vectorfile_detail
 {
