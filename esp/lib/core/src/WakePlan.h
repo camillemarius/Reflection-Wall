@@ -33,4 +33,14 @@ namespace WakePlan
     // (doneDate, yesterday, quote, pendingWrite bleiben). Ein spaeter Versuch verbraucht
     // die Termine, die schon vorbei sind (Abschnitt 9, "Kaltstart in der Nacht").
     void markAttempt(NightData& night, const ClockData& clock);
+
+    // Darf auf StartNight ein neuer Versuch beginnen? Ja in einer neuen Nacht (date ist
+    // nicht heute) und nach Idle oder Failed. Laeuft GET (Wanted) oder ist das Zitat da
+    // (Got), nein: decide beachtet den Status nicht, markAttempt zaehlte einen Termin zu viel.
+    bool mayStartAttempt(const NightData& night, const ClockData& clock);
+
+    // R4 (NIGHT_TEST): Verschiebung der Uhr, mit der leadS Sekunden nach ntpUtc
+    // Mitternacht (Ortszeit) ist. Die Application legt sie beim ersten Abgleich nach
+    // einem Kaltstart fest; jeder spaetere Abgleich nimmt dieselbe (Clock::synced).
+    int32_t testOffset(uint32_t ntpUtc, uint32_t leadS);
 }

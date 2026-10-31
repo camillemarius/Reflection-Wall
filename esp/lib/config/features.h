@@ -21,13 +21,12 @@ namespace Features
     // Auf true stellen, sobald der Radar angeschlossen ist.
     constexpr bool RADAR_INSTALLED = false;
 
-    // true: Das Funkteil ist beim Aufwachen an. Auf true stellen, sobald WLAN oder OTA gebraucht wird.
-    // false: Es bleibt aus und spart rund 70 mA und 200 ms Bootzeit.
-    // Der Wert liegt im RTC-Speicher. Darum gilt er erst ab dem naechsten Start.
-    constexpr bool WAKE_RF_ENABLED = false;
+    // Ob das Funkteil beim Aufwachen an ist, legt jede Schlafstrecke selbst fest
+    // (Application::enterDeepSleep): nur fuer den Abgleich der Uhr.
 
-    // true: Testbetrieb der Nacht (N4, R4). Die Uhr geht um NIGHT_TEST_LEAD_S vor,
-    // der Auftrag der Nacht startet so schon kurz nach dem Einschalten statt um Mitternacht.
+    // true: Testbetrieb der Nacht (N4, R4). Der erste Abgleich nach einem Kaltstart stellt
+    // die Uhr so, dass NIGHT_TEST_LEAD_S spaeter Mitternacht ist; jeder weitere Abgleich
+    // behaelt die Verschiebung. Der Auftrag der Nacht startet so kurz nach dem Einschalten.
     // false: Normalbetrieb.
     constexpr bool NIGHT_TEST = false;
     constexpr uint32_t NIGHT_TEST_LEAD_S = 120;

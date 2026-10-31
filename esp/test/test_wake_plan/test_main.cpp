@@ -692,6 +692,87 @@ void test_mark_attempt_spring_night_has_two_terms()
     TEST_ASSERT_EQUAL_UINT8(2, late.attempts);
 }
 
+// --- mayStartAttempt ---
+
+void test_may_start_attempt_only_in_new_night_or_after_idle_or_failed()
+{
+    const ClockData c = freshClock(midnight() + 5);
+
+    // nie versucht, oder die letzte Nacht ist eine andere: in jedem Status
+    NightData n = emptyNight();
+    TEST_ASSERT_TRUE(WakePlan::mayStartAttempt(n, c));
+    setText(n.date, sizeof(n.date), "2026-07-01");
+    n.status = NightStatus::Got;
+    TEST_ASSERT_TRUE(WakePlan::mayStartAttempt(n, c));
+    n.status = NightStatus::Wanted;
+    TEST_ASSERT_TRUE(WakePlan::mayStartAttempt(n, c));
+
+    // heute: nur nach Idle oder Failed
+    setText(n.date, sizeof(n.date), "2026-07-02");
+    n.status = NightStatus::Idle;
+    TEST_ASSERT_TRUE(WakePlan::mayStartAttempt(n, c));
+    n.status = NightStatus::Failed;
+    TEST_ASSERT_TRUE(WakePlan::mayStartAttempt(n, c));
+    n.status = NightStatus::Wanted;
+    TEST_ASSERT_FALSE(WakePlan::mayStartAttempt(n, c));
+    n.status = NightStatus::Got;
+    TEST_ASSERT_FALSE(WakePlan::mayStartAttempt(n, c));
+
+    // eine Sekunde vor Mitternacht ist "heute" noch der 07-01
+    n.status = NightStatus::Wanted;
+    setText(n.date, sizeof(n.date), "2026-07-01");
+    TEST_ASSERT_FALSE(WakePlan::mayStartAttempt(n, freshClock(midnight() - 1)));
+}
+
+// --- testOffset (R4) ---
+
+namespace
+{
+    // Uhr nach dem ersten Abgleich mit Testschalter
+    ClockData testClock(uint32_t ntp, uint32_t leadS)
+    {
+        ClockData c = unknownClock();
+        c.testOffsetS = WakePlan::testOffset(ntp, leadS);
+        Clock::synced(c, ntp);
+        return c;
+    }
+
+    void assertLocal(uint32_t utc, int hour, int minute, int second)
+    {
+        const CivilTime::Local l = CivilTime::toZurich(utc);
+        TEST_ASSERT_EQUAL_INT(hour, l.hour);
+        TEST_ASSERT_EQUAL_INT(minute, l.minute);
+        TEST_ASSERT_EQUAL_INT(second, l.second);
+    }
+}
+
+void test_test_offset_puts_midnight_lead_seconds_ahead()
+{
+    // Nachmittag im Sommer: 23:58:00 am selben Tag, in 120 s Mitternacht
+    const uint32_t ntp = at(2026, 7, 1, 15, 17, 3);
+    ClockData c = testClock(ntp, 120);
+    assertLocal(c.utc, 23, 58, 0);
+    TEST_ASSERT_EQUAL_STRING("2026-07-01", dateOf(c.utc).c_str());
+    const NightData n = doneNight(at(2026, 7, 1, 0, 30));
+    ASSERT_SLEEP(120, true, decide(c, n, true, false));
+    Clock::advance(c, 120000);
+    ASSERT_KIND(WakeKind::StartNight, decide(c, n, false, false));
+
+    // ein spaeterer Abgleich nimmt dieselbe Verschiebung (Clock::synced)
+    Clock::synced(c, ntp + 60);
+    assertLocal(c.utc, 23, 59, 0);
+
+    // kurz vor dem echten Mitternacht: die Verschiebung ist negativ
+    const uint32_t late = at(2026, 7, 1, 23, 59, 30);
+    TEST_ASSERT_EQUAL_INT32(-90, WakePlan::testOffset(late, 120));
+    assertLocal(testClock(late, 120).utc, 23, 58, 0);
+
+    // Winterzeit und die Nacht der Umstellung im Herbst
+    assertLocal(testClock(at(2026, 1, 15, 9, 0, 0), 120).utc, 23, 58, 0);
+    const ClockData autumn = testClock(at(2026, 10, 24, 20), 120);
+    TEST_ASSERT_EQUAL_UINT32(at(2026, 10, 25, 0) - 120, autumn.utc);
+}
+
 // --- NightData ---
 
 void test_night_data_valid_rejects_bad_values()
@@ -781,6 +862,8 @@ int main(int, char**)
     RUN_TEST(test_mark_attempt_late_at_0210_is_the_last);
     RUN_TEST(test_mark_attempt_new_night_resets_status);
     RUN_TEST(test_mark_attempt_spring_night_has_two_terms);
+    RUN_TEST(test_may_start_attempt_only_in_new_night_or_after_idle_or_failed);
+    RUN_TEST(test_test_offset_puts_midnight_lead_seconds_ahead);
     RUN_TEST(test_night_data_valid_rejects_bad_values);
     return UNITY_END();
 }

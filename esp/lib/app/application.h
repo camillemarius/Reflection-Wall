@@ -9,6 +9,7 @@
 #include "FramQuoteStore.h"
 #include "FramBus.h"
 #include "WallLogic.h"
+#include "WakePlan.h"
 #include "PiPower.h"
 #include "PowerSwitchPin.h"
 #include "UartPort.h"
@@ -27,6 +28,9 @@
 // Es gibt keine Hauptschleife mehr. Die Hardware weckt den
 // ESP ueber den INT-Ausgang des GPIO Expanders, der auf RST
 // geht: jede Aenderung an einem Taster ist damit ein Reset.
+// Dazu weckt der Timer (GPIO16 -> RST): Jede Schlafstrecke
+// endet spaetestens nach 3 h oder am naechsten Termin der
+// Nacht (WakePlan).
 //
 // run() laeuft einmal durch - Zustand lesen, Taster und Radar
 // auswerten, reagieren, Zustand sichern - und geht am Ende in
@@ -37,7 +41,12 @@
 //
 // Laeuft eine Sitzung mit dem Pi (PiSession), bleibt run() wach,
 // bis sie zu Ende ist (runSession). Ein Reset mittendrin macht
-// im selben Zustand weiter; die Wand-Regeln ruhen so lange.
+// im selben Zustand weiter. In einer Sitzung HAND ruhen die
+// Wand-Regeln, in einer Sitzung NACHT laufen sie mit (N2).
+//
+// Am Ende jedes Durchlaufs, und wach jede Sekunde, entscheidet
+// WakePlan nach der Uhr: abgleichen, mit Funk neu starten, den
+// Auftrag der Nacht beginnen oder schlafen.
 //
 // Alles, was ueber einen Tastendruck hinaus bestehen bleiben
 // muss, liegt in PersistentState im RTC-Speicher. Objekt-
@@ -53,6 +62,14 @@ public:
     void run();
 
 private:
+    // Ergebnis von beginNightAttempt
+    enum class NightStart
+    {
+        Started,  // Auftrag laeuft (Wanted), mit neuer oder laufender Sitzung
+        Skipped,  // Termin verbraucht ohne Pi (Zitat der letzten Nacht nicht gespeichert)
+        Ignored   // nichts geaendert: GET laeuft, Zitat da oder die Sitzung nimmt keinen Auftrag
+    };
+
     // Liest den Expander und gibt damit die INT-Leitung frei
     uint16_t readExpander();
 
@@ -67,7 +84,8 @@ private:
     void handleInput(InputEvent button, std::vector<SessionAction>& actions);
 
     // Bleibt wach, solange die Sitzung aktiv ist: Leitung lesen,
-    // Takt, Aktionen ausfuehren, Zustand sichern
+    // Takt, Aktionen ausfuehren, Zustand sichern. In der Nacht
+    // dazu die Wand-Regeln (N2), jede Sekunde der Weckplan.
     void runSession(std::vector<SessionAction>& actions);
 
     // Fuehrt die Aktionen der Sitzung der Reihe nach aus und
@@ -78,25 +96,78 @@ private:
     void showSessionText(const std::string& text);
     void sessionDisplayOff();
 
-    // Nummern der Verbindung in _state uebernehmen und sichern
+    // Uhr nachfuehren, Nummern der Verbindung in _state
+    // uebernehmen und sichern
     void saveState();
+
+    // Zaehlt die wach verbrachte Zeit seit dem letzten Aufruf zur Uhr
+    void advanceClock();
 
     // Zeigt ein Zitat aus der Liste im FRAM; welches, bestimmt
     // die Aktion (neuestes, aktuelles, naechstes)
     void showQuote(WallAction action);
 
+    // Schreibt ein Zitat auf die Anzeige und merkt sich, welches
+    // (Index, Datum), mit displayState = Writing davor
+    void writeQuote(const std::string& text, std::size_t index, const std::string& date);
+
+    // Wand-Regeln beim Start (decideOnBoot): BT1, Radar, abgebrochenes Schreiben
+    void wallOnBoot(bool button1);
+
     // Bleibt wach, solange die Wand an ist, und schaltet sie
-    // ab, sobald die Regeln es verlangen
-    void runWallLoop();
+    // ab, sobald die Regeln es verlangen. Kehrt auch zurueck,
+    // wenn der Auftrag der Nacht eine Sitzung gestartet hat (Z11).
+    void runWallLoop(std::vector<SessionAction>& actions);
 
     // Anzeige dunkel schalten und den Zustand nachfuehren
     void turnWallOff();
 
-    void enterDeepSleep();
-
     // Radar meldet "jemand da"? Liest INT_HLK nur, wenn der Radar
     // eingebaut ist (Features::RADAR_INSTALLED)
     bool radarHigh();
+
+    // -----------------------------------------------------
+    // Uhr und Nacht
+    // -----------------------------------------------------
+
+    // WakePlan::decide mit aktueller Uhr. SyncNow und
+    // RestartWithRadio fuehrt es selbst aus; zurueck kommt
+    // Sleep oder StartNight.
+    WakeDecision plan();
+
+    // NTP-Abgleich (SyncNow); nach einem Kaltstart ohne Zugangsdaten
+    // zuerst das Portal. Scheitert er, gilt _syncFailed.
+    void syncClock();
+
+    // StartNight: Versuch beginnen, ohne Sitzung mit Pi ein (NACHT)
+    NightStart beginNightAttempt(std::vector<SessionAction>& actions);
+
+    // Nach einem Kaltstart die Liste einmal lesen; ein Zitat, das
+    // noch nicht in der Liste steht, nachtragen. Nur ohne Sitzung.
+    void catchUpNight();
+
+    // Zitat der Nacht vorne in die Liste (P1-a). true: steht dort.
+    bool writePendingQuote();
+
+    // Liste laden und loggen; erneuert night.yesterday (R6)
+    QuoteList loadQuotes();
+
+    // Darf die Liste jetzt gelesen werden? Nur mit dem Pi aus oder
+    // in einer Sitzung NACHT (R6, R14 aus Teil 2).
+    bool listAllowed() const;
+
+    // Sitzung NACHT laeuft (nicht AUS)
+    bool nightSession() const;
+
+    // Uhr, Auftrag und Ergebnis der Nacht ins Log
+    void logClock(const char* what);
+    void logNight();
+
+    // R3: 1 ms schlafen mit Funk; kehrt nicht zurueck
+    void restartWithRadio();
+
+    // Timer-Schlaf; kehrt nicht zurueck
+    void enterDeepSleep(uint32_t sleepS, bool radio);
 
     Display _display;
 
@@ -134,9 +205,38 @@ private:
     PiLink _link;
 
     // Sitzung mit dem Pi; ihr Zustand liegt in _state.session
-    // (Reihenfolge: nach _state)
+    // und _state.night (Reihenfolge: nach _state)
     PiSession _session;
 
     // BT3 ohne Sitzung in diesem Durchlauf: Verbindungstest nach dem Sichern des Tastenstands
     bool _linkTestRequested;
+
+    // Dieser Durchlauf hat Funk: Kaltstart, oder die letzte
+    // Schlafstrecke war mit Funk geplant (clock.radio)
+    bool _radioOn;
+
+    // Ein Abgleich ist in diesem Durchlauf gescheitert (R16)
+    bool _syncFailed;
+
+    // Das Portal lief in diesem Durchlauf schon
+    bool _portalDone;
+
+    // Dateisystem in diesem Durchlauf eingebunden
+    bool _fsReady;
+
+    // Die Liste wurde in diesem Durchlauf gelesen; yesterday ist aktuell
+    bool _listRead;
+
+    // Schritt 3 (Liste nach dem Kaltstart) ist erledigt
+    bool _coldListDone;
+
+    // "Auftrag wartet" steht in diesem Durchlauf schon im Log
+    bool _nightWaitLogged;
+
+    // millis() beim letzten Nachfuehren der Uhr
+    unsigned long _clockMs;
+
+    // millis(), ab dem die Fristen der Sitzung zaehlen: 0 fuer eine
+    // Sitzung vom Start dieses Durchlaufs (R1), sonst ihr Beginn
+    unsigned long _sessionSinceMs;
 };

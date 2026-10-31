@@ -117,4 +117,20 @@ namespace WakePlan
         night.attempts = static_cast<uint8_t>(attempts);
         night.rejects = 0;
     }
+
+    bool mayStartAttempt(const NightData& night, const ClockData& clock)
+    {
+        const std::string today = CivilTime::date(CivilTime::toZurich(clock.utc));
+        if (!isDate(night.date, sizeof(night.date), today))
+        {
+            return true;
+        }
+        return night.status == NightStatus::Idle || night.status == NightStatus::Failed;
+    }
+
+    int32_t testOffset(uint32_t ntpUtc, uint32_t leadS)
+    {
+        const int64_t target = static_cast<int64_t>(CivilTime::nextLocalHour(ntpUtc, 0)) - leadS;
+        return static_cast<int32_t>(target - static_cast<int64_t>(ntpUtc));
+    }
 }
