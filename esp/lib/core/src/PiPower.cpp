@@ -2,8 +2,8 @@
 
 constexpr unsigned long PiPower::PULSE_MS;
 
-PiPower::PiPower(IPowerPin& pin)
-    : _pin(pin), _on(false)
+PiPower::PiPower(IPowerPin& pin, unsigned long minOffMs)
+    : _pin(pin), _on(false), _minOffMs(minOffMs), _offInRun(false), _offAtMs(0)
 {
 }
 
@@ -29,6 +29,11 @@ void PiPower::toggle()
     _pin.drive(idle);
 
     _on = !_on;
+
+    // Die Pause zaehlt ab dem Ende des Pulses; welche Flanke das
+    // Flipflop nimmt, spielt so keine Rolle
+    _offInRun = !_on;
+    _offAtMs = _pin.nowMs();
 }
 
 bool PiPower::switchTo(bool on)
@@ -48,4 +53,23 @@ bool PiPower::isOn() const
 void PiPower::restore(bool on)
 {
     _on = on;
+}
+
+// Ein Pi, der aus- und gleich wieder eingeschaltet wird, startet
+// vielleicht nicht neu (Relais, Netzteil, Stromaufnahme im Halt).
+// Nur ein Ausschalten in diesem Durchlauf zaehlt: nach einem Reset
+// ist die Zeit seither unbekannt, aber mindestens der Neustart.
+unsigned long PiPower::waitMinOff()
+{
+    if (_on || !_offInRun)
+        return 0;
+
+    const unsigned long off = _pin.nowMs() - _offAtMs;
+
+    if (off >= _minOffMs)
+        return 0;
+
+    const unsigned long rest = _minOffMs - off;
+    _pin.waitMs(rest);
+    return rest;
 }

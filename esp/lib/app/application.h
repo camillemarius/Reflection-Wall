@@ -132,8 +132,15 @@ private:
 
     // WakePlan::decide mit aktueller Uhr. SyncNow und
     // RestartWithRadio fuehrt es selbst aus; zurueck kommt
-    // Sleep oder StartNight.
+    // Sleep oder StartNight. In einer Sitzung, in der der Abgleich
+    // nichts nuetzt (syncWaitsForSession), kommt SyncNow oder
+    // RestartWithRadio unausgefuehrt zurueck und heisst "weiter".
     WakeDecision plan();
+
+    // In einer Sitzung lohnt der Abgleich nur, wenn die Uhr gilt und
+    // die Sitzung den Auftrag danach annaehme. Sonst wartet er bis
+    // nach der Sitzung. Ohne Sitzung false.
+    bool syncWaitsForSession();
 
     // NTP-Abgleich (SyncNow); nach einem Kaltstart ohne Zugangsdaten
     // zuerst das Portal. Scheitert er, gilt _syncFailed.
@@ -230,8 +237,11 @@ private:
     // Schritt 3 (Liste nach dem Kaltstart) ist erledigt
     bool _coldListDone;
 
-    // "Auftrag wartet" steht in diesem Durchlauf schon im Log
+    // Steht in diesem Durchlauf schon im Log: "Auftrag wartet bis
+    // nach der Sitzung", "Sitzung nimmt keinen an", "Abgleich wartet"
     bool _nightWaitLogged;
+    bool _refusedLogged;
+    bool _syncWaitLogged;
 
     // millis() beim letzten Nachfuehren der Uhr
     unsigned long _clockMs;

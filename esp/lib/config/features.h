@@ -31,6 +31,11 @@ namespace Features
     constexpr bool NIGHT_TEST = false;
     constexpr uint32_t NIGHT_TEST_LEAD_S = 120;
 
+    // So lange bleibt der Pi mindestens aus, bevor der ESP ihn wieder einschaltet, etwa
+    // fuer einen Versuch der Nacht gleich nach dem Ende einer Sitzung. Sonst startet ein
+    // Pi im Halt vielleicht nicht neu (Relais, Netzteil). Vorlaeufig; am Geraet pruefen.
+    constexpr unsigned long PI_MIN_OFF_MS = 5000;
+
     // Baudrate der Leitung zum Pi, zugleich die der Debug-Ausgabe auf derselben UART.
     // 74880 wie das Boot-ROM des ESP8266 (E2-a). Z12: sonst 115200 hier und in rpi/app/link/serial_port.py.
     constexpr unsigned long LINK_BAUD = 74880;

@@ -25,7 +25,7 @@ Application::Application()
       _coldBoot(false),
       _displayReady(false),
       _powerPin(),
-      _piPower(_powerPin),
+      _piPower(_powerPin, Features::PI_MIN_OFF_MS),
       _port(Serial),
       _link(_port),
       _session(_state.session, _state.night),
@@ -37,6 +37,8 @@ Application::Application()
       _listRead(false),
       _coldListDone(false),
       _nightWaitLogged(false),
+      _refusedLogged(false),
+      _syncWaitLogged(false),
       _clockMs(0),
       _sessionSinceMs(0)
 {
@@ -246,6 +248,11 @@ void Application::run()
     {
         Clock::reset(_state.clock);
         NightJob::reset(_state.night);
+
+        // Nach dem Einschalten ist das Funkteil an. Ein Reset vor dem
+        // ersten Schlaf (Taste waehrend Abgleich oder Portal) behaelt
+        // den Funk so; sonst bliebe die Uhr bis zu 3 h unbekannt.
+        _state.clock.radio = 1;
     }
 
     // N1, R13: die geplante Strecke zaehlt ganz. Vor der Zeit geweckt
@@ -643,7 +650,16 @@ void Application::runSession(std::vector<SessionAction>& actions)
             lastPlan = millis();
 
             if (plan().kind == WakeKind::StartNight)
+            {
+                const unsigned long since = _sessionSinceMs;
+
                 beginNightAttempt(actions);
+
+                // Hier eben begonnen (die alte Sitzung ging gerade aus):
+                // die Fristen zaehlen ab ihrem Beginn, nach der Pi-Pause
+                if (_sessionSinceMs != since)
+                    lastTick = _sessionSinceMs;
+            }
         }
 
         const unsigned long spent = millis() - tickStart;
@@ -674,6 +690,18 @@ void Application::executeActions(std::vector<SessionAction>& actions)
             case SessionAction::Kind::PowerOff:
             {
                 const bool on = action.kind == SessionAction::Kind::PowerOn;
+
+                // Pi-Pause, falls der ESP den Pi eben erst ausgeschaltet
+                // hat. Vor dem Sichern: ein Reset in der Pause hinterlaesst
+                // so keinen Pi, der als ein gilt und noch aus ist.
+                if (on)
+                {
+                    const unsigned long waited = _piPower.waitMinOff();
+
+                    if (waited > 0)
+                        DebugSerial.printf("[PI] %lu ms Pause vor dem Einschalten (mindestens %lu ms aus)\n",
+                                           waited, Features::PI_MIN_OFF_MS);
+                }
 
                 // Erst sichern, dann pulsen. Ein Reset mitten im Puls
                 // laesst GPIO12 auf den Ruhepegel zurueckfallen und
@@ -1165,6 +1193,19 @@ WakeDecision Application::plan()
         const WakeDecision decision = WakePlan::decide(_state.clock, _state.night,
                                                        _radioOn, _syncFailed);
 
+        const bool wantsSync = decision.kind == WakeKind::SyncNow ||
+                               decision.kind == WakeKind::RestartWithRadio;
+
+        if (wantsSync && syncWaitsForSession())
+        {
+            if (!_syncWaitLogged)
+            {
+                _syncWaitLogged = true;
+                DebugSerial.println("[CLOCK] Abgleich wartet: in dieser Sitzung kann jetzt kein Versuch beginnen");
+            }
+            return decision;
+        }
+
         if (decision.kind == WakeKind::SyncNow)
         {
             syncClock();
@@ -1176,6 +1217,37 @@ WakeDecision Application::plan()
 
         return decision;
     }
+}
+
+// Ein Abgleich haelt die Sitzung bis 15 s an. Nur wenn danach ein
+// Versuch beginnen kann: Uhr bekannt, ein neuer Versuch erlaubt,
+// kein Zitat, das erst nach der Sitzung in die Liste kann, und die
+// Sitzung nimmt den Auftrag an. Geprueft wird wie in
+// beginNightAttempt nach markAttempt, das in einer neuen Nacht den
+// Status zuruecksetzt; der Auftrag bleibt danach unveraendert.
+// RestartWithRadio dient nur dem Abgleich und wartet ebenso.
+
+bool Application::syncWaitsForSession()
+{
+    if (!_session.active())
+        return false;
+
+    NightData& night = _state.night;
+
+    if (!_state.clock.valid || !WakePlan::mayStartAttempt(night, _state.clock))
+        return true;
+
+    if (night.pendingWrite && !listAllowed())
+        return true;
+
+    const NightData before = night;
+
+    WakePlan::markAttempt(night, _state.clock);
+
+    const bool takes = _session.canRequestQuote();
+
+    night = before;
+    return !takes;
 }
 
 // M3-a: WLAN nur zum Abgleich, hoechstens 15 s. Das Portal gibt es
@@ -1208,6 +1280,10 @@ void Application::syncClock()
         DebugSerial.println("[CLOCK] Abgleich gescheitert, weiter nach eigener Uhr");
         return;
     }
+
+    // Die eigene Uhr erst um die Dauer des Abgleichs nachfuehren,
+    // sonst wiche sie im Log um diese Zeit zu wenig ab
+    advanceClock();
 
     const bool wasValid = _state.clock.valid != 0;
     const uint32_t own = _state.clock.utc;
@@ -1300,18 +1376,14 @@ Application::NightStart Application::beginNightAttempt(std::vector<SessionAction
     {
         night = before;
 
-        if (!_nightWaitLogged)
+        if (!_refusedLogged)
         {
-            _nightWaitLogged = true;
+            _refusedLogged = true;
             DebugSerial.printf("[NIGHT] Auftrag wartet: die Sitzung nimmt in %s keinen an\n",
                                stateName(_state.session.state));
         }
         return NightStart::Ignored;
     }
-
-    // Die Fristen der neuen Sitzung zaehlen ab jetzt
-    if (newSession)
-        _sessionSinceMs = millis();
 
     // Ohne Sitzung ist der Pi noch aus (PowerOn folgt unten); in einer
     // Sitzung NACHT nutzt er den Bus nicht. Von Hand gilt der Vortag
@@ -1328,6 +1400,10 @@ Application::NightStart Application::beginNightAttempt(std::vector<SessionAction
     saveState();
 
     executeActions(actions);
+
+    // Die Fristen der neuen Sitzung zaehlen ab jetzt, nach der Pi-Pause
+    if (newSession)
+        _sessionSinceMs = millis();
 
     return NightStart::Started;
 }
@@ -1400,6 +1476,11 @@ bool Application::writePendingQuote()
 
     night.pendingWrite = 0;
     setField(night.yesterday, sizeof(night.yesterday), quote);
+
+    // Ein frueheres StoreFailed ist damit behoben: das Zitat steht
+    // in der Liste wie nach einer gewoehnlichen Nacht
+    if (night.result == NightResult::StoreFailed)
+        night.result = NightResult::Ok;
 
     DebugSerial.printf("[NIGHT] Zitat %s vorne in der Liste%s\n", date.c_str(),
                        there ? " (stand schon dort)" : "");

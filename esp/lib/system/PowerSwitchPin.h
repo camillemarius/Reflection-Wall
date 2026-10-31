@@ -10,4 +10,5 @@ public:
     bool readIdle() override;
     void drive(bool high) override;
     void waitMs(unsigned long ms) override;
+    unsigned long nowMs() override;
 };

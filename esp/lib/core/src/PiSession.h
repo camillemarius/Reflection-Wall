@@ -72,6 +72,8 @@ public:
     // Auftrag der Nacht in dieser Sitzung (M4-a), nur in EINSCHALTEN und BETRIEB.
     // Datum und Vortag setzt die Application vorher. true: neuer Auftrag (Wanted).
     bool requestQuote();
+    // Naehme requestQuote den Auftrag jetzt an? Dieselben Bedingungen, ohne etwas zu aendern.
+    bool canRequestQuote() const;
     void onButton(int button, std::vector<SessionAction>& out);           // Tabelle 5.2, ausser Off; NACHT: N2, N3
     void onLink(const LinkEvent& event, std::vector<SessionAction>& out); // Antworten sofort als Reply
     void onTick(unsigned long elapsedMs, bool linkBusy, std::vector<SessionAction>& out);  // nur hier Send

@@ -13,7 +13,7 @@ pio device monitor      # serielle Konsole, 74880 Baud
 
 **Erstes Flashen dieser Firmware (Mitternacht):** Der Zustand im RTC-Speicher hat ein neues Format (`MAGIC` „RWL4“, dazu Uhr und Auftrag der Nacht). Der erste Start nach dem Flashen gilt deshalb als Kaltstart: Der ESP hält den Pi für aus, kennt die Uhrzeit nicht und gleicht sie zuerst ab. Wie in Teil 2 macht man die Wand vor dem ersten Flashen kurz stromlos; das Flipflop der Speisung steht dann wieder auf aus. Den Pi fährt man davor am besten selbst herunter. Sonst schaltet der erste BT2 oder der erste Auftrag der Nacht den Pi hart aus: Der ESP will ihn einschalten, und der Puls kippt die Speisung auf aus.
 
-**OTA:** Zurzeit nicht nutzbar. Kein Code startet OTA: `OtaManager::begin` ruft keine Stelle auf. WLAN schaltet nur `TimeSync` ein, für den Abgleich der Uhr (siehe „Uhr und Nacht“). Darum haben die Zeilen unter `#OTA` in `platformio.ini` und die VS-Code-Aufgabe „Upload ESP + Telnet“ heute keine Wirkung. Geflasht wird nur über USB.
+**OTA:** Zurzeit nicht nutzbar. Kein Code startet OTA: Keine Stelle ruft `OtaManager::begin` auf. WLAN schaltet nur `TimeSync` ein, für den Abgleich der Uhr (siehe „Uhr und Nacht“). Darum haben die Zeilen unter `#OTA` in `platformio.ini` und die VS-Code-Aufgabe „Upload ESP + Telnet“ heute keine Wirkung. Geflasht wird nur über USB.
 
 ## Ablauf im Normalbetrieb
 
@@ -93,7 +93,7 @@ Jede Nacht holt der ESP ein neues Zitat vom Pi und schreibt es vorne in die List
 - WLAN und NTP dauern höchstens 15 s (`TimeSync::sync` mit 14 s). Sonst bleibt das Funkteil aus.
 - Gelingt der Abgleich um Mitternacht nicht, läuft der Auftrag nach der eigenen Uhr. Der Pi braucht für die KI aber Internet; meist folgt ein Fehler und der nächste Termin.
 
-**Funk.** Ob das Funkteil beim Aufwachen bereit ist, legt jede Schlafstrecke fest. Nur die Strecke, die um Mitternacht endet, und die Strecken ohne bekannte Uhr wecken mit Funk (`WAKE_RF_DEFAULT`), alle anderen ohne (`WAKE_RF_DISABLED`, spart rund 70 mA und 200 ms Bootzeit). Braucht der ESP den Abgleich und hat keinen Funk, schläft er 1 ms und startet mit Funk neu. Die Anzeige behält dabei ihren Inhalt, eine Sitzung macht danach weiter. In einer Sitzung HAND um Mitternacht hält der Abgleich die Sitzung bis 15 s an.
+**Funk.** Ob das Funkteil beim Aufwachen bereit ist, legt jede Schlafstrecke fest. Nur die Strecke, die um Mitternacht endet, und die Strecken ohne bekannte Uhr wecken mit Funk (`WAKE_RF_DEFAULT`), alle anderen ohne (`WAKE_RF_DISABLED`, spart rund 70 mA und 200 ms Bootzeit). Braucht der ESP den Abgleich und hat keinen Funk, schläft er 1 ms und startet mit Funk neu. Die Anzeige behält dabei ihren Inhalt, eine Sitzung macht danach weiter. In einer Sitzung HAND um Mitternacht hält der Abgleich die Sitzung bis 15 s an. Das geschieht nur, wenn die Uhr bekannt ist und die Sitzung den Auftrag danach annimmt; sonst warten der Abgleich und der Neustart mit Funk bis nach der Sitzung.
 
 **Einrichtungsportal.** Hat der ESP nach einem Kaltstart keine WLAN-Zugangsdaten, öffnet er vor dem ersten Abgleich 3 min lang das Portal: WLAN `ReflectionWall`, Webseite unter `192.168.4.1`. Dort trägt man das WLAN ein; die Zugangsdaten bleiben im Flash. Sonst öffnet er das Portal nie.
 
@@ -107,7 +107,9 @@ Jede Nacht holt der ESP ein neues Zitat vom Pi und schreibt es vorne in die List
 4. Ist das Zitat da, gilt die Nacht als gelungen. In der Nacht fährt der ESP den Pi dann herunter; eine Sitzung von Hand läuft weiter.
 5. Ist der Pi aus, schreibt der ESP das Zitat mit dem Datum der Nacht vorne in die Liste. Das Datum ist das Ortsdatum um Mitternacht: die Nacht vom 1. auf den 2. Juli heisst `2026-07-02`.
 
-Gelingt das Schreiben nicht, bleibt das Zitat im RTC-Speicher. Der ESP versucht es bei jedem Wecken wieder, solange der Pi aus ist. Kommt die nächste Nacht, bevor es geklappt hat, fällt deren Versuch aus (Ergebnis `StoreFailed`), damit das alte Zitat nicht verloren geht.
+Gelingt das Schreiben nicht, bleibt das Zitat im RTC-Speicher. Der ESP versucht es bei jedem Wecken wieder, solange der Pi aus ist. Kommt die nächste Nacht, bevor es geklappt hat, fällt deren Versuch aus (Ergebnis `StoreFailed`), damit das alte Zitat nicht verloren geht. Gelingt das Schreiben später, steht im Log wieder `Ok`.
+
+**Pi-Pause.** Hat der ESP den Pi eben erst ausgeschaltet, etwa am Ende einer Sitzung kurz nach einem Termin, schaltet er ihn erst wieder ein, wenn er 5 s aus war (`Features::PI_MIN_OFF_MS`, vorläufig, am Gerät zu prüfen).
 
 **Kaltstart in der Nacht.** Kommt der Strom zurück, liest der ESP die Liste einmal (der Pi ist dann aus). Das Datum des neuesten Eintrags sagt, ob das Zitat dieser Nacht schon da ist. Fehlt es, startet er den Auftrag gleich nach dem Abgleich. Die Termine, die schon vorbei sind, zählen als verbraucht: Um 01:30 bleibt nach einem Fehlversuch nur noch 02:00.
 

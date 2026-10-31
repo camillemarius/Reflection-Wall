@@ -385,10 +385,15 @@ void PiSession::startNight(Out& out)
 }
 
 // Laeuft schon ein Auftrag oder ist das Zitat da, beginnt kein neuer.
-bool PiSession::requestQuote()
+bool PiSession::canRequestQuote() const
 {
     if (m_d.state != SessionState::Starting && m_d.state != SessionState::Running) return false;
-    if (m_n.status == NightStatus::Wanted || m_n.status == NightStatus::Got) return false;
+    return m_n.status != NightStatus::Wanted && m_n.status != NightStatus::Got;
+}
+
+bool PiSession::requestQuote()
+{
+    if (!canRequestQuote()) return false;
     m_n.status = NightStatus::Wanted;
     m_n.rejects = 0;
     m_n.result = NightResult::None;

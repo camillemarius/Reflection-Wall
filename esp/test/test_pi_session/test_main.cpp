@@ -1341,6 +1341,46 @@ void test_request_quote_only_in_starting_or_running()
     TEST_ASSERT_EQUAL_MEMORY(&before, &n, sizeof n);
 }
 
+// Die Abfrage sagt in jedem Zustand und Status dasselbe wie
+// requestQuote und aendert dabei nichts
+static void checkCanRequest(PiSession& s, bool stateTakes)
+{
+    const PiSession& c = s;
+    const NightStatus all[] = {NightStatus::Idle, NightStatus::Failed,
+                               NightStatus::Wanted, NightStatus::Got};
+    for (NightStatus st : all)
+    {
+        n.status = st;
+        const NightData nb = n;
+        const SessionData db = d;
+        const bool expected = stateTakes && (st == NightStatus::Idle || st == NightStatus::Failed);
+        TEST_ASSERT_EQUAL(expected, c.canRequestQuote());
+        TEST_ASSERT_EQUAL_MEMORY(&nb, &n, sizeof n);
+        TEST_ASSERT_EQUAL_MEMORY(&db, &d, sizeof d);
+        TEST_ASSERT_EQUAL(expected, s.requestQuote());
+    }
+}
+
+void test_can_request_quote_matches_request_quote()
+{
+    std::strcpy(n.date, "2026-10-26");
+    PiSession s(d, n);
+    checkCanRequest(s, false);                     // AUS
+    s.startNight(out);
+    checkCanRequest(s, true);                      // EINSCHALTEN
+    PiSession::reset(d); toRunning(s);
+    checkCanRequest(s, true);                      // BETRIEB
+    n.status = NightStatus::Idle;
+    s.onLink(ev(K::Request, "MODE", "RADAR"), out);
+    TEST_ASSERT_STATE(RadarDebug);
+    checkCanRequest(s, false);
+    PiSession::reset(d); out.clear(); toShuttingDown(s);
+    checkCanRequest(s, false);                     // HERUNTERFAHREN
+    s.onLink(ev(K::Response, "OK"), out);
+    TEST_ASSERT_STATE(Halting);
+    checkCanRequest(s, false);                     // HALT-WARTEN
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -1410,5 +1450,6 @@ int main(int, char**)
     RUN_TEST(test_bt2_at_night_starting_becomes_hand);
     RUN_TEST(test_other_buttons_at_night_do_nothing);
     RUN_TEST(test_request_quote_only_in_starting_or_running);
+    RUN_TEST(test_can_request_quote_matches_request_quote);
     return UNITY_END();
 }
