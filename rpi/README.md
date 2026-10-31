@@ -78,7 +78,7 @@ Jede Nacht schaltet der ESP den Pi ein (`SESSION|NACHT`) und schickt `GET|QUOTE|
 - `quote_fits` prüft: 1 bis 96 erlaubte Zeichen, und der Text passt in die vier Zeilen der Wand.
 - Passt eine Antwort nicht, fragt der Pi noch einmal. Er nimmt höchstens 3 Antworten.
 
-`app/config/.thema_zuletzt` merkt sich das Thema der letzten gelungenen Nacht. Ist das Thema heute ein anderes, vergisst die KI den Gedanken von gestern und beginnt neu. Die Datei wird nur nach einem gelungenen Zitat geschrieben.
+`app/config/.thema_zuletzt` merkt sich das Thema der letzten gelungenen Nacht. Ist das Thema heute ein anderes, vergisst die KI den Gedanken von gestern und beginnt neu. Die Datei wird nur nach einem gelungenen Zitat geschrieben. Scheitert das Schreiben, etwa auf einer nur lesbaren SD-Karte, steht das im Log, und das Zitat gilt trotzdem.
 
 Der Pi antwortet mit einer dieser Zeilen:
 
@@ -86,10 +86,10 @@ Der Pi antwortet mit einer dieser Zeilen:
 |---|---|
 | `QUOTE\|<Text>` | das Zitat |
 | `ERROR\|ZU_LANG` | alle 3 Antworten waren zu lang oder unbrauchbar |
-| `ERROR\|KI` | Fehler der KI, oder die Rechnung warf eine Ausnahme |
+| `ERROR\|KI` | Fehler der KI (auch „Leere Antwort“), kein Rechner für das Zitat angeschlossen, oder die Rechnung warf eine Ausnahme |
 | `ERROR\|BAD_GET` | `GET` ohne `QUOTE\|` in den Daten |
 
-Das Zitat rechnet ein eigener Thread (`app/ui/link_dispatch.py`). Tasten beantwortet der Pi währenddessen weiter. Zählen darf nur das neueste `GET`. In einer Sitzung `NACHT` schreibt der Pi die Anzeige nie und beendet die Sitzung nie selbst. Sie endet mit dem `SHUTDOWN` des ESP.
+Das Zitat rechnet ein eigener Thread (`app/ui/link_dispatch.py`). Tasten beantwortet der Pi währenddessen weiter. Zählen darf nur das neueste `GET`. Jede Taste setzt den ESP zurück; ein offenes `GET` sendet er danach noch einmal, mit neuer Nummer. Rechnet der Thread noch, geht seine Antwort an dieses neue `GET`. Ist er schon fertig, bekommt es dasselbe Zitat ohne zweite KI-Runde. Gemerkt bleibt nur ein Zitat, kein `ERROR`, und nur bis zum Ende der Sitzung. In einer Sitzung `NACHT` schreibt der Pi die Anzeige nie und beendet die Sitzung nie selbst. Sie endet mit dem `SHUTDOWN` des ESP.
 
 ## Verbindung zum ESP (`app/link`)
 

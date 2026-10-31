@@ -89,7 +89,7 @@ Jede Nacht holt der ESP ein neues Zitat vom Pi und schreibt es vorne in die List
 **Uhr.** Die Uhr zählt UTC-Sekunden im RTC-Speicher. Bei jedem Wecken zählt sie die geplante Schlafstrecke ganz dazu, auch wenn eine Taste oder der Radar den ESP früher geweckt hat (N1). Wach zählt sie die verstrichene Zeit bei jedem Sichern dazu. Die Uhr geht darum höchstens vor, nie nach. Genau stellt sie nur ein Abgleich per NTP (`pool.ntp.org`, `time.nist.gov`):
 
 - Der ESP gleicht vor dem Auftrag um Mitternacht ab, wenn der letzte Abgleich älter als 15 min ist oder ihn eine Taste seither früher geweckt hat. Ist es danach noch vor 00:00, schläft er den Rest.
-- Nach einem Kaltstart kennt er die Zeit nicht. Er gleicht beim ersten Durchlauf ab, und bis das gelingt, bei jedem Wecken. Dazwischen schläft er Strecken von 3 h, und die Nacht fällt aus (Ergebnis `NoClock`).
+- Nach einem Kaltstart kennt er die Zeit nicht. Er gleicht beim ersten Durchlauf ab, und bis das gelingt, bei jedem Wecken nach Zeitplan, nicht nach einem Tastendruck (Entscheid B vom 2026-10-31): Eine Taste wartet so nicht 14 s auf das WLAN. Dazwischen schläft er Strecken von 3 h, und die Nacht fällt aus (Ergebnis `NoClock`).
 - WLAN und NTP dauern höchstens 15 s (`TimeSync::sync` mit 14 s). Sonst bleibt das Funkteil aus.
 - Gelingt der Abgleich um Mitternacht nicht, läuft der Auftrag nach der eigenen Uhr. Der Pi braucht für die KI aber Internet; meist folgt ein Fehler und der nächste Termin.
 
@@ -115,7 +115,7 @@ Gelingt das Schreiben nicht, bleibt das Zitat im RTC-Speicher. Der ESP versucht 
 
 **Log.** Bei jedem Wecken stehen die Uhr (`[CLOCK]`) und das Ergebnis der Nacht im Log (`[NIGHT] Ergebnis …`): `Ok` oder der Grund, `NoReady` (kein `READY`), `NoAnswer` (keine Antwort), `Error` (`ERROR` vom Pi), `Rejected` (drei abgelehnte Zitate), `SessionEnded` (Sitzung vorher beendet), `NoClock` (Uhr unbekannt), `StoreFailed` (Liste nicht geschrieben).
 
-**Testschalter `NIGHT_TEST`.** In `lib/config/features.h` steht `Features::NIGHT_TEST = false`. Auf `true` gestellt, stellt der erste Abgleich nach einem Kaltstart die Uhr so, dass in 120 s Mitternacht ist (`NIGHT_TEST_LEAD_S`). Jeder spätere Abgleich behält diese Verschiebung bis zum nächsten Kaltstart. So läuft der Auftrag der Nacht kurz nach dem Einschalten, und die Termine 01:00 und 02:00 folgen nach der verschobenen Uhr. Solange der Schalter an ist, steht bei jedem Wecken `NIGHT_TEST AN` im Log. Nach dem Test wieder auf `false` stellen und neu flashen.
+**Testschalter `NIGHT_TEST`.** In `lib/config/features.h` steht `Features::NIGHT_TEST = false`. Auf `true` gestellt, stellt der erste Abgleich nach einem Kaltstart die Uhr so, dass in 120 s Mitternacht ist (`NIGHT_TEST_LEAD_S`). Jeder spätere Abgleich behält diese Verschiebung bis zum nächsten Kaltstart. So läuft der Auftrag der Nacht kurz nach dem Einschalten, und die Termine 01:00 und 02:00 folgen nach der verschobenen Uhr. Solange der Schalter an ist, steht bei jedem Wecken `NIGHT_TEST AN` im Log. Ein negativer Vorlauf stellt die Uhr hinter das falsche Mitternacht: Mit `NIGHT_TEST_LEAD_S = -5400` zeigt sie nach dem ersten Abgleich 01:30, für den Kaltstart in der Nacht (Task 10, Schritt 7). Nach dem Test wieder auf `false` und 120 stellen und neu flashen.
 
 ## Zitate im FRAM
 

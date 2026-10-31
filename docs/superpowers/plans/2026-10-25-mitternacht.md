@@ -70,7 +70,7 @@ Dazu kommen aus `docs/superpowers/specs/2026-10-23-menue-und-anwendungen-design.
 - **R11 `TimeSync` statt `WifiController`:** Der ungenutzte `WifiController` hat keine Fristen. Er wird durch `TimeSync` ersetzt. `OtaManager` bleibt, wie er ist.
 - **R12 Weckgrund ohne Radar:** Mit `RADAR_INSTALLED = false` beachtet `WakeupReason` INT_HLK nicht mehr. Heute meldet er ein Timer-Wecken sonst als `INT_HLK`, weil der Pull-up die Leitung HIGH hält.
 - **R13 Früh geweckt (N1):** Als „vor der Zeit“ gilt jedes Wecken ausser `TIMER` und `POWER_ON`. Die geplante Strecke zählt in jedem Fall ganz. Nur ein Wecken vor der Zeit macht die Uhr „ungenau“.
-- **R14 Uhr unbekannt:** Nach einem Kaltstart ohne gelungenen Abgleich schläft der ESP Strecken von 3 h mit Funk und versucht bei jedem Wecken abzugleichen. Bis dahin lässt er die Nacht aus (M3-a).
+- **R14 Uhr unbekannt:** Nach einem Kaltstart ohne gelungenen Abgleich schläft der ESP Strecken von 3 h mit Funk und versucht bei jedem Wecken nach Zeitplan (nicht bei einem Tastendruck) abzugleichen (Entscheid B des Owners vom 2026-10-31). Bis dahin lässt er die Nacht aus (M3-a).
 - **R15 Ergebnis der Nacht:** `NightResult` merkt sich `Ok` oder den Grund und kommt bei jedem Wecken ins Log (§9 „Fehler in der Nacht“). Die Gründe: `NoReady`, `NoAnswer`, `Error`, `Rejected`, `SessionEnded`, `NoClock`, `StoreFailed`.
 - **R16 Abgleich scheitert um Mitternacht:** Dann läuft der Auftrag nach der eigenen Uhr (§13 „WLAN fehlt um Mitternacht“), ohne weiteren Abgleich in diesem Durchlauf. Kostet: Ging die Uhr nach N1 vor, kann der Auftrag vor dem echten Mitternacht laufen und das Zitat das Datum des nächsten Tages tragen.
 
@@ -83,7 +83,7 @@ Dazu kommen aus `docs/superpowers/specs/2026-10-23-menue-und-anwendungen-design.
 2. **Viele Resets am Abend:** Die Uhr geht höchstens vor. Der Abgleich vor 00:00 korrigiert sie, und Mitternacht wird nie verschlafen (N1, R2). Test in Task 2.
 3. **Kaltstart in der Nacht** (Strom kommt um 01:30 zurück): Abgleich, dann das Datum des neuesten Listeneintrags vergleichen und den Auftrag sofort starten, wenn das Zitat fehlt. Test in Task 2.
 4. **Reset während `GET` offen ist:** `GET` geht noch einmal raus, ohne als Ablehnung zu zählen. Auf dem Pi läuft nur ein Thread, und die Antwort geht an das neueste `GET`. Tests in Task 4 und Task 8.
-5. **BT2 in der Nacht, während `GET` läuft:** `PI STARTET` erscheint sofort, `SESSION|HAND` geht erst nach der Antwort, das Zitat zählt, und der Pi wechselt ins Menü. Tests in Task 4 und Task 8.
+5. **BT2 in der Nacht, während `GET` läuft:** BT2 setzt den ESP zurück, das offene `GET` verfällt. `PI STARTET` erscheint sofort, `SESSION|HAND` geht zuerst, dann sendet der ESP das `GET` noch einmal mit neuer Nummer. Der Pi gibt es dem Arbeits-Thread, der noch rechnet, oder antwortet mit dem Zitat, das er schon hat. Das Zitat zählt, und der Pi wechselt ins Menü. Tests in Task 4 und Task 8, seit der Schlussprüfung in dieser Reihenfolge und auf dem echten `PiLink`.
 
 ---
 
@@ -164,7 +164,7 @@ Dazu kommen aus `docs/superpowers/specs/2026-10-23-menue-und-anwendungen-design.
 
   | Lage | Entscheid |
   |---|---|
-  | Uhr unbekannt | `radioOn` und nicht `syncFailed` → `SyncNow`; sonst `Sleep(10 800, radio)` (R14) |
+  | Uhr unbekannt | `radioOn`, nicht `syncFailed` und nicht `earlyWake` (Wecken vor der Zeit) → `SyncNow`; sonst `Sleep(10 800, radio)` (R14) |
   | 00:00 ≤ Ortszeit < 03:00, `doneDate` ≠ heute, Versuche < 3, Versuch 0 fällig, `freshSync` falsch | `syncFailed` → `StartNight` nach eigener Uhr (§13, R16); sonst `radioOn` → `SyncNow`; sonst `RestartWithRadio` (R2) |
   | gleiches Fenster, Termin des nächsten Versuchs erreicht (bei Versuch 0 mit `freshSync`) | `StartNight` |
   | gleiches Fenster, Termin noch nicht erreicht | `Sleep(bis zum Termin, radio = Versuch 0)` |
@@ -265,7 +265,8 @@ Dazu kommen aus `docs/superpowers/specs/2026-10-23-menue-und-anwendungen-design.
   | `test_error_answer_fails` ; `test_get_expired_fails` | |
   | `test_reset_while_get_open_resends_without_counting` | Review Focus 4 |
   | `test_session_end_while_wanted_records_reason` | `NoReady`, `NoAnswer`, `SessionEnded` |
-  | `test_bt2_at_night_running_becomes_hand_after_get` | Review Focus 5: `Show PI STARTET` sofort, `SESSION\|HAND` erst nach der Antwort auf `GET`, Zitat zählt |
+  | `test_bt2_at_night_running_becomes_hand_after_get` | N3 ohne Reset, innerhalb eines Durchlaufs: `Show PI STARTET` sofort, `SESSION\|HAND` nach der Antwort auf `GET`, Zitat zählt |
+  | `test_bt2_at_night_with_get_open_after_reset_sends_hand_then_get_again` | Review Focus 5, wie auf dem Gerät: BT2 setzt den ESP zurück, `resume()` verwirft das offene `GET`; `SESSION\|HAND` zuerst, dann das `GET` noch einmal mit neuer Nummer; `QUOTE` → Got, Grund Hand, kein Herunterfahren (seit der Schlussprüfung) |
   | `test_bt2_at_night_starting_becomes_hand` | N3 |
   | `test_other_buttons_at_night_do_nothing` | N2 |
   | `test_request_quote_only_in_starting_or_running` | |
@@ -402,5 +403,100 @@ Dazu kommen aus `docs/superpowers/specs/2026-10-23-menue-und-anwendungen-design.
 4. Während der Test-Nacht vor der Wand stehen → Wand an; das neue Zitat erscheint sofort (N2, Z11).
 5. BT2 während der Test-Nacht → `PI STARTET`, Menü; das Zitat steht danach in der Liste (N3).
 6. Nach mehreren Tastendrücken am Abend (Build ohne Test): Abgleich vor Mitternacht im Log, Auftrag um 00:00 (N1).
-7. Stromunterbruch um 01:30 der Testuhr → Auftrag sofort nach dem Start (Review Focus 3).
-8. Danach `NIGHT_TEST = false` flashen.
+7. Kaltstart in der Nacht (Review Focus 3) mit einem eigenen Testbuild: `NIGHT_TEST = true` und `NIGHT_TEST_LEAD_S = -5400`. Mit dem Vorlauf von 120 s ginge es nicht, denn ein Stromunterbruch ist ein Kaltstart, und der erste Abgleich danach stellt die Uhr wieder auf 23:58. Mit −5400 zeigt sie nach dem Abgleich 01:30, 90 min nach dem falschen Mitternacht → Auftrag sofort nach dem Start. Die Liste darf dabei keinen Eintrag mit dem falschen Datum einer früheren Testnacht haben; sonst gilt die Nacht als erledigt und läuft nicht.
+8. Danach `NIGHT_TEST = false` und `NIGHT_TEST_LEAD_S = 120` flashen.
+
+## Stand nach der Umsetzung (2026-10-31)
+
+### Gebaut
+
+| Task | Was | Commits |
+|---|---|---|
+| 1 | Ortszeit Zürich aus UTC (`CivilTime`) | 0750568 |
+| 2 | Uhr und Weckplan (`Clock`, `WakePlan`); ein später Versuch zählt die verpassten Termine (`markAttempt`) | 694e535, a68df1d |
+| 3 | Zitat prüfen, mit gemeinsamen Fällen für ESP und Pi | bdf6118 |
+| 4 | `PiSession` holt das Zitat der Nacht (`GET`, N2, N3) | 00edbec |
+| 5 | Uhr und Nacht im RTC-Speicher, Weckgrund ohne Radar, `TimeSync` | d5f3c78 |
+| 6 | Nacht-Auftrag, Uhr und Timer-Schlaf in der `Application`; README; Nachbesserung nach der Prüfung | 09f3995, cfdfa28, b2cb44f |
+| 7 | Zitat der Nacht von der KI (`make_night_quote`) | 0ddce50 |
+| 8 | `GET` auf dem Pi; von der Nacht ins Menü | d1057b1 |
+| 9 | README und Hauptentwurf | 9c42def |
+| 10 | Abnahme am Gerät | offen bis Teil 0 |
+| Abschluss | Korrekturen aus der Schlussprüfung: N3 in der Reihenfolge des Geräts getestet, auf beiden Seiten (I1); der Pi merkt das Zitat der Sitzung (Fall C); „Leere Antwort“ ist ein Fehler der KI (I2); das Zitat gilt, auch wenn `.thema_zuletzt` nicht geschrieben werden kann (M5); `NIGHT_TEST_LEAD_S` mit Vorzeichen (M6); zwei Werte in §12 (M8); Entscheid B zu M4; kleinere Punkte aus Task 7 und 8 | 528536e, d29b173 und der Commit mit dieser Zeile |
+
+### Entscheide während der Umsetzung
+
+Jeder Entscheid sagt, was gilt, und was es kostet, wenn er falsch ist.
+
+- **Reihenfolge der Tasks:** 1, 2, 3, 5, 4, 6, 7, 8, 9. Task 5 bringt `_state.night`; erst danach kann Task 4 den Konstruktor von `PiSession` ändern, ohne den Build für esp12e zu brechen. Kostet: nichts.
+- **`WAKE_RF_ENABLED` bis Task 6:** Task 5 bringt die neuen Schalter, Task 6 entfernt den alten mit seiner letzten Verwendung. Kostet: eine veraltete Konstante für einen Task.
+- **`markAttempt`:** Eine neue Nacht setzt Status, Versuche, Ablehnungen und Ergebnis zurück und setzt das Datum auf heute. Ein später Versuch verbraucht die Termine, die schon vorbei sind (§9). Kostet: ein Helfer und seine Tests.
+- **`markAttempt` nur bei einem neuen Versuch:** Die `Application` ruft es auf `StartNight` nur, wenn das Datum neu ist oder der Status Idle oder Failed. Kostet: sonst ein falsch gezählter Versuch.
+- **Zitat, das noch geschrieben werden muss:** Steht es noch aus, wenn die nächste Nacht beginnt, schreibt der ESP es zuerst. Scheitert das wieder, fällt der Versuch dieser Nacht aus (`StoreFailed`), damit das alte Zitat nicht überschrieben wird. Geschrieben wird mit dem Datum seiner eigenen Nacht (`doneDate`). In einer Sitzung von Hand wartet das bis zu ihrem Ende. Kostet: Ein kaputtes FRAM kostet Nächte, bis es repariert ist; eine Sitzung über 03:00 verliert dann die Nacht.
+- **Abgleich höchstens 14 s:** So bleiben Verbinden, NTP und Ausschalten in den 15 s von M3-a. Kostet: eine Sekunde weniger für einen langsamen Router.
+- **Text vom Vortag:** Nur ein Listeneintrag, der `QuoteCheck::acceptable` besteht, wird zu `yesterday`; sonst beginnt eine neue Kette. Kostet: eine abgebrochene Kette nach einem Eintrag von Hand mit Umlaut.
+- **BT2 in der Nacht im Radar-Debug:** nichts. Der Zustand kommt in der Nacht nicht vor. Kostet: nichts.
+- **Abgleich während einer Sitzung:** Nur, wenn die Uhr gültig ist und die Sitzung den Auftrag der Nacht jetzt annähme. Sonst wartet der Abgleich bis nach der Sitzung. Kostet: Der Versuch um 00:00 in einer Sitzung von Hand gleicht ein paar Sekunden später ab.
+- **5 s Pause:** Der Pi bleibt mindestens 5 s aus, bevor der ESP ihn für einen Versuch wieder einschaltet (`PI_MIN_OFF_MS`, vorläufig). Kostet: 5 s späterer Start eines Versuchs gleich nach einer Sitzung.
+- **Nachbesserung von Task 6:** Die Runde nahm fünf kleine Punkte der Prüfung mit, weil sie denselben Code betrafen. Kostet: nichts.
+- **Task 9 auch für das README des Repos** (Owner, 2026-10-31). Kostet: eine Datei mehr im Commit.
+- **I1, BT2 in der Nacht:** Jede Taste setzt den ESP zurück. Ein offenes `GET` verfällt, `SESSION|HAND` geht zuerst, dann das `GET` noch einmal mit neuer Nummer. Die Tests auf beiden Seiten folgen jetzt dieser Reihenfolge, auf dem Pi mit dem echten `PiLink`. Die angenommenen Kosten „kein `BUTTON` und kein `PING`, solange `GET` offen ist“ fallen auf dem Gerät nie an. Kostet: nichts, das sichtbare Verhalten bleibt.
+- **I1, Fall C:** Der Pi merkt sich das Zitat der laufenden Sitzung mit seinem Text vom Vortag. Kommt das `GET` erst, nachdem der Arbeits-Thread fertig ist, bekommt es dieses Zitat, ohne zweite KI-Runde. Ein `ERROR` merkt er sich nicht: ein späterer Versuch in derselben Sitzung fragt neu. Mit `SHUTDOWN` verfällt das Zitat. Kostet: ein gemerkter Text pro Sitzung.
+- **I2:** „Leere Antwort“ von `write_to_ai` gilt wie „Fehler…“ als `ERROR|KI`. Die Chat-Anwendung behält diesen Text. Kostet: nichts.
+- **I3:** nicht in dieser Runde, siehe „Technische Schuld“. Kostet: Ein Fehler in diesen Regeln fällt erst in Task 10 oder in der späteren Runde auf.
+- **M5, M6, M8 und die kleinen Punkte aus Task 7 und 8:** in der Runde der Schlussprüfung. Jeder ist klein.
+- **M1:** wartet auf die Abnahme am Gerät, denn die 5 s sind vorläufig. Startet der Pi nach einer kurzen Pause nicht, kommt die Zeit des letzten Ausschaltens in den RTC-Speicher. Kostet: ein verlorener Termin nach einem Reset durch BT2.
+- **M2, M3, M7:** bleiben offen (unten).
+
+### Entscheid B des Owners zu M4 (2026-10-31)
+
+Kennt der ESP die Zeit nicht, gleicht er nur nach einem Kaltstart oder einem Timer-Wecken ab, nie nach einer Taste. So steht es schon in §9 des Hauptentwurfs („bei jedem Timer-Weckvorgang (höchstens alle 3 h)“); die Zeile M3-a sagt es jetzt auch. Nach einer Taste schläft der Durchlauf am Ende 3 h mit Funk, wie nach einem gescheiterten Abgleich, und das nächste Timer-Wecken gleicht ab. Die Regel steht in `WakePlan::decide` (`earlyWake`), mit nativem Test. Der Abgleich nach dem Kaltstart, das Portal und der frische Abgleich um Mitternacht (R2) bleiben, wie sie sind.
+
+### Technische Schuld (I3)
+
+Die Regeln der Nacht, die vor Datenverlust schützen, stehen in `application.cpp` ohne nativen Test:
+
+- `syncWaitsForSession` mit dem probeweisen `markAttempt` und dem Zurücksetzen danach;
+- `beginNightAttempt`: zuerst das ausstehende Schreiben, `StoreFailed` lässt die Nacht aus, Zurücksetzen, wenn die Sitzung den Auftrag nicht annimmt;
+- nach einem Kaltstart das `doneDate` aus `list.at(0).date`;
+- `writePendingQuote`: kein Eintrag doppelt, ein spätes Gelingen setzt `StoreFailed` auf `Ok` zurück;
+- die Reihenfolge von `resume` und `handleInput` (I1).
+
+Jeder Zweig ist heute richtig, das Risiko ist ein späterer Fehler. Geplant: ein reiner `NightRunner` in `lib/core`, mit Uhr, Daten der Nacht, einer Sicht auf die Sitzung und dem Ergebnis des Speichers als Eingang und Aktionen als Ausgang, und mit nativen Tests für die Fälle oben.
+
+### Offen
+
+**Aus der Schlussprüfung**
+
+- M1: Die 5 s Pause gilt nur innerhalb eines Durchlaufs. Jede Taste setzt den ESP zurück, darum gilt sie für eine Sitzung mit BT2 nicht (anders als eine frühere Notiz zu Task 6 sagte). Auch der Lauf um 00:00 nach einer Sitzung kurz davor schaltet den Pi ohne Pause ein. Siehe den Entscheid oben.
+- M2: Geht eine Antwort verloren (ein Reset, während sie auf der Leitung ist, die Frist von 120 s, ein Stromausfall vor dem Schreiben), ist `.thema_zuletzt` schon geschrieben. Ein späterer Versuch mit neuem Thema setzt dann die alte Kette fort. Fall C deckt der gemerkte Text jetzt ab.
+- M3: BT2 in der Nacht, nachdem die Antwort da ist, tut 30–40 s lang nichts und zeigt nichts. Man muss nach dem Ausschalten noch einmal drücken.
+- M7: Ist das Internet weg, das WLAN aber da, kann `ERROR|KI` nach der Frist von 120 s kommen. Die Nacht steht dann als `NoAnswer` im Log, als hinge der Pi.
+
+**ESP**
+
+- `CivilTime.cpp:117`: Der Zweig, der nie erreicht wird, gibt `utc` zurück; ein Assert oder ein Kommentar fehlt.
+- Keine Tests für den Jahreswechsel um Mitternacht Ortszeit, für Jahre nahe 2100 und für ein Jahr, dessen letzter Tag im März oder Oktober ein Sonntag ist. Ein Literal in `test_main.cpp:242` liest sich schwer.
+- Die Grenze von 900 s in `freshSync` ist nicht getestet. `MAX_ATTEMPTS` zählt zugleich die Termine einer Nacht. Die Bedingung von `markAttempt` (Uhr gültig) steht nirgends. Die Suite prüft keine absolute Zeit.
+- Ein Text nur aus Leerzeichen besteht die Prüfung auf beiden Seiten und bliebe auf der Anzeige leer. Es fehlt ein Fall mit Leerzeichen am Ende. Zwei Fälle heissen unpassend oder doppelt (`only_space_ok_chars`, `sharp_s`).
+- `TimeSync`: `sync()` überzieht um etwa 50 ms, `portal()` um bis zu 15 s. `persistent(false)` bleibt global gesetzt. `<string.h>` für `memset` fehlt.
+- `PiSession`: kein `static_assert`, dass `date` und `doneDate` gleich gross sind; ein überdecktes `n` in `test_button_queue_holds_six_then_logs`; der Schritt `onQuote` in der Nacht ist nicht als frei von Anzeige-Aktionen geprüft; einige Prüfungen sind schwach; das harte Aus nach 10 min `BUSY` bei Wanted ist ungetestet.
+- `RestartWithRadio` in einer Sitzung von Hand liest den Expander ohne Flanke an INT; Regel B warnt den Pi dann nicht, und eine abgeschnittene Übertragung wiederholt der Pi.
+- BT1 in der Nacht zwischen `QuoteReady` und dem Schreiben zeigt Eintrag 1. Ein Absturz vor dem ersten Sichern zählt `plannedS` doppelt. Der Rückfall von 600 s wird nie erreicht. Pro Sitzung steht eine Zeile der Nacht zu viel im Log.
+- Ein spätes Zurücksetzen von `StoreFailed` auf `Ok` kann im Log `Ok` mit dem Status Failed der neuen Nacht zeigen (nur im Log).
+
+**Pi**
+
+- Kein Test für eine Antwort der KI, die kein Text ist. `startswith("Fehler")` fängt auch ein echtes Zitat, das mit „Fehler“ beginnt.
+- `night_quote.py`: Ein Docstring sagt „kuerzen“; die erlaubten Zeichen stehen zweimal da.
+- `PiLink.reply` gibt nur `False` zurück. Das Log einer abgelehnten Antwort nennt darum alle drei möglichen Gründe, nicht den einen.
+
+**Anleitung**
+
+- `README.md:29` vereinfacht, wem der Bus in einer Sitzung von Hand gehört: Der ESP schreibt dort auch seine eigenen Texte (`esp/README.md:78`).
+
+### Prüfen am Gerät (Task 10)
+
+- Die Pause von 5 s (M1): Startet ein Pi 5 im Halt nach 5 s wieder, und nach einer Pause von wenigen Millisekunden?
+- Ist der Funk nach einem Reset von aussen da, während der ESP wach ist (`clock.radio`)?
+- Der Kaltstart um 01:30 mit dem Testbuild (`NIGHT_TEST_LEAD_S = -5400`, Schritt 7).
