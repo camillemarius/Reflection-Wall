@@ -462,22 +462,25 @@ nicht, kommt die Frage zurück zum Owner.
 **RTC-Speicher** (`PersistentState`, überlebt Resets und Deep Sleep, nicht einen
 Stromausfall). Das Layout ändert sich, deshalb neue `MAGIC`.
 
+Der Zustand ist `PersistentState::Data` mit 300 Bytes, `MAGIC` ist „RWL4“
+(`0x52574C34`). Die Felder, wie sie gebaut sind:
+
 | Feld | Inhalt |
 |---|---|
 | `lastExpanderState` | wie heute: Referenz für die Tasten-Auswertung |
-| `wakeCount` | wie heute: Anzahl Weckvorgänge, im Log |
-| `session` | Zustand aus Abschnitt 7 |
-| `piPowered` | ob der ESP die Speisung zuletzt eingeschaltet hat |
-| `sessionSeconds` | verstrichene Sitzungszeit, in jedem Takt der Sitzung gesichert (etwa alle 20 ms); nur noch fürs Log, die 3 h entfallen (Teil 4 D1) |
-| `pendingShutdown` | BT2 während RADAR-DEBUG gedrückt |
-| `display` | aus / an / wird geschrieben |
-| `shownIndex`, `shownDate` | Platz und Datum des Zitats, das gerade zu sehen ist (T2-a); massgeblich ist das Datum, der Platz hilft bei gleichen Daten |
+| `displayState` | aus / an / wird geschrieben |
 | `button1Active` | die BT1-Minute läuft. Sie zählt ab dem Start des Durchlaufs, denn jeder BT1-Druck setzt den ESP zurück |
-| `clockEpoch`, `clockValid` | geschätzte Uhrzeit beim Einschlafen, ob sie aus einem NTP-Abgleich stammt |
-| `sleepSeconds` | geplante Schlafdauer, zum Weiterzählen |
-| `nightAttempts`, `nightResult` | Versuche und Ergebnis der letzten Nacht |
-| `nightQuote` | das geprüfte Zitat der Nacht, bis es nach dem Ausschalten des Pi in der Liste steht (P1-a) |
-| `txSeq`, `rxSeq` | laufende Nummern der Verbindung (Z1) |
+| `wakeCount` | wie heute: Anzahl Weckvorgänge, im Log |
+| `shownIndex`, `shownDate` | Platz und Datum des Zitats, das gerade zu sehen ist (T2-a); massgeblich ist das Datum, der Platz hilft bei gleichen Daten |
+| `session` (`SessionData`, 28 Bytes) | Zustand aus Abschnitt 7: `state`, `reason`, `awaiting`, `flags`, `missedPings`, `buttonCount`, `buttons[6]`, `inStateMs`, `sincePingMs`, `sinceBusyMs`, `sessionMs`. Das Flag `PendingShutdown` in `flags` ist BT2 während RADAR-DEBUG. `sessionMs` ist die verstrichene Sitzungszeit (im Entwurf `sessionSeconds`), in jedem Takt der Sitzung gesichert (etwa alle 20 ms); nur noch fürs Log, die 3 h entfallen (Teil 4 D1) |
+| `piPowered` | ob der ESP die Speisung zuletzt eingeschaltet hat |
+| `txSeq`, `rxSeq`, `rxValid` | laufende Nummern der Verbindung (Z1): nächste eigene Nummer, letzte Nummer des Pi, ob sie gilt |
+| `clock` (`ClockData`, 24 Bytes) | `utc` (UTC-Sekunden seit 1970), `plannedS` (geplante Strecke des letzten Deep Sleep), `lastSyncUtc` (`utc` beim letzten Abgleich), `testOffsetS` (Verschiebung des Testschalters `NIGHT_TEST`), `ms` (Rest unter einer Sekunde), `valid` (Zeit bekannt, nur durch einen Abgleich), `exact` (seit dem Abgleich nie vor der Zeit geweckt), `radio` (Funk beim nächsten Start) |
+| `night` (`NightData`, 224 Bytes) | `status` (Idle, Wanted, Got, Failed), `attempts` (Versuche der Nacht von `date`), `rejects` (abgelehnte Zitate im laufenden Versuch), `result` (Ergebnis der Nacht), `pendingWrite` (das Zitat fehlt noch in der Liste, P1-a), `date` (Nacht des laufenden Auftrags, `JJJJ-MM-TT`), `doneDate` (Nacht mit Zitat), `yesterday` (neuester Text der Liste, R6), `quote` (das geprüfte Zitat der Nacht, bis es nach dem Ausschalten des Pi in der Liste steht) |
+
+`yesterday` und `quote` sind je 97 Bytes (96 Zeichen und das Ende). `result` ist
+`None`, `Ok`, `NoReady`, `NoAnswer`, `Error`, `Rejected`, `SessionEnded`,
+`NoClock` oder `StoreFailed`.
 
 Das Feld `textIndex` entfällt.
 
