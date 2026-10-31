@@ -62,6 +62,10 @@ class LinkDispatcher:
         self._quote_maker = quote_maker
         self._get_lock = threading.Lock()
         self._newest_get = None  # das neueste GET, solange der Arbeits-Thread rechnet
+        # (Text vom Vortag, ("QUOTE", Text)): das letzte Zitat der Nacht in dieser Sitzung. Ein
+        # ERROR bleibt nicht gemerkt: ein spaeterer Versuch in derselben Sitzung fragt neu.
+        self._night_result = None
+        self._session_over = False  # nach SHUTDOWN oder stop(): kein Ergebnis mehr merken
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -71,6 +75,7 @@ class LinkDispatcher:
         self._thread.start()
 
     def stop(self) -> None:
+        self._end_night_session()
         with self._fallback_lock:  # wartet auf einen laufenden Rueckfall; danach kommt keiner mehr
             self._end.set()
             fallback = self._fallback
@@ -129,41 +134,67 @@ class LinkDispatcher:
     def _get(self, msg) -> None:
         """GET|QUOTE|<Text vom Vortag>: das Zitat rechnet ein Arbeits-Thread, damit BUTTON,
         SESSION und SHUTDOWN weiterlaufen (R10). Kommt GET noch einmal, waehrend er rechnet (neue
-        Nummer nach einem Reset des ESP, R8), startet kein zweiter; die Antwort geht an das
-        neueste GET. Der ESP beachtet ohnehin nur die Antwort auf sein neuestes."""
+        Nummer nach einem Reset des ESP, R8; jede Taste ist ein Reset), startet kein zweiter; die
+        Antwort geht an das neueste GET. Der ESP beachtet ohnehin nur die Antwort auf sein
+        neuestes, und PiLink nimmt nur diese an. Kommt es erst, nachdem er ein Zitat geliefert
+        hat, und mit demselben Text vom Vortag, antwortet der Pi mit diesem Zitat, ohne zweite
+        KI-Runde (Fall C: die Antwort auf das alte GET ging nicht mehr raus)."""
         if not msg.data.startswith(QUOTE_PREFIX):
             self._link.reply(msg, "ERROR", "BAD_GET")
             return
         if self._quote_maker is None:
             self._link.reply(msg, "ERROR", "KI")
             return
+        yesterday = msg.data[len(QUOTE_PREFIX):]
         with self._get_lock:
             running = self._newest_get is not None
-            self._newest_get = msg
+            known = self._night_result
+            if not running and known is not None and known[0] == yesterday:
+                answer = known[1]
+            else:
+                answer = None
+                self._newest_get = msg
             if running:
                 log.info("GET #%02X, waehrend das Zitat noch entsteht: die Antwort geht an "
                          "diese Nummer", msg.seq)
                 return
-            worker = threading.Thread(target=self._answer_get,
-                                      args=(msg.data[len(QUOTE_PREFIX):],),
-                                      name="night-quote", daemon=True)
-            try:
-                worker.start()
-            except RuntimeError:
-                self._newest_get = None  # sonst bliebe jedes weitere GET ohne Antwort
-                log.exception("Arbeits-Thread fuer GET nicht gestartet")
-                self._link.reply(msg, "ERROR", "KI")
+            if answer is None:
+                worker = threading.Thread(target=self._answer_get, args=(yesterday,),
+                                          name="night-quote", daemon=True)
+                try:
+                    worker.start()
+                except RuntimeError:
+                    self._newest_get = None  # sonst bliebe jedes weitere GET ohne Antwort
+                    log.exception("Arbeits-Thread fuer GET nicht gestartet")
+                    answer = ("ERROR", "KI")
+                else:
+                    return
+            else:
+                log.info("GET #%02X: das Zitat dieser Sitzung ist schon da, keine zweite "
+                         "KI-Runde", msg.seq)
+        self._send_get_answer(msg, *answer)
 
     def _answer_get(self, yesterday) -> None:
         """Arbeits-Thread: fragt quote_maker und beantwortet das neueste GET, auch wenn
-        quote_maker wirft (dann ERROR|KI): Ein GET bleibt nie ohne Antwort."""
+        quote_maker wirft (dann ERROR|KI): Ein GET bleibt nie ohne Antwort. Ein Zitat bleibt
+        fuer diese Sitzung gemerkt (_get). Auch nach einer BaseException gilt kein GET mehr als
+        offen; sonst bliebe jedes weitere ohne Antwort."""
+        result = None
         try:
-            command, data = self._quote_maker(yesterday)
-        except Exception:
-            log.exception("Zitat der Nacht nicht erstellt")
-            command, data = "ERROR", "KI"
-        with self._get_lock:  # danach startet ein neues GET einen neuen Thread
-            msg, self._newest_get = self._newest_get, None
+            try:
+                command, data = self._quote_maker(yesterday)
+            except Exception:
+                log.exception("Zitat der Nacht nicht erstellt")
+                command, data = "ERROR", "KI"
+            result = (command, data)
+        finally:
+            with self._get_lock:  # danach startet ein neues GET einen neuen Thread
+                msg, self._newest_get = self._newest_get, None
+                if result is not None and result[0] == "QUOTE" and not self._session_over:
+                    self._night_result = (yesterday, result)
+        self._send_get_answer(msg, *result)
+
+    def _send_get_answer(self, msg, command, data) -> None:
         log.info("Antwort auf GET #%02X: %s|%s", msg.seq, command, data)
         try:
             sent = self._link.reply(msg, command, data)
@@ -171,13 +202,22 @@ class LinkDispatcher:
             log.exception("Antwort auf GET #%02X nicht gesendet", msg.seq)
             return
         if not sent:
-            log.info("Antwort auf GET #%02X nicht gesendet, die Anfrage ist nicht mehr offen",
-                     msg.seq)
+            # PiLink.reply gibt nur False: welcher Grund es war, sieht der Dispatcher nicht
+            log.info("Antwort auf GET #%02X nicht gesendet: PiLink nimmt sie nicht an (die "
+                     "Anfrage ist nicht mehr offen, die Leitung ist an das Radar abgegeben, oder "
+                     "die Antwort laesst sich nicht kodieren)", msg.seq)
+
+    def _end_night_session(self) -> None:
+        """Die Sitzung ist zu Ende (SHUTDOWN oder stop): das gemerkte Ergebnis verfaellt."""
+        with self._get_lock:
+            self._session_over = True
+            self._night_result = None
 
     def _shutdown(self, msg) -> None:
         if self.radar_writing.is_set():
             self._link.reply(msg, "BUSY")
             return
+        self._end_night_session()
         self._stop_signal.set("shutdown")
         if not self._released.wait(self._release_wait_s):
             log.warning("Anzeige nach %.1f s nicht freigegeben", self._release_wait_s)

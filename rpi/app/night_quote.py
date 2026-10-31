@@ -1,12 +1,17 @@
 # night_quote.py
 # Zitat der Nacht: bereinigen und pruefen (dieselbe Pruefung wie QuoteCheck auf dem ESP,
 # gemeinsame Testfaelle in tests/quote_vectors.json).
+import logging
 import re
 
 from app import topics
 from app.driver.display import text_layout
 
+log = logging.getLogger(__name__)
+
 MAX_CHARS = 96
+# So antwortet write_to_ai, wenn auch der Rueckfall ohne Streaming nichts liefert: kein Zitat
+EMPTY_ANSWER = "Leere Antwort"
 
 _UMLAUTS = {
     "ä": "ae", "Ä": "Ae",
@@ -57,8 +62,10 @@ def build_night_messages(topic: str, yesterday: str) -> list:
 def make_night_quote(yesterday: str, ask, config_dir=topics.CONFIG_DIR) -> tuple:
     """Fragt die KI nach dem Zitat der Nacht (hoechstens 3 Antworten).
 
-    Gibt ("QUOTE", Text), ("ERROR", "ZU_LANG") oder ("ERROR", "KI") zurueck.
-    .thema_zuletzt wird nur nach einem gelungenen Zitat geschrieben.
+    Gibt ("QUOTE", Text), ("ERROR", "ZU_LANG") oder ("ERROR", "KI") zurueck. Ein Fehler der
+    KI ("Fehler..." oder "Leere Antwort" von write_to_ai) beendet die Fragen sofort.
+    .thema_zuletzt wird nur nach einem gelungenen Zitat geschrieben; scheitert das Schreiben,
+    gilt das Zitat trotzdem (eine nur lesbare SD-Karte soll nicht jede Nacht scheitern lassen).
     """
     topic = topics.read_daily(config_dir)
     if topic != topics.read_last_daily(config_dir):
@@ -69,10 +76,15 @@ def make_night_quote(yesterday: str, ask, config_dir=topics.CONFIG_DIR) -> tuple
             answer = ask(messages)
         except Exception:
             return ("ERROR", "KI")
-        if not isinstance(answer, str) or answer.startswith("Fehler"):
+        if (not isinstance(answer, str) or answer.startswith("Fehler")
+                or answer.strip() == EMPTY_ANSWER):
             return ("ERROR", "KI")
         text = clean_quote(answer)
         if quote_fits(text):
-            topics.save_last_daily(config_dir, topic)
+            try:
+                topics.save_last_daily(config_dir, topic)
+            except OSError:
+                log.exception("%s nicht geschrieben; das Zitat gilt trotzdem",
+                              topics.LAST_DAILY_FILE)
             return ("QUOTE", text)
     return ("ERROR", "ZU_LANG")

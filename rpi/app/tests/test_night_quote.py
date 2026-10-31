@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from app import night_quote, topics
 from app.tests.vectors import load_vectors
@@ -101,12 +102,35 @@ class MakeNightQuoteTest(unittest.TestCase):
         self.assertEqual(len(ask.calls), 3)
 
     def test_ai_error_string_is_ki(self):
-        ask = FakeAsk("Fehler: Zeitueberschreitung")
+        ask = FakeAsk("Fehler: Zeitueberschreitung", GOOD)
         self.assertEqual(night_quote.make_night_quote("", ask, self.dir), ("ERROR", "KI"))
+        self.assertEqual(len(ask.calls), 1)  # nach einem Fehler der KI keine zweite Frage
 
     def test_ai_exception_is_ki(self):
-        ask = FakeAsk(RuntimeError("kein Netz"))
+        ask = FakeAsk(RuntimeError("kein Netz"), GOOD)
         self.assertEqual(night_quote.make_night_quote("", ask, self.dir), ("ERROR", "KI"))
+        self.assertEqual(len(ask.calls), 1)
+
+    def test_empty_answer_fallback_is_ki(self):
+        # write_to_ai gibt "Leere Antwort" zurueck, wenn auch der Rueckfall nichts liefert. Das
+        # ist kein Zitat: ERROR|KI, keine zweite Frage, und .thema_zuletzt bleibt ungeschrieben.
+        for raw in ("Leere Antwort", "  Leere Antwort\n"):
+            with self.subTest(raw=raw):
+                ask = FakeAsk(raw, GOOD)
+                self.assertEqual(night_quote.make_night_quote("", ask, self.dir), ("ERROR", "KI"))
+                self.assertEqual(len(ask.calls), 1)
+                self.assertFalse((self.dir / topics.LAST_DAILY_FILE).exists())
+
+    def test_failed_topic_write_still_returns_quote(self):
+        # M5: eine nur lesbare SD-Karte darf die Nacht nicht scheitern lassen
+        self.write("thema.txt", "Mut\n")
+        with mock.patch.object(night_quote.topics, "save_last_daily",
+                               side_effect=OSError("Read-only file system")) as save, \
+                self.assertLogs("app.night_quote", "ERROR") as logs:
+            result = night_quote.make_night_quote("", FakeAsk(GOOD), self.dir)
+        self.assertEqual(result, ("QUOTE", GOOD))
+        save.assert_called_once_with(self.dir, "Mut")
+        self.assertIn(topics.LAST_DAILY_FILE, "\n".join(logs.output))
 
     def test_failed_night_keeps_last_topic(self):
         self.write("thema.txt", "Mut\n")

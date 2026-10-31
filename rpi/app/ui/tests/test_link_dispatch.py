@@ -226,7 +226,12 @@ class DispatchTest(unittest.TestCase):
         self.assertEqual(self.link.replies, [(11, "OK", ""), (12, "OK", "")])
 
     def test_second_nacht_or_hand_after_hand_keeps_the_old_rule(self):
-        for seq, data in ((11, "NACHT"), (12, "NACHT"), (13, "HAND"), (14, "HAND"), (15, "NACHT")):
+        for seq in (11, 12):
+            self.link.incoming.put(Message(seq, "SESSION", "NACHT"))
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 2))
+        self.assertFalse(self.d.hand_requested.is_set())  # ein zweites NACHT startet kein Menue
+        self.assertEqual(self.d.session_reason, "NACHT")
+        for seq, data in ((13, "HAND"), (14, "HAND"), (15, "NACHT")):
             self.link.incoming.put(Message(seq, "SESSION", data))
         self.assertTrue(wait_for(lambda: len(self.link.replies) == 5))
         self.assertTrue(all(r[1] == "OK" for r in self.link.replies))
@@ -297,34 +302,69 @@ class GetTest(unittest.TestCase):
             self.assertTrue(wait_for(lambda: (seq, "ERROR", code) in self.link.replies))
             d.stop()
 
-    def test_get_does_not_block_buttons(self):
+    def test_finished_result_answers_a_get_with_the_same_yesterday(self):
+        # Kommt GET mit demselben Text vom Vortag noch einmal, nachdem der Arbeits-Thread fertig
+        # ist, antwortet der Pi aus dem Ergebnis dieser Sitzung: keine zweite KI-Runde.
         maker = SlowQuote()
-        self.make(maker)
-        self.put(20, "GET", "QUOTE|")
-        self.assertTrue(maker.entered.wait(1.0))
-        self.put(21, "BUTTON", "3")
-        self.assertEqual(self.buttons.get(1.0), 3)
-        self.assertTrue(wait_for(lambda: self.link.replies))
-        self.assertEqual(self.link.replies, [(21, "OK", "")])  # GET rechnet noch
         maker.release()
-        self.assertTrue(wait_for(lambda: len(self.link.replies) == 2))
-        self.assertEqual(self.link.replies[1], (20, "QUOTE", "DER WEG IST DAS ZIEL."))
-
-    def test_repeated_get_one_worker_answer_to_newest(self):
-        # Review Focus 4: ein Reset des ESP, waehrend GET offen ist, sendet GET noch einmal mit
-        # neuer Nummer (R8). Kein zweiter Thread; die Antwort geht an das neueste GET.
-        maker = SlowQuote()
         self.make(maker)
         self.put(20, "GET", "QUOTE|GESTERN")
-        self.assertTrue(maker.entered.wait(1.0))
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 1))
         self.put(21, "GET", "QUOTE|GESTERN")
-        self.put(0x7F, "BUTTON", "1")  # der Dispatcher arbeitet der Reihe nach
-        self.assertTrue(wait_for(lambda: (0x7F, "OK", "") in self.link.replies))
-        maker.release()
         self.assertTrue(wait_for(lambda: len(self.link.replies) == 2))
-        self.assertEqual(self.link.replies, [(0x7F, "OK", ""),
-                                             (21, "QUOTE", "DER WEG IST DAS ZIEL.")])
+        self.assertEqual(self.link.replies[1], (21, "QUOTE", "DER WEG IST DAS ZIEL."))
         self.assertEqual(len(maker.calls), 1)
+        self.put(22, "GET", "QUOTE|ANDERS")  # anderer Text vom Vortag: neu rechnen
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 3))
+        self.assertEqual([y for y, _ in maker.calls], ["GESTERN", "ANDERS"])
+
+    def test_session_end_clears_the_finished_result(self):
+        maker = SlowQuote()
+        maker.release()
+        released = threading.Event()
+        released.set()
+        d = LinkDispatcher(self.link, self.buttons, Activity(), StopSignal(), released,
+                           quote_maker=maker)
+        d.start()
+        self.addCleanup(d.stop)
+        self.put(20, "GET", "QUOTE|GESTERN")
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 1))
+        self.put(21, "SHUTDOWN")
+        self.assertTrue(wait_for(lambda: (21, "OK", "") in self.link.replies))
+        self.put(22, "GET", "QUOTE|GESTERN")
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 3))
+        self.assertEqual(len(maker.calls), 2)
+
+    def test_base_exception_in_worker_does_not_block_later_gets(self):
+        calls = []
+
+        def leaving(yesterday):
+            calls.append(yesterday)
+            if len(calls) == 1:
+                raise SystemExit  # eine BaseException; threading meldet sie nicht
+            return ("QUOTE", "WIEDER DA.")
+
+        self.make(leaving)
+        self.put(40, "GET", "QUOTE|")
+        self.assertTrue(wait_for(lambda: calls))
+        time.sleep(0.05)  # der erste Arbeits-Thread ist zu Ende
+        self.put(41, "GET", "QUOTE|")
+        self.assertTrue(wait_for(lambda: self.link.replies))
+        self.assertEqual(self.link.replies, [(41, "QUOTE", "WIEDER DA.")])
+
+    def test_refused_reply_log_names_every_cause(self):
+        # PiLink.reply gibt nur False: die Anfrage ist nicht mehr offen, die Leitung ist an das
+        # Radar abgegeben, oder die Antwort laesst sich nicht kodieren. Das Log sagt nur das.
+        maker = SlowQuote()
+        maker.release()
+        self.link.stale_seqs = {42}
+        self.make(maker)
+        with self.assertLogs("app.ui.link_dispatch", "INFO") as logs:
+            self.put(42, "GET", "QUOTE|")
+            self.assertTrue(wait_for(lambda: any("nicht gesendet" in line for line in logs.output)))
+        line = next(line for line in logs.output if "nicht gesendet" in line)
+        for cause in ("#2A", "nicht mehr offen", "Radar", "kodier"):
+            self.assertIn(cause, line)
 
     def test_get_bad_data(self):
         maker = SlowQuote()
@@ -382,6 +422,80 @@ class GetTest(unittest.TestCase):
             self.put(37, "GET", "QUOTE|")
             self.assertTrue(wait_for(lambda: self.link.replies))
         self.assertEqual(self.link.replies, [(37, "ERROR", "KI")])
+
+
+class RealLinkGetTest(unittest.TestCase):
+    """GET mit dem echten PiLink: Er nimmt nur eine Antwort auf die neueste Anfrage an. Jede
+    Taste setzt den ESP zurueck; ein offenes GET verfaellt, und der ESP sendet es nach seiner
+    eigenen Anfrage noch einmal, mit neuer Nummer."""
+
+    def setUp(self):
+        self.events = []
+        self.port = RecordingPort(self.events)
+        self.link = PiLink(self.port)
+        self.link.start()
+        self.addCleanup(self.link.stop)
+        self.buttons = QueueButtons()
+        self.maker = SlowQuote()
+        self.addCleanup(self.maker.release)  # vor link.stop: der Arbeits-Thread endet
+        self.d = LinkDispatcher(self.link, self.buttons, Activity(), StopSignal(),
+                                threading.Event(), quote_maker=self.maker)
+        self.d.start()
+        self.addCleanup(self.d.stop)
+
+    def feed(self, seq, command, data=""):
+        self.port.feed(encode(Message(seq, command, data)) + b"\n")
+
+    def feed_get_while_running(self, seq, data):
+        """Ein GET, waehrend der Arbeits-Thread rechnet; kehrt zurueck, wenn der Dispatcher es
+        als neuestes GET vermerkt hat."""
+        with self.assertLogs("app.ui.link_dispatch", "INFO") as logs:
+            self.feed(seq, "GET", data)
+            self.assertTrue(wait_for(lambda: any("GET #%02X, waehrend" % seq in line
+                                                 for line in logs.output)))
+
+    def test_get_does_not_block_buttons(self):
+        self.feed(0x20, "GET", "QUOTE|")
+        self.assertTrue(self.maker.entered.wait(1.0))
+        self.feed(0x21, "BUTTON", "3")  # Taste: Reset des ESP, das GET verfaellt
+        self.assertEqual(self.buttons.get(1.0), 3)
+        self.assertTrue(wait_for(lambda: ("tx", 0x21, "OK") in self.events))
+        self.feed_get_while_running(0x22, "QUOTE|")
+        self.assertNotIn("QUOTE", [e[2] for e in self.events if e[0] == "tx"])  # rechnet noch
+        self.maker.release()
+        self.assertTrue(wait_for(lambda: ("tx", 0x22, "QUOTE") in self.events))
+        self.assertNotIn(("tx", 0x20, "QUOTE"), self.events)
+        self.assertEqual(len(self.maker.calls), 1)
+
+    def test_repeated_get_one_worker_answer_to_newest(self):
+        # Review Focus 4: ein Reset des ESP, waehrend GET offen ist, sendet GET noch einmal mit
+        # neuer Nummer (R8). Kein zweiter Thread; die Antwort geht an das neueste GET.
+        self.feed(0x20, "GET", "QUOTE|GESTERN")
+        self.assertTrue(self.maker.entered.wait(1.0))
+        self.feed_get_while_running(0x21, "QUOTE|GESTERN")
+        self.maker.release()
+        self.assertTrue(wait_for(lambda: ("tx", 0x21, "QUOTE") in self.events))
+        self.assertNotIn(("tx", 0x20, "QUOTE"), self.events)
+        self.assertEqual(len(self.maker.calls), 1)
+
+    def test_worker_done_before_the_resent_get_answers_from_its_result(self):
+        # Fall C: BT2 in der Nacht. SESSION|HAND kommt, und der Arbeits-Thread wird fertig,
+        # bevor das GET noch einmal kommt. Seine Antwort auf das alte GET nimmt PiLink nicht an;
+        # das neue GET bekommt dasselbe Ergebnis, ohne zweite KI-Runde.
+        self.feed(0x1F, "SESSION", "NACHT")
+        self.assertTrue(wait_for(lambda: ("tx", 0x1F, "OK") in self.events))
+        self.feed(0x20, "GET", "QUOTE|GESTERN")
+        self.assertTrue(self.maker.entered.wait(1.0))
+        self.feed(0x21, "SESSION", "HAND")
+        self.assertTrue(self.d.hand_requested.wait(1.0))
+        with self.assertLogs("app.ui.link_dispatch", "INFO") as logs:
+            self.maker.release()
+            self.assertTrue(wait_for(lambda: any("GET #20 nicht gesendet" in line
+                                                 for line in logs.output)))
+        self.feed(0x22, "GET", "QUOTE|GESTERN")
+        self.assertTrue(wait_for(lambda: ("tx", 0x22, "QUOTE") in self.events))
+        self.assertNotIn(("tx", 0x20, "QUOTE"), self.events)
+        self.assertEqual(len(self.maker.calls), 1)
 
 
 class RealLinkShutdownTest(unittest.TestCase):
