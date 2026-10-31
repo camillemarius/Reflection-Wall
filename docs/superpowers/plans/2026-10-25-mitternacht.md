@@ -488,8 +488,10 @@ Jeder Zweig ist heute richtig, das Risiko ist ein späterer Fehler. Geplant: ein
 **Pi**
 
 - Kein Test für eine Antwort der KI, die kein Text ist. `startswith("Fehler")` fängt auch ein echtes Zitat, das mit „Fehler“ beginnt.
-- `night_quote.py`: Ein Docstring sagt „kuerzen“; die erlaubten Zeichen stehen zweimal da.
 - `PiLink.reply` gibt nur `False` zurück. Das Log einer abgelehnten Antwort nennt darum alle drei möglichen Gründe, nicht den einen.
+- Lehnt `PiLink.reply` eine Antwort aus einem anderen Grund als einer neueren Anfrage ab (die Leitung gehört gerade dem Radar, oder die Antwort lässt sich nicht codieren), bleibt das Zitat gemerkt. Jedes wiederholte `GET` bekommt dann dieselbe abgelehnte Antwort, bis die Sitzung endet oder die Frist von 120 s abläuft.
+- `LinkDispatcher`: `_session_over` setzt nur `stop()` oder `_shutdown`, `start()` setzt es nicht zurück. Nach `stop()` und erneutem `start()` am selben Objekt merkt sich der Pi kein Zitat mehr. Heute gibt es einen Dispatcher pro Prozess, darum schadet das nicht.
+- `test_base_exception_in_worker_does_not_block_later_gets` wartet mit `time.sleep(0.05)` auf das Ende des Threads.
 
 **Anleitung**
 
