@@ -302,9 +302,27 @@ class GetTest(unittest.TestCase):
             self.assertTrue(wait_for(lambda: (seq, "ERROR", code) in self.link.replies))
             d.stop()
 
-    def test_finished_result_answers_a_get_with_the_same_yesterday(self):
-        # Kommt GET mit demselben Text vom Vortag noch einmal, nachdem der Arbeits-Thread fertig
-        # ist, antwortet der Pi aus dem Ergebnis dieser Sitzung: keine zweite KI-Runde.
+    def test_undelivered_quote_answers_a_get_with_the_same_yesterday(self):
+        # Fall C: PiLink nimmt die Antwort auf GET 20 nicht an, eine neuere Anfrage kam zuerst.
+        # Das Zitat bleibt gemerkt; das GET danach mit demselben Text vom Vortag bekommt es ohne
+        # zweite KI-Runde. Damit ist es zugestellt und verfaellt: GET 22 rechnet neu.
+        maker = SlowQuote()
+        maker.release()
+        self.link.stale_seqs = {20}
+        self.make(maker)
+        self.put(20, "GET", "QUOTE|GESTERN")
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 1))
+        self.put(21, "GET", "QUOTE|GESTERN")
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 2))
+        self.assertEqual(self.link.replies[1], (21, "QUOTE", "DER WEG IST DAS ZIEL."))
+        self.assertEqual(len(maker.calls), 1)
+        self.put(22, "GET", "QUOTE|GESTERN")
+        self.assertTrue(wait_for(lambda: len(self.link.replies) == 3))
+        self.assertEqual(len(maker.calls), 2)
+
+    def test_delivered_quote_is_not_reused(self):
+        # Ist die Antwort zugestellt (der ESP lehnt das Zitat ab, oder ein Reset kam, waehrend
+        # sie auf der Leitung war), rechnet ein spaeteres GET mit demselben Text vom Vortag neu.
         maker = SlowQuote()
         maker.release()
         self.make(maker)
@@ -313,10 +331,7 @@ class GetTest(unittest.TestCase):
         self.put(21, "GET", "QUOTE|GESTERN")
         self.assertTrue(wait_for(lambda: len(self.link.replies) == 2))
         self.assertEqual(self.link.replies[1], (21, "QUOTE", "DER WEG IST DAS ZIEL."))
-        self.assertEqual(len(maker.calls), 1)
-        self.put(22, "GET", "QUOTE|ANDERS")  # anderer Text vom Vortag: neu rechnen
-        self.assertTrue(wait_for(lambda: len(self.link.replies) == 3))
-        self.assertEqual([y for y, _ in maker.calls], ["GESTERN", "ANDERS"])
+        self.assertEqual(len(maker.calls), 2)
 
     def test_session_end_clears_the_finished_result(self):
         maker = SlowQuote()
@@ -327,6 +342,7 @@ class GetTest(unittest.TestCase):
                            quote_maker=maker)
         d.start()
         self.addCleanup(d.stop)
+        self.link.stale_seqs = {20}  # nicht zugestellt: das Zitat bliebe gemerkt
         self.put(20, "GET", "QUOTE|GESTERN")
         self.assertTrue(wait_for(lambda: len(self.link.replies) == 1))
         self.put(21, "SHUTDOWN")

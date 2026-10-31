@@ -62,8 +62,8 @@ class LinkDispatcher:
         self._quote_maker = quote_maker
         self._get_lock = threading.Lock()
         self._newest_get = None  # das neueste GET, solange der Arbeits-Thread rechnet
-        # (Text vom Vortag, ("QUOTE", Text)): das letzte Zitat der Nacht in dieser Sitzung. Ein
-        # ERROR bleibt nicht gemerkt: ein spaeterer Versuch in derselben Sitzung fragt neu.
+        # (Text vom Vortag, ("QUOTE", Text)): das letzte Zitat der Nacht, bis es zugestellt ist.
+        # Ein ERROR bleibt nicht gemerkt: ein spaeterer Versuch in derselben Sitzung fragt neu.
         self._night_result = None
         self._session_over = False  # nach SHUTDOWN oder stop(): kein Ergebnis mehr merken
 
@@ -137,8 +137,9 @@ class LinkDispatcher:
         Nummer nach einem Reset des ESP, R8; jede Taste ist ein Reset), startet kein zweiter; die
         Antwort geht an das neueste GET. Der ESP beachtet ohnehin nur die Antwort auf sein
         neuestes, und PiLink nimmt nur diese an. Kommt es erst, nachdem er ein Zitat geliefert
-        hat, und mit demselben Text vom Vortag, antwortet der Pi mit diesem Zitat, ohne zweite
-        KI-Runde (Fall C: die Antwort auf das alte GET ging nicht mehr raus)."""
+        hat, das nicht mehr zugestellt wurde, und mit demselben Text vom Vortag, antwortet der Pi
+        mit diesem Zitat, ohne zweite KI-Runde (Fall C). Nach einer zugestellten Antwort (der
+        ESP lehnt ab, oder ein Reset kam, waehrend sie auf der Leitung war) rechnet er neu."""
         if not msg.data.startswith(QUOTE_PREFIX):
             self._link.reply(msg, "ERROR", "BAD_GET")
             return
@@ -177,8 +178,8 @@ class LinkDispatcher:
     def _answer_get(self, yesterday) -> None:
         """Arbeits-Thread: fragt quote_maker und beantwortet das neueste GET, auch wenn
         quote_maker wirft (dann ERROR|KI): Ein GET bleibt nie ohne Antwort. Ein Zitat bleibt
-        fuer diese Sitzung gemerkt (_get). Auch nach einer BaseException gilt kein GET mehr als
-        offen; sonst bliebe jedes weitere ohne Antwort."""
+        gemerkt, bis es zugestellt ist (_get). Auch nach einer BaseException gilt kein GET mehr
+        als offen; sonst bliebe jedes weitere ohne Antwort."""
         result = None
         try:
             try:
@@ -196,11 +197,14 @@ class LinkDispatcher:
 
     def _send_get_answer(self, msg, command, data) -> None:
         log.info("Antwort auf GET #%02X: %s|%s", msg.seq, command, data)
-        try:
-            sent = self._link.reply(msg, command, data)
-        except Exception:
-            log.exception("Antwort auf GET #%02X nicht gesendet", msg.seq)
-            return
+        with self._get_lock:  # zustellen und vergessen in einem Schritt, vor dem naechsten GET
+            try:
+                sent = self._link.reply(msg, command, data)
+            except Exception:
+                log.exception("Antwort auf GET #%02X nicht gesendet", msg.seq)
+                return
+            if sent:
+                self._night_result = None  # der ESP hat seine Antwort: ein neues GET rechnet neu
         if not sent:
             # PiLink.reply gibt nur False: welcher Grund es war, sieht der Dispatcher nicht
             log.info("Antwort auf GET #%02X nicht gesendet: PiLink nimmt sie nicht an (die "

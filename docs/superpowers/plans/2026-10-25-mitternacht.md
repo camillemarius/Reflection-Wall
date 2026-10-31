@@ -422,7 +422,7 @@ Dazu kommen aus `docs/superpowers/specs/2026-10-23-menue-und-anwendungen-design.
 | 8 | `GET` auf dem Pi; von der Nacht ins Menü | d1057b1 |
 | 9 | README und Hauptentwurf | 9c42def |
 | 10 | Abnahme am Gerät | offen bis Teil 0 |
-| Abschluss | Korrekturen aus der Schlussprüfung: N3 in der Reihenfolge des Geräts getestet, auf beiden Seiten (I1); der Pi merkt das Zitat der Sitzung (Fall C); „Leere Antwort“ ist ein Fehler der KI (I2); das Zitat gilt, auch wenn `.thema_zuletzt` nicht geschrieben werden kann (M5); `NIGHT_TEST_LEAD_S` mit Vorzeichen (M6); zwei Werte in §12 (M8); Entscheid B zu M4; kleinere Punkte aus Task 7 und 8 | 528536e, d29b173 und der Commit mit dieser Zeile |
+| Abschluss | Korrekturen aus der Schlussprüfung: N3 in der Reihenfolge des Geräts getestet, auf beiden Seiten (I1); der Pi merkt das Zitat, bis es zugestellt ist (Fall C); „Leere Antwort“ ist ein Fehler der KI (I2); das Zitat gilt, auch wenn `.thema_zuletzt` nicht geschrieben werden kann (M5); `NIGHT_TEST_LEAD_S` mit Vorzeichen (M6); zwei Werte in §12 (M8); Entscheid B zu M4; kleinere Punkte aus Task 7 und 8 | 528536e, d29b173, 3d7274a und der Commit mit dieser Zeile |
 
 ### Entscheide während der Umsetzung
 
@@ -441,7 +441,7 @@ Jeder Entscheid sagt, was gilt, und was es kostet, wenn er falsch ist.
 - **Nachbesserung von Task 6:** Die Runde nahm fünf kleine Punkte der Prüfung mit, weil sie denselben Code betrafen. Kostet: nichts.
 - **Task 9 auch für das README des Repos** (Owner, 2026-10-31). Kostet: eine Datei mehr im Commit.
 - **I1, BT2 in der Nacht:** Jede Taste setzt den ESP zurück. Ein offenes `GET` verfällt, `SESSION|HAND` geht zuerst, dann das `GET` noch einmal mit neuer Nummer. Die Tests auf beiden Seiten folgen jetzt dieser Reihenfolge, auf dem Pi mit dem echten `PiLink`. Die angenommenen Kosten „kein `BUTTON` und kein `PING`, solange `GET` offen ist“ fallen auf dem Gerät nie an. Kostet: nichts, das sichtbare Verhalten bleibt.
-- **I1, Fall C:** Der Pi merkt sich das Zitat der laufenden Sitzung mit seinem Text vom Vortag. Kommt das `GET` erst, nachdem der Arbeits-Thread fertig ist, bekommt es dieses Zitat, ohne zweite KI-Runde. Ein `ERROR` merkt er sich nicht: ein späterer Versuch in derselben Sitzung fragt neu. Mit `SHUTDOWN` verfällt das Zitat. Kostet: ein gemerkter Text pro Sitzung.
+- **I1, Fall C:** Der Pi merkt sich das Zitat mit seinem Text vom Vortag, bis es zugestellt ist. Nimmt `PiLink` die Antwort nicht an, weil schon eine neuere Anfrage da ist, bekommt das `GET`, das danach kommt, dieses Zitat, ohne zweite KI-Runde. Ist die Antwort zugestellt (der ESP lehnt das Zitat ab, oder ein Reset kam, während sie auf der Leitung war), rechnet ein späteres `GET` neu, wie vorher. Ein `ERROR` merkt er sich nie: ein späterer Versuch in derselben Sitzung fragt neu. Mit `SHUTDOWN` verfällt das Zitat ebenfalls. Kostet: ein gemerkter Text, bis er zugestellt ist.
 - **I2:** „Leere Antwort“ von `write_to_ai` gilt wie „Fehler…“ als `ERROR|KI`. Die Chat-Anwendung behält diesen Text. Kostet: nichts.
 - **I3:** nicht in dieser Runde, siehe „Technische Schuld“. Kostet: Ein Fehler in diesen Regeln fällt erst in Task 10 oder in der späteren Runde auf.
 - **M5, M6, M8 und die kleinen Punkte aus Task 7 und 8:** in der Runde der Schlussprüfung. Jeder ist klein.

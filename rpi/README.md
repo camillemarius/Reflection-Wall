@@ -89,7 +89,7 @@ Der Pi antwortet mit einer dieser Zeilen:
 | `ERROR\|KI` | Fehler der KI (auch „Leere Antwort“), kein Rechner für das Zitat angeschlossen, oder die Rechnung warf eine Ausnahme |
 | `ERROR\|BAD_GET` | `GET` ohne `QUOTE\|` in den Daten |
 
-Das Zitat rechnet ein eigener Thread (`app/ui/link_dispatch.py`). Tasten beantwortet der Pi währenddessen weiter. Zählen darf nur das neueste `GET`. Jede Taste setzt den ESP zurück; ein offenes `GET` sendet er danach noch einmal, mit neuer Nummer. Rechnet der Thread noch, geht seine Antwort an dieses neue `GET`. Ist er schon fertig, bekommt es dasselbe Zitat ohne zweite KI-Runde. Gemerkt bleibt nur ein Zitat, kein `ERROR`, und nur bis zum Ende der Sitzung. In einer Sitzung `NACHT` schreibt der Pi die Anzeige nie und beendet die Sitzung nie selbst. Sie endet mit dem `SHUTDOWN` des ESP.
+Das Zitat rechnet ein eigener Thread (`app/ui/link_dispatch.py`). Tasten beantwortet der Pi währenddessen weiter. Zählen darf nur das neueste `GET`. Jede Taste setzt den ESP zurück; ein offenes `GET` sendet er danach noch einmal, mit neuer Nummer. Rechnet der Thread noch, geht seine Antwort an dieses neue `GET`. Ist er schon fertig und ging seine Antwort nicht mehr raus, bekommt es dasselbe Zitat ohne zweite KI-Runde. Gemerkt bleibt nur ein Zitat, kein `ERROR`, und nur, bis es zugestellt ist, höchstens bis zum Ende der Sitzung. In einer Sitzung `NACHT` schreibt der Pi die Anzeige nie und beendet die Sitzung nie selbst. Sie endet mit dem `SHUTDOWN` des ESP.
 
 ## Verbindung zum ESP (`app/link`)
 
