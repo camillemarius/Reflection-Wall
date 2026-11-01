@@ -138,19 +138,23 @@ Er wartet höchstens 1 s. Dann schreibt er trotzdem und schreibt eine Warnung in
 ```bash
 sudo raspi-config              # I2C und Serial aktivieren
 sudo apt install mariadb-server
+sudo apt install liblgpio-dev libportaudio2 git-lfs   # lgpio wird beim pip install gebaut; sounddevice braucht PortAudio
+git lfs pull                   # die Stimmen für piper (*.onnx) liegen in Git LFS
 cd rpi
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-`pyserial` braucht die UART-Verbindung. Das Paket `piper-tts` liefert den Befehl `piper`, den die Sprachausgabe aufruft (Paketname ungeprüft). Zum Abspielen braucht es außerdem `aplay` (`sudo apt install alsa-utils`).
+`pyserial` braucht die UART-Verbindung. Das Paket `piper-tts` liefert den Befehl `piper`, den die Sprachausgabe aufruft (am Pi geprüft, 2026-11-01). Er liegt im Ordner `bin/` des venv; unter dem Dienst steht dieser Ordner nicht im PATH (offener Punkt in der Spezifikation, Abschnitt 15). Zum Abspielen braucht es außerdem `aplay` (`sudo apt install alsa-utils`).
+
+Auf dem Pi der Wand ist `fstrim.timer` abgeschaltet (`sudo systemctl disable --now fstrim.timer`). Der wöchentliche Lauf blockierte am 2026-11-01 die SD-Karte über 40 Minuten; pip, SSH und cron standen still. Er fiele außerdem jeden Montag auf 00:00, genau auf das Zitat der Nacht.
 
 Die einzelnen Komponenten lassen sich in `tests/<Komponente>/` getrennt testen (`chatbot_groq`, `ht16k33`, `ioExpander`, `ld2410s`, `lichtsensor`, `microphone`, `mysql`, `speechrecognition`, `wakeWord`); dort steht jeweils eine `installation.txt`. `tests/ld2410s` nutzt den App-Treiber und startet im Ordner `rpi/` mit `python -m tests.ld2410s.test [--simulation] [--seconds N]`; auf dem PC mit `--simulation` (Windows: `python -X utf8 …`, sonst scheitert die Konsole an den Zeichen für Balken und Pfeile). `tests/microphone` nimmt auf und legt die Aufnahmen in `tests/microphone/recordings/` ab (nicht im Repository).
 
 ## Dienst einrichten
 
-Dieser Abschnitt ist ungeprüft bis zur Abnahme am Gerät. Teil 0 (Einrichtung des Pi) richtet die Gruppen und die sudoers-Regel am Gerät ein.
+Dieser Abschnitt ist ungeprüft bis zur Abnahme am Gerät. Am Pi der Wand ist alles hier seit Teil 0 (2026-11-01) eingerichtet: Gruppen, `sudo` ohne Passwort, die Unit mit dem venv `~/.venvs/reflection-wall-rpi`. Die Unit ist aktiviert und startet beim nächsten Booten.
 
 Die Unit liegt unter `rpi/systemd/reflection-wall.service`. Sie startet `python -m app.main` ohne `--pc`. Im Repository-Ordner auf dem Pi:
 
