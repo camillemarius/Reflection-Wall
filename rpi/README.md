@@ -146,7 +146,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-`pyserial` braucht die UART-Verbindung. Das Paket `piper-tts` liefert den Befehl `piper`, den die Sprachausgabe aufruft (am Pi geprüft, 2026-11-01). Er liegt im Ordner `bin/` des venv; unter dem Dienst steht dieser Ordner nicht im PATH (offener Punkt in der Spezifikation, Abschnitt 15). Zum Abspielen braucht es außerdem `aplay` (`sudo apt install alsa-utils`).
+`pyserial` braucht die UART-Verbindung. Das Paket `piper-tts` liefert den Befehl `piper`, den die Sprachausgabe aufruft (am Pi geprüft, 2026-11-01). Die Sprachausgabe startet ihn mit dem Python des venv (`python -m piper`), weil unter dem Dienst der Ordner `bin/` des venv nicht im PATH steht. Zum Abspielen braucht es außerdem `aplay` (`sudo apt install alsa-utils`).
 
 Auf dem Pi der Wand ist `fstrim.timer` abgeschaltet (`sudo systemctl disable --now fstrim.timer`). Der wöchentliche Lauf blockierte am 2026-11-01 die SD-Karte über 40 Minuten; pip, SSH und cron standen still. Er fiele außerdem jeden Montag auf 00:00, genau auf das Zitat der Nacht.
 
