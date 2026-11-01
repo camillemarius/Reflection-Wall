@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 import tempfile
 
 class SpeechAssistant:
@@ -20,8 +21,9 @@ class SpeechAssistant:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             wav_path = f.name
 
+        # piper ueber das Python des venv: unter systemd liegt dessen bin/ nicht im PATH
         cmd = [
-            "piper",
+            sys.executable, "-m", "piper",
             "--model", self.model_path,
             "--output_file", wav_path,
         ]
