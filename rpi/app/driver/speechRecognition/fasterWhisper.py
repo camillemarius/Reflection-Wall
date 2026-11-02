@@ -7,7 +7,9 @@ import time
 class fasterWhsiper:
     # Entscheid A (2026-11-02): int8, 3 Kandidaten, fest Deutsch. An 15 s Sprache auf dem Pi 5
     # 11 s statt 34 s (float32, Beam 7, Sprache suchen), derselbe Text.
-    def __init__(self, model_name="small", device="cpu", sample_rate=16000, channels=1, beam_size=3,
+    # Modell base (Owner 2026-11-02: kurze Fragen, so schnell wie moeglich): 2 s je kurze Frage
+    # statt 5.6 s mit small; an zwei Fragen derselbe Inhalt, einmal ein anderer Artikel.
+    def __init__(self, model_name="base", device="cpu", sample_rate=16000, channels=1, beam_size=3,
                  compute_type="int8", language="de"):
         self.sample_rate = sample_rate
         self.channels = channels

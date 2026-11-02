@@ -31,10 +31,10 @@ class RecorderTest(unittest.TestCase):
         sys.modules.pop(MODULE, None)
         self.module = importlib.import_module(MODULE)
 
-    def test_loads_small_as_int8_on_the_cpu(self):
-        # Entscheid A (2026-11-02): an 15 s Sprache 11 s statt 34 s, derselbe Text
+    def test_loads_base_as_int8_on_the_cpu(self):
+        # Owner 2026-11-02: kurze Fragen, so schnell wie moeglich. base: 2 s je Frage, small 5.6 s
         self.module.fasterWhsiper()
-        self.whisper_model.assert_called_once_with("small", device="cpu", compute_type="int8")
+        self.whisper_model.assert_called_once_with("base", device="cpu", compute_type="int8")
 
     def test_recognizes_german_with_three_candidates(self):
         recorder = self.module.fasterWhsiper()
