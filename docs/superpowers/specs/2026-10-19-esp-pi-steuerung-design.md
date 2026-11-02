@@ -558,7 +558,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | `T_shutdown` | 60 s | auf `SHUTDOWN` keine Antwort | Entwurf |
 | BUSY-Wiederholung | 30 s | | Entwurf |
 | BUSY höchstens | 10 min | ab Eintritt in HERUNTERFAHREN, also ab dem Moment, in dem das erste `SHUTDOWN` fällig ist | Entscheid (S1-a) |
-| `T_halt` | 30 s | **wird bei der Inbetriebnahme gemessen** und auf das Doppelte gesetzt | Entscheid (E4-a) |
+| `T_halt` | 120 s | gemessen am 2026-11-02: 3.6 s vom `OK` bis zum Halt (mit wayvnc 57–82 s, das ignorierte SIGTERM bis zum Stop-Timeout). Bewusst nicht verdoppelt: 120 s decken auch einen Dienst, der bis zum Stop-Timeout von systemd (90 s) hängt. Preis: BT2 bleibt nach dem Ausschalten 2 min ohne Wirkung | Entscheid (E4-a), Wert vom Owner 2026-11-02 |
 | ~~Sitzung höchstens~~ | ~~3 h~~ | entfällt | Teil 4 D1 |
 | Pi ohne Aktivität bis `DONE` | 15 min | nur wenn der Schalter an ist, Standard aus | Teil 4 D2, F6 |
 | Webseite ohne Speichern höchstens | 15 min | | Teil 4 D11 |
@@ -637,7 +637,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | Punkt | Warum offen | Wie es geschlossen wird |
 |---|---|---|
 | 74 880 Baud am Pi 5 | nicht gemessen | Abnahme 1; sonst überall 115 200 (E2-b) |
-| `T_halt` | nicht gemessen | Abnahme 2 |
+| ~~`T_halt`~~ | ~~nicht gemessen~~ | geschlossen 2026-11-02: gemessen, 120 s (§12) |
 | Strom bei 100 % Helligkeit | nicht gemessen; Anzeigen und Pi am selben 5-V-Wandler | Abnahme 7 |
 | Rückspeisung | ESP-TX liegt kurz am RX des stromlosen Pi | prüfen, ob der ESP seinen TX bei ausgeschaltetem Pi hochohmig lassen kann |
 | COM8 zeitweise blockiert, Datenmüll im Schlaf | Ursache unbekannt | nur Entwicklung; beobachten |
