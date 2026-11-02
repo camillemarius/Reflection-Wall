@@ -54,7 +54,7 @@ constexpr unsigned long PING_INTERVAL_MS = 10000;  // PING-Abstand im Betrieb
 constexpr unsigned long PING_MISSES = 3;           // Aussetzer bis hart aus
 constexpr unsigned long BUSY_RETRY_MS = 30000;     // SHUTDOWN noch einmal nach BUSY
 constexpr unsigned long BUSY_MAX_MS = 600000;      // ab Eintritt in HERUNTERFAHREN
-constexpr unsigned long HALT_MS = 30000;           // T_halt, Startwert, wird gemessen
+constexpr unsigned long HALT_MS = 120000;          // T_halt, vorlaeufig: 30 s reichten am Geraet nicht, wird gemessen
 constexpr unsigned long RADAR_MAX_MS = 3600000;    // Radar-Debug hoechstens
 constexpr unsigned long NO_ANSWER_MS = 10000;      // PI ANTWORTET NICHT sichtbar (D18)
 }

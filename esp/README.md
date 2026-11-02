@@ -62,7 +62,7 @@ BT2 bei ausgeschaltetem Pi startet eine Sitzung: Der ESP schaltet die Speisung e
 | BETRIEB | `PING` alle 10 s, Tasten als `BUTTON\|n` | BT2 oder `DONE` → HERUNTERFAHREN, `MODE\|RADAR` → RADAR-DEBUG, 3 `PING` ohne Antwort → hart aus |
 | RADAR-DEBUG | sendet nichts, merkt sich BT2 | `MODE\|NORMAL` oder `READY` → BETRIEB, mit gemerktem BT2 → HERUNTERFAHREN; nach 60 min → HERUNTERFAHREN |
 | HERUNTERFAHREN | `SHUTDOWN`, nach `BUSY` alle 30 s noch einmal | `OK` → HALT-WARTEN; keine Antwort in 60 s oder 10 min `BUSY` → hart aus |
-| HALT-WARTEN | wartet 30 s (`T_halt`), bis der Pi gehalten hat | Speisung aus, Anzeige aus, Sitzung zu Ende |
+| HALT-WARTEN | wartet 120 s (`T_halt`, vorläufig bis zur Messung), bis der Pi gehalten hat | Speisung aus, Anzeige aus, Sitzung zu Ende |
 
 „Hart aus“ heisst: Speisung trennen, ohne dass der Pi heruntergefahren ist, mit Eintrag im Log.
 

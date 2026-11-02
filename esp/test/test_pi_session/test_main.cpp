@@ -323,13 +323,13 @@ void test_ok_to_shutdown_shows_text_then_power_off_after_t_halt()
     s.onLink(ev(K::Response, "OK"), out);
     TEST_ASSERT_TRUE(has(A::Show, "PI FAEHRT HERUNTER"));
     TEST_ASSERT_STATE(Halting);
-    out.clear(); s.onTick(29999, false, out);
+    out.clear(); s.onTick(SessionTiming::HALT_MS - 1, false, out);
     TEST_ASSERT_TRUE(out.empty());
     s.onTick(1, false, out);
     TEST_ASSERT_TRUE(has(A::PowerOff));
     TEST_ASSERT_TRUE(has(A::DisplayOff));
     TEST_ASSERT_TRUE(has(A::Log));                 // Dauer der Sitzung
-    TEST_ASSERT_EQUAL_UINT32(30000, d.sessionMs);
+    TEST_ASSERT_EQUAL_UINT32(SessionTiming::HALT_MS, d.sessionMs);
     TEST_ASSERT_STATE(Off);
     TEST_ASSERT_FALSE(s.active());
 }
@@ -345,7 +345,7 @@ void test_night_halting_has_no_display_actions()
     TEST_ASSERT_TRUE(has(A::Send, "SHUTDOWN"));
     s.onLink(ev(K::Response, "OK"), out);
     TEST_ASSERT_STATE(Halting);
-    s.onTick(30000, false, out);
+    s.onTick(SessionTiming::HALT_MS, false, out);
     TEST_ASSERT_TRUE(has(A::PowerOff));
     TEST_ASSERT_STATE(Off);
     TEST_ASSERT_FALSE(has(A::Show));
@@ -1035,7 +1035,7 @@ void test_valid_quote_sets_got_emits_ready_and_shuts_down_at_night()
     TEST_ASSERT_EQUAL(1, count(A::Send));
     TEST_ASSERT_TRUE(has(A::Send, "SHUTDOWN"));
     s.onLink(ev(K::Response, "OK"), out);
-    s.onTick(30000, false, out);
+    s.onTick(SessionTiming::HALT_MS, false, out);
     TEST_ASSERT_STATE(Off);
     TEST_ASSERT_FALSE(has(A::Show));
     TEST_ASSERT_FALSE(has(A::DisplayOff));
@@ -1192,7 +1192,7 @@ void test_session_end_while_wanted_records_reason()
     TEST_ASSERT_FALSE(has(A::Send, "GET"));
     s.onLink(ev(K::Response, "OK"), out);
     TEST_ASSERT_NIGHT(Wanted, None);
-    s.onTick(30000, false, out);
+    s.onTick(SessionTiming::HALT_MS, false, out);
     TEST_ASSERT_STATE(Off);
     TEST_ASSERT_NIGHT(Failed, SessionEnded);
 
@@ -1232,7 +1232,7 @@ void test_bt2_at_night_running_becomes_hand_after_get()
     s.onTick(0, false, out);
     s.onLink(ev(K::Response, "OK"), out);
     TEST_ASSERT_TRUE(has(A::Show, "PI FAEHRT HERUNTER"));
-    s.onTick(30000, false, out);
+    s.onTick(SessionTiming::HALT_MS, false, out);
     TEST_ASSERT_STATE(Off);
     TEST_ASSERT_NIGHT(Got, Ok);                    // das Zitat zaehlt (N3)
 }
