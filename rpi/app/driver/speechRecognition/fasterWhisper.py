@@ -5,10 +5,14 @@ import time
 
 
 class fasterWhsiper:
-    def __init__(self, model_name="small", device="cpu", sample_rate=16000, channels=1, beam_size=7):
+    # Entscheid A (2026-11-02): int8, 3 Kandidaten, fest Deutsch. An 15 s Sprache auf dem Pi 5
+    # 11 s statt 34 s (float32, Beam 7, Sprache suchen), derselbe Text.
+    def __init__(self, model_name="small", device="cpu", sample_rate=16000, channels=1, beam_size=3,
+                 compute_type="int8", language="de"):
         self.sample_rate = sample_rate
         self.channels = channels
         self.beam_size = beam_size
+        self.language = language
 
         self.listening = False
         self.audio_buffer = []
@@ -19,7 +23,7 @@ class fasterWhsiper:
 
         # Whisper Modell laden
         print("DEBUG: Lade Whisper Modell...")
-        self.model = WhisperModel(model_name, device=device)
+        self.model = WhisperModel(model_name, device=device, compute_type=compute_type)
         print("DEBUG: Modell geladen")
 
         # Mikrofon check
@@ -108,7 +112,7 @@ class fasterWhsiper:
 
         segments, _ = self.model.transcribe(
             audio_array,
-            language=None,
+            language=self.language,
             beam_size=self.beam_size
         )
 
