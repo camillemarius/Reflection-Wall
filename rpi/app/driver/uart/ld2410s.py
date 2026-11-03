@@ -29,6 +29,10 @@ READ_STEP_S = 0.02
 # Abstand von Befehl zu Befehl: mit 0,3 s kam am Geraet jede Antwort (Abstimm-Werkzeug),
 # ohne Abstand fehlten Antworten oder kam Status 1 (2026-11-03)
 COMMAND_GAP_S = 0.3
+# Auch mit Abstand blieb ab und zu eine Antwort aus oder kam eine falsche, jedes Mal bei einem
+# anderen Befehl; der naechste Anlauf ging durch (2026-11-03). Jede Folge ist wiederholbar.
+SESSION_TRIES = 3
+SESSION_RETRY_S = 1.0
 SHOWN_BYTES = 80  # so viel vom Empfangenen nennt eine Fehlermeldung
 
 
@@ -161,8 +165,21 @@ class LD2410S:
             self._sleep(READ_STEP_S)
 
     def _session(self, steps) -> list:
-        """steps im Einstellmodus ausfuehren; der Einstellmodus wird immer verlassen, auch wenn
-        nur die Antwort auf ENABLE verloren ging."""
+        """steps im Einstellmodus ausfuehren, bei einem Protokollfehler von vorne, hoechstens
+        SESSION_TRIES Mal. Lese-, Schreib- und Umschaltfolgen wirken zweimal wie einmal."""
+        for attempt in range(1, SESSION_TRIES + 1):
+            try:
+                return self._session_once(steps)
+            except LD2410SError as exc:
+                if attempt == SESSION_TRIES:
+                    raise
+                log.warning("Radar: Anlauf %d von %d gescheitert, nochmals: %s",
+                            attempt, SESSION_TRIES, exc)
+                self._sleep(SESSION_RETRY_S)
+
+    def _session_once(self, steps) -> list:
+        """Der Einstellmodus wird immer verlassen, auch wenn nur die Antwort auf ENABLE verloren
+        ging."""
         try:
             self._transact(ENABLE, b"\x01\x00")
             answers = [self._transact(cmd, value) for cmd, value in steps]

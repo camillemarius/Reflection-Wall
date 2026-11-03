@@ -285,6 +285,12 @@ Alle Zahlen Little Endian. Geprüft am Gerät am 2026-11-03 (Werkzeug im Abstimm
 - **Antwort:** `FD FC FB FA` · Länge · Befehl | `0x0100` (2 B) · Status (2 B, `0` = ausgeführt)
   · Daten · `04 03 02 01`. Das Längenfeld stimmt im Datenblatt-Beispiel nicht; gelesen wird
   bis zum Rahmenende.
+- **Takt und Wiederholung (am Gerät, 2026-11-03):** ohne Abstand zwischen den Befehlen
+  fehlten Antworten oder kam Status 1. Auch mit 0,3 s Abstand blieb ab und zu eine Antwort
+  aus oder kam eine zweite Antwort auf ENABLE statt der erwarteten, jedes Mal bei einem
+  anderen Befehl; der nächste Anlauf ging durch. Der Treiber hält darum 0,3 s von Befehl zu
+  Befehl und wiederholt eine gescheiterte Folge (ENABLE … END) nach 1 s von vorne, höchstens
+  dreimal; jede Folge wirkt zweimal wie einmal. Jede Wiederholung steht im Protokoll.
 - **Einstellmodus ein** `0x00FF`, Wert `01 00`; Daten: Protokollversion (2 B), Puffer (2 B).
   Am Gerät: `FF 01 · 00 00 · 03 00 · 80 00`. **Aus** `0x00FE`, ohne Wert.
 - **Allgemeine Werte schreiben** `0x0070`, Wert = je (Kennung 2 B, Wert 4 B). **Lesen**

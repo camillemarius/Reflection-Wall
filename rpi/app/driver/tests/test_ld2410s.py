@@ -167,7 +167,36 @@ class DriverTest(unittest.TestCase):
         self.fake.silent.add(0x0071)
         with self.assertRaises(LD2410SError):
             self.radar.read_settings()
-        self.assertLess(self.clock.now, 5.0)
+        self.assertLess(self.clock.now, 15.0)
+
+    def test_a_lost_answer_repeats_the_whole_session(self):
+        # am Geraet beantwortete der Radar ab und zu einen Befehl nicht oder falsch, jedes Mal
+        # einen anderen; der naechste Anlauf ging durch (2026-11-03)
+        self.fake.silent_once.add(0x0073)
+        with self.assertLogs("app.driver.uart.ld2410s", level="WARNING"):
+            self.assertEqual(self.radar.read_settings(),
+                             RadarSettings(WERK_GENERAL, WERK_TRIGGER, WERK_HOLD))
+        self.assertEqual(self.fake.commands, [0x00FF, 0x0071, 0x0073, 0x00FE,
+                                              0x00FF, 0x0071, 0x0073, 0x0077, 0x00FE])
+
+    def test_session_gives_up_after_three_tries(self):
+        self.fake.status[0x007A] = 1
+        with self.assertRaises(LD2410SError):
+            self.radar.minimal_mode()
+        self.assertEqual(self.fake.commands.count(0x007A), 3)
+        self.assertEqual(self.fake.commands[-1], 0x00FE)
+
+    def test_measure_keeps_its_frames_when_switching_back_needs_a_second_try(self):
+        self.fake.energies = lambda k: [k + 1] * 16
+
+        def wait(seconds):
+            self.clock.advance(seconds)
+            if self.clock.now > 4.0:
+                self.fake.silent_once.add(0x007A)  # erst das Zurueckschalten verliert die Antwort
+
+        frames = self.radar.measure(5.0, wait)
+        self.assertTrue(frames)
+        self.assertEqual(self.fake.output, "minimal")
 
     def test_commands_keep_the_gap_of_the_tuning_tool(self):
         # am Geraet kamen Antworten nur sicher, wenn zwischen zwei Befehlen 0,3 s lagen
@@ -218,7 +247,7 @@ class DriverTest(unittest.TestCase):
         self.assertTrue(all(t <= 2.0 + 1e-6 for t, _ in seen))
 
     def test_end_is_sent_even_if_enable_ack_is_lost(self):
-        self.fake.silent_once.add(0x00FF)
+        self.fake.silent.add(0x00FF)
         with self.assertRaises(LD2410SError):
             self.radar.read_settings()
         self.assertEqual(self.fake.commands[-1], 0x00FE)
@@ -230,7 +259,7 @@ class DriverTest(unittest.TestCase):
         self.assertEqual(self.fake.commands[-1], 0x00FE)
 
     def test_measure_back_to_minimal_when_switching_fails(self):
-        self.fake.silent_once.add(0x00FE)  # Ausgabe umgeschaltet, Antwort auf END verloren
+        self.fake.silent.add(0x00FE)  # Ausgabe umgeschaltet, Antwort auf END bleibt aus
         with self.assertRaises(LD2410SError):
             self.radar.measure(5.0, self.wait)
         self.assertEqual(self.fake.output, "minimal")
