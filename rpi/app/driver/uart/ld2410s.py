@@ -1,10 +1,13 @@
 # driver/uart/ld2410s.py
 # HLK-LD2410S ueber die UART: Einstellungen lesen und schreiben, Energien je Tor, Anwesenheit.
 # Bytes nach "HLK-LD2410S Serial Communication Protocol V1.00", am Geraet geprueft (Radar-Spec §12).
+import logging
 import struct
 import time
 from dataclasses import dataclass, field
 from typing import Callable
+
+log = logging.getLogger(__name__)
 
 GATES = 16
 # Reihenfolge fest: so gehen die Kennungen raus und so kommen die Werte zurueck
@@ -146,15 +149,16 @@ class LD2410S:
             self._sleep(READ_STEP_S)
 
     def _session(self, steps) -> list:
-        """steps im Einstellmodus ausfuehren; der Einstellmodus wird immer verlassen."""
-        self._transact(ENABLE, b"\x01\x00")
+        """steps im Einstellmodus ausfuehren; der Einstellmodus wird immer verlassen, auch wenn
+        nur die Antwort auf ENABLE verloren ging."""
         try:
+            self._transact(ENABLE, b"\x01\x00")
             answers = [self._transact(cmd, value) for cmd, value in steps]
-        except LD2410SError:
+        except Exception:
             try:
                 self._transact(END)
-            except LD2410SError:
-                pass
+            except Exception as exc:
+                log.warning("Radar: Einstellmodus nicht verlassen: %s", exc)
             raise
         self._transact(END)
         return answers
@@ -180,11 +184,18 @@ class LD2410S:
                 settle_s: float = 2.0) -> list:
         """seconds lang Energien je Tor; ohne die ersten settle_s und ohne leere Meldungen.
         wait(s) wartet und darf werfen (Abbruch); der Kurzmodus kommt in jedem Fall zurueck."""
-        self._session([(OUTPUT, OUTPUT_STANDARD)])
         try:
+            self._session([(OUTPUT, OUTPUT_STANDARD)])
             timed = self._collect(seconds, wait, parse_energies)
-        finally:
-            self.minimal_mode()
+        except BaseException:
+            # auch wenn nur die Antwort auf das Umschalten fehlt: zurueck in den Kurzmodus,
+            # ohne den eigentlichen Fehler oder Abbruch zu verdecken
+            try:
+                self.minimal_mode()
+            except Exception as exc:
+                log.warning("Radar: Kurzmodus nicht zurueck: %s", exc)
+            raise
+        self.minimal_mode()
         return [e for t, e in timed if t >= settle_s and any(e)]
 
     def watch(self, seconds: float, wait: Callable[[float], None]) -> list:
@@ -192,6 +203,7 @@ class LD2410S:
         return self._collect(seconds, wait, parse_states)
 
     def _collect(self, seconds, wait, parse) -> list:
+        self._uart.read_all()  # was vorher kam, gehoert nicht zu dieser Messung
         start = self._clock()
         buffer, timed = b"", []
         while self._clock() - start < seconds:

@@ -53,6 +53,8 @@ class FakeRadar:
         self.commands = []
         self.status = {}
         self.silent = set()
+        self.silent_once = set()  # Befehle, deren naechste Antwort verloren geht
+        self.broken = set()  # Befehle, bei denen die UART selbst einen Fehler wirft
         self.energies = lambda k: [1000] * 16  # k-te Meldung seit dem Umschalten
         self.present = lambda t: False
         self._pending = b""
@@ -69,9 +71,13 @@ class FakeRadar:
             assert data[6 + n:10 + n] == TAIL
             data = data[10 + n:]
             self.commands.append(cmd)
-            if cmd in self.silent:
+            if cmd in self.broken:
+                raise OSError("serieller Fehler")
+            answer = self._answer(cmd, value)
+            if cmd in self.silent or cmd in self.silent_once:
+                self.silent_once.discard(cmd)
                 continue
-            self._pending += ack(cmd, self._answer(cmd, value), self.status.get(cmd, 0))
+            self._pending += ack(cmd, answer, self.status.get(cmd, 0))
 
     def _answer(self, cmd, value):
         words = [struct.unpack("<H", value[i:i + 2])[0] for i in range(0, len(value) - 1, 2)]
@@ -189,6 +195,44 @@ class DriverTest(unittest.TestCase):
         self.assertFalse(seen[0][1])
         self.assertTrue(seen[-1][1])
         self.assertTrue(all(t <= 2.0 + 1e-6 for t, _ in seen))
+
+    def test_end_is_sent_even_if_enable_ack_is_lost(self):
+        self.fake.silent_once.add(0x00FF)
+        with self.assertRaises(LD2410SError):
+            self.radar.read_settings()
+        self.assertEqual(self.fake.commands[-1], 0x00FE)
+
+    def test_end_is_sent_after_a_serial_error(self):
+        self.fake.broken.add(0x0072)
+        with self.assertRaises(OSError):
+            self.radar.write_settings(RadarSettings(WERK_GENERAL, WERK_TRIGGER, WERK_HOLD))
+        self.assertEqual(self.fake.commands[-1], 0x00FE)
+
+    def test_measure_back_to_minimal_when_switching_fails(self):
+        self.fake.silent_once.add(0x00FE)  # Ausgabe umgeschaltet, Antwort auf END verloren
+        with self.assertRaises(LD2410SError):
+            self.radar.measure(5.0, self.wait)
+        self.assertEqual(self.fake.output, "minimal")
+
+    def test_measure_abort_is_not_masked_by_failing_minimal_mode(self):
+        class Abort(Exception):
+            pass
+
+        def wait(seconds):
+            self.clock.advance(seconds)
+            if self.clock.now > 1.0:
+                self.fake.silent.add(0x007A)
+                raise Abort()
+
+        with self.assertRaises(Abort):
+            self.radar.measure(30.0, wait)
+
+    def test_watch_ignores_input_from_before(self):
+        self.fake.present = lambda t: t < 5.0
+        self.clock.advance(10.0)  # zehn Sekunden niemand gelesen: alte Meldungen im Puffer
+        seen = self.radar.watch(1.0, self.wait)
+        self.assertTrue(seen)
+        self.assertFalse(any(present for _, present in seen))
 
     def test_settings_dict_roundtrip_and_bad_form(self):
         settings = RadarSettings(WERK_GENERAL, WERK_TRIGGER, WERK_HOLD)
