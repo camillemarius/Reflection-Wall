@@ -173,8 +173,10 @@ class _Session:
 
     # --- Warten, Tasten, Anzeige ---
 
-    def _show(self, *lines: str) -> None:
+    def _show(self, *lines: str, quiet: bool = False) -> None:
         self._ctx.display.show_lines(list(lines))
+        if not quiet:  # ins Protokoll: ohne Anzeige der einzige Blick auf den Ablauf
+            log.info("Radar-Einrichtung zeigt: %s", " / ".join(line for line in lines if line))
 
     def _wait(self, seconds: float) -> None:
         """Wartet hoechstens seconds auf eine Taste; BT4/BT2, Stopp und Zeit um werfen."""
@@ -205,7 +207,7 @@ class _Session:
 
     def _countdown(self, title: str, seconds: int) -> None:
         for remaining in range(seconds, 0, -1):
-            self._show(title, "IN %d S" % remaining)
+            self._show(title, "IN %d S" % remaining, quiet=remaining != seconds)
             self._pause(1.0)
 
     # --- Ablauf ---
