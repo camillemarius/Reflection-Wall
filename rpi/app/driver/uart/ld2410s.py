@@ -26,6 +26,10 @@ OUTPUT_STANDARD = bytes.fromhex("000001000000")
 OUTPUT_MINIMAL = bytes.fromhex("000000000000")
 
 READ_STEP_S = 0.02
+# Abstand von Befehl zu Befehl: mit 0,3 s kam am Geraet jede Antwort (Abstimm-Werkzeug),
+# ohne Abstand fehlten Antworten oder kam Status 1 (2026-11-03)
+COMMAND_GAP_S = 0.3
+SHOWN_BYTES = 80  # so viel vom Empfangenen nennt eine Fehlermeldung
 
 
 class LD2410SError(RuntimeError):
@@ -129,12 +133,18 @@ class LD2410S:
         self._clock = clock
         self._sleep = sleep
         self._ack_timeout_s = ack_timeout_s
+        self._last_write = None
 
     def _transact(self, cmd: int, value: bytes = b"") -> bytes:
         """Befehl senden, auf die Antwort warten; gibt die Daten nach dem Status zurueck."""
+        if self._last_write is not None:
+            rest = self._last_write + COMMAND_GAP_S - self._clock()
+            if rest > 0:
+                self._sleep(rest)
         self._uart.read_all()  # Meldungen von vorher sind keine Antwort
         self._uart.write(command_frame(cmd, value))
-        deadline = self._clock() + self._ack_timeout_s
+        self._last_write = self._clock()
+        deadline = self._last_write + self._ack_timeout_s
         buffer = b""
         while True:
             buffer += self._uart.read_all() or b""
@@ -142,10 +152,12 @@ class LD2410S:
             if payload is not None:
                 status = struct.unpack("<H", payload[:2])[0]
                 if status != 0:
-                    raise LD2410SError("Befehl 0x%04X: Status %d" % (cmd, status))
+                    raise LD2410SError("Befehl 0x%04X: Status %d, Antwort %s"
+                                       % (cmd, status, payload.hex()))
                 return payload[2:]
             if self._clock() >= deadline:
-                raise LD2410SError("Befehl 0x%04X: keine Antwort" % cmd)
+                raise LD2410SError("Befehl 0x%04X: keine Antwort, empfangen %d B: %s"
+                                   % (cmd, len(buffer), buffer[-SHOWN_BYTES:].hex()))
             self._sleep(READ_STEP_S)
 
     def _session(self, steps) -> list:

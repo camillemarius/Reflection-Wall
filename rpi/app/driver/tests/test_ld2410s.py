@@ -51,6 +51,7 @@ class FakeRadar:
         self.hold = list(WERK_HOLD)
         self.output = "minimal"
         self.commands = []
+        self.sent_at = []  # Uhrzeit jedes Befehls
         self.status = {}
         self.silent = set()
         self.silent_once = set()  # Befehle, deren naechste Antwort verloren geht
@@ -71,6 +72,7 @@ class FakeRadar:
             assert data[6 + n:10 + n] == TAIL
             data = data[10 + n:]
             self.commands.append(cmd)
+            self.sent_at.append(self.clock())
             if cmd in self.broken:
                 raise OSError("serieller Fehler")
             answer = self._answer(cmd, value)
@@ -166,6 +168,25 @@ class DriverTest(unittest.TestCase):
         with self.assertRaises(LD2410SError):
             self.radar.read_settings()
         self.assertLess(self.clock.now, 5.0)
+
+    def test_commands_keep_the_gap_of_the_tuning_tool(self):
+        # am Geraet kamen Antworten nur sicher, wenn zwischen zwei Befehlen 0,3 s lagen
+        self.radar.read_settings()
+        self.radar.write_settings(RadarSettings(WERK_GENERAL, WERK_TRIGGER, WERK_HOLD))
+        gaps = [b - a for a, b in zip(self.fake.sent_at, self.fake.sent_at[1:])]
+        self.assertGreaterEqual(min(gaps), 0.3 - 1e-9)
+
+    def test_errors_name_what_came_back(self):
+        self.fake.silent.add(0x0071)
+        with self.assertRaises(LD2410SError) as missing:
+            self.radar.read_settings()
+        self.assertIn(state_frame(0).hex(), str(missing.exception))
+        self.fake.silent.clear()
+        self.fake.status[0x0073] = 1
+        with self.assertRaises(LD2410SError) as refused:
+            self.radar.read_settings()
+        answer = struct.pack("<H", 1) + b"".join(struct.pack("<I", v) for v in WERK_TRIGGER)
+        self.assertIn(answer.hex(), str(refused.exception))
 
     def test_measure_drops_settle_and_zero_frames(self):
         # Meldung k traegt k als Energie; jede fuenfte ist leer
