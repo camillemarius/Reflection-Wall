@@ -82,7 +82,15 @@ nötig.
   - Die Zentimeter-Angabe im Kurzmodus folgt der Person nicht (blieb 50 s auf 175 cm).
     Für die Einrichtung zählt sie nicht.
   - Der Zustand im Kurzmodus (jemand / niemand) und INT_HLK stimmten in allen Tests überein.
-  - Die erste Messmodus-Meldung nach dem Umschalten hat lauter Nullen; sie wird verworfen.
+  - Nach dem Umschalten in den Messmodus ist die erste Meldung leer (lauter Nullen), die
+    zweite hat in Tor 0 und 1 eine Spitze von 42 und 47 dB, in allen fünf Messungen, leer
+    wie mit Person. Das ist das Umschalten, nicht der Raum: ohne diese Meldungen liegt der
+    leere Raum auch in Tor 0 und 1 bei höchstens etwa 35 dB. Zudem kommt mitten in jeder
+    Messung einmal eine leere Meldung.
+  - **Fernstes Tor = Nummer des letzten Tors, das zählt** (Wert 3 heisst Tore 0 bis 3): Mit
+    Wert 2 wurde die Person bei 2 m (stärkstes Tor 3, 35 dB) nicht erkannt, mit Wert 3 schon.
+  - Die Energien hängen nicht von den eingestellten Schwellen und vom fernsten Tor ab: auch
+    mit fernstem Tor 2 kamen alle 16 Tore.
   - Die erste Leer-Messung war verdorben, weil der Owner noch im Raum war (Tor 3 bis
     37 dB statt 31 dB). Mit solchen Werten wäre die Person bei 2 m nicht mehr sichtbar, die
     Berechnung meldet dann `NOCHMAL`. Ein solcher Fehler ist also sicher, kostet aber einen
@@ -164,7 +172,9 @@ einem Warteschritt: Abbruch wie BT4.
 
 ## 6. Berechnung (Entscheid Claude, aus den Messungen vom 2026-11-03)
 
-Alle Werte in dB = 10·log10(max(Energie, 1)). Je Tor g:
+Verworfen werden die Meldungen der ersten **2 s** nach dem Umschalten in den Messmodus und
+jede Meldung mit lauter Nullen (Abschnitt 3). Alle Werte in dB = 10·log10(max(Energie, 1)).
+Je Tor g:
 - **Rauschen** `N(g)` = höchster Wert der Leer-Messung; `N95(g)` = 95. Perzentil.
 - **Ziel** `P(g)` = Median der Messung am Zielwert.
 - **Dahinter** `O(g)` = Median der Messung dahinter (falls gemessen).
@@ -180,19 +190,28 @@ Regeln (Abstände `M_N = 1,5 dB`, `M_O = 1,0 dB`):
    So gibt das Radar im leeren Raum sicher frei. Eine Regel „Halteschwelle über dem
    Dahinter“ gibt es nicht: Am Gerät gab das Radar mit Halteschwelle 32 frei, obwohl der
    Median dahinter 33,2 dB war; die Nachlaufzeit fängt kurze Aussetzer ab.
-5. Tore hinter F schaltet das fernste Tor ab; ihre Schwellen bleiben, wie sie sind.
-6. **Weitere Werte:** nächstes Tor 0, Nachlaufzeit 30 s (R5; während der Tests 10 s),
+5. **Tor 0 und 1** (direkt vor dem Gehäuse) werden nie empfindlicher als ab Werk:
+   Auslöseschwelle mindestens 48 und 42, Halteschwelle mindestens 45 und 42. Grund: Dort
+   stört die Wand selbst, etwa die Lüfter, die erst ab 40 °C laufen und bei der Leer-Messung
+   vielleicht still sind. Wer so nah steht, ist in Tor 2 ohnehin laut (bei 1 m 38,9 dB).
+6. Tore hinter F schaltet das fernste Tor ab; ihre Schwellen bleiben, wie sie sind.
+7. **Weitere Werte:** nächstes Tor 0, Nachlaufzeit 30 s (R5; während der Tests 10 s),
    Ansprechen **normal** (5) gegen kurzes Vorbeigehen (R6), Meldetakt Zustand 8 Hz,
    Entfernung 4 Hz.
-7. **Angezeigte Reichweite:** der gewählte Zielwert; der Bericht hält zusätzlich F fest.
+8. **Angezeigte Reichweite:** der gewählte Zielwert; der Bericht hält zusätzlich F fest.
+9. **Neuer Anlauf:** misst alles neu; nichts aus dem vorigen Anlauf wird mitgenommen (eine
+   verdorbene Leer-Messung soll nicht nachwirken). Nach einem verpatzten Leer-Test wird
+   `M_N` für die folgenden Anläufe um 1 dB grösser, damit seltene Spitzen nicht dreimal
+   hintereinander scheitern. Das Radar behält beim Messen die zuletzt geschriebenen Werte;
+   die Energien hängen nicht davon ab.
 
-Prüfung gegen die Messungen vom 2026-11-03 (Zielwert 2,0 m, dahinter 2,5 m): Tor 3 ist
-sichtbar (35,0 ≥ 31,3 + 1,5) und vom Dahinter getrennt (35,0 ≥ 33,2 + 1,0); Tor 4 ist
-sichtbar (34,1 ≥ 32,6 + 1,5), aber nicht getrennt (34,1 < 33,7 + 1,0). Also F = 3, wie
-von Hand gefunden. Am Rand ergibt sich T(3) = max(33, runden(34,1)) = 34 und
-H(3) = max(32, 31) = 32: genau die Werks-Schwellen von Tor 3, mit denen die Wand am
-2026-11-03 bei 2 m erkannt hat und bei 2,5 m nicht neu. Die Messdaten liegen als Testdaten
-im Repo (Abschnitt 10).
+Prüfung gegen die Messungen vom 2026-11-03 (Zielwert 2,0 m, dahinter 2,5 m; ohne die
+ersten Meldungen nach dem Umschalten): Tor 3 ist sichtbar (35,0 ≥ 31,3 + 1,5) und vom
+Dahinter getrennt (35,0 ≥ 33,2 + 1,0); Tor 4 ist sichtbar (34,1 ≥ 31,7 + 1,5), aber nicht
+getrennt (34,1 < 33,7 + 1,0). Also F = 3, wie von Hand gefunden. Am Rand ergibt sich
+T(3) = max(33, runden(34,1)) = 34 und H(3) = max(32, 31) = 32: genau die Werks-Schwellen
+von Tor 3, mit denen die Wand am 2026-11-03 bei 2 m erkannt hat und bei 2,5 m nicht neu.
+Die Messdaten liegen als Testdaten im Repo (Abschnitt 10).
 
 ## 7. Bericht und Sicherung
 
@@ -229,7 +248,9 @@ im Repo (Abschnitt 10).
 **Am PC:**
 - Befehle und Antworten gegen die Beispiele im Datenblatt.
 - Berechnung mit den Messdaten vom 2026-11-03 (leer, 1 m, 2 m, 2,5 m): Zielwert 2,0 m mit
-  dahinter 2,5 m ergibt F = 3; erfundene Fälle für `NOCHMAL`.
+  dahinter 2,5 m ergibt F = 3, T(3) = 34, H(3) = 32; ohne dahinter F = 4; Zielwert 1 m mit
+  den Daten von 2 m als dahinter ergibt F = 2; die verdorbene Leer-Messung ergibt
+  `NOCHMAL`.
 - Der ganze Ablauf mit nachgebildetem Radar, Tasten und Uhr: Erfolg, `NOCHMAL`, Leer-Test
   scheitert dreimal, Abbruch mit BT4 vor und nach dem Schreiben, BT6 überspringt Schritt 8,
   unterbrochene Sicherung wird zurückgeschrieben.
@@ -238,6 +259,9 @@ im Repo (Abschnitt 10).
 1. Ganze Einrichtung mit Zielwert 2,0 m. Danach: leer keine Meldung, bei 2 m Meldung, bei
    2,5 m neu keine Meldung.
 2. Abbruch mit BT4 mitten in einer Messung: das Radar hat danach die alten Werte.
+3. Nach der Einrichtung Strom aus und wieder ein: das Radar hat die neuen Werte noch und
+   sendet im Kurzmodus (am 2026-11-03 nicht geprüft; der Treiber schaltet beim Start der
+   Einrichtung ohnehin in den Kurzmodus).
 
 ## 11. Was der Builder festlegt
 
@@ -247,7 +271,30 @@ im Repo (Abschnitt 10).
 - Wie der erlaubte Bereich der Schwellen begrenzt wird (Datenblatt nennt keinen; Werte
   0–100 annehmen und beim Zurücklesen prüfen).
 
-## 12. Offen und später
+## 12. Anhang: Bytes am Draht
+
+Alle Zahlen Little Endian. Geprüft am Gerät am 2026-11-03 (Werkzeug im Abstimm-Branch).
+
+- **Befehl:** `FD FC FB FA` · Länge (2 B) = 2 + Länge des Werts · Befehl (2 B) · Wert ·
+  `04 03 02 01`.
+- **Antwort:** `FD FC FB FA` · Länge · Befehl | `0x0100` (2 B) · Status (2 B, `0` = ausgeführt)
+  · Daten · `04 03 02 01`. Das Längenfeld stimmt im Datenblatt-Beispiel nicht; gelesen wird
+  bis zum Rahmenende.
+- **Einstellmodus ein** `0x00FF`, Wert `01 00`; Daten: Protokollversion (2 B), Puffer (2 B).
+  Am Gerät: `FF 01 · 00 00 · 03 00 · 80 00`. **Aus** `0x00FE`, ohne Wert.
+- **Allgemeine Werte schreiben** `0x0070`, Wert = je (Kennung 2 B, Wert 4 B). **Lesen**
+  `0x0071`, Wert = Kennungen zu je 2 B; Daten = die Werte zu je 4 B, in derselben
+  Reihenfolge. Am Gerät für `05 0A 06 02 0C 0B`: `02 0 10 80 5 10`.
+- **Auslöseschwellen** schreiben `0x0072` = je (Tor 2 B, Wert 4 B), lesen `0x0073` = Tore zu
+  je 2 B, Daten 16 × 4 B. **Halteschwellen** ebenso mit `0x0076` / `0x0077`.
+- **Ausgabe** `0x007A`, Wert 6 B: `00 00 01 00 00 00` Messmodus, `00 00 00 00 00 00`
+  Kurzmodus.
+- **Kurzmodus-Meldung:** `6E` · Zustand (1 B: 0/1 niemand, 2/3 jemand) · Entfernung cm (2 B)
+  · `62`.
+- **Messmodus-Meldung:** `F4 F3 F2 F1` · Länge (2 B, = 70) · `01` · Zustand (1 B) ·
+  Entfernung (2 B) · reserviert (2 B) · 16 × Energie (4 B) · `F8 F7 F6 F5`.
+
+## 13. Offen und später
 
 - **Eigene Entfernung für RADAR:** aus den Energien je Tor statt aus der Zentimeter-Angabe.
 - **R48 und `RADAR_INSTALLED`:** damit INT_HLK die Wand weckt.
