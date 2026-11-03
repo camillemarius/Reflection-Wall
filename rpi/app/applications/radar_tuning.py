@@ -71,12 +71,18 @@ def figures(empty, target, behind=None) -> Figures:
 def compute(fig: Figures, margin_db: float = M_N) -> Optional[Tuning]:
     """Fernstes Tor und Schwellen; None, wenn Ziel und Rauschen oder dahinter nicht trennbar."""
     gates = range(len(fig.target))
+    # Sichtbar: die ganzzahlige Schwelle ueber dem Rauschen erreicht die Person noch
     candidates = [g for g in gates
-                  if fig.target[g] >= fig.noise_max[g] + margin_db
+                  if _up(fig.noise_max[g] + margin_db) <= fig.target[g]
                   and (fig.behind is None or fig.target[g] >= fig.behind[g] + M_O)]
-    if not candidates:
-        return None
-    farthest = max(candidates)
+    for farthest in sorted(candidates, reverse=True):
+        tuning = _thresholds(fig, farthest, margin_db)
+        if tuning.trigger[farthest] <= fig.target[farthest]:
+            return tuning
+    return None
+
+
+def _thresholds(fig: Figures, farthest: int, margin_db: float) -> Tuning:
     trigger, hold = [], []
     for g in range(farthest + 1):
         t = _up(fig.noise_max[g] + margin_db)
@@ -90,8 +96,6 @@ def compute(fig: Figures, margin_db: float = M_N) -> Optional[Tuning]:
             h = max(h, NEAR_HOLD_FLOOR[g])
         trigger.append(t)
         hold.append(min(h, t))
-    if trigger[farthest] > fig.target[farthest]:
-        return None
     return Tuning(farthest, trigger, hold)
 
 

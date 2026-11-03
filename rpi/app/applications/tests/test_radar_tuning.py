@@ -44,6 +44,12 @@ class ComputeTest(unittest.TestCase):
         self.assertEqual(tuning.farthest, 2)
         self.assertEqual(tuning.trigger[2], 35)
 
+    def test_target_2m5_without_behind_falls_back_to_reachable_gate(self):
+        # Tor 4: Schwelle 34 laege ueber dem Median 33,7, also nicht sichtbar; bleibt Tor 3
+        tuning = compute(figures(EMPTY, AT_2M5))
+        self.assertEqual(tuning.farthest, 3)
+        self.assertEqual(tuning.trigger[3], 33)
+
     def test_spoiled_empty_gives_none(self):
         self.assertIsNone(compute(figures(SPOILED, AT_2M, AT_2M5)))
 
