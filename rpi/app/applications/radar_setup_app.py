@@ -299,6 +299,8 @@ class _Session:
         if tuning is None:
             raise _Retry("nochmal", "NICHT UNTERSCHEIDBAR")
         info["fernstes_tor"] = tuning.farthest
+        log.info("Radar-Einrichtung: fernstes Tor %d, ausloesen %s, halten %s",
+                 tuning.farthest, tuning.trigger, tuning.hold)
         self._show("SPEICHERE")
         self._write_checked(apply(self._backup, tuning, TEST_DELAY_S))
 

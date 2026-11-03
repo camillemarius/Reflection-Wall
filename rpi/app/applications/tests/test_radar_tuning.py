@@ -83,8 +83,11 @@ class ApplyTest(unittest.TestCase):
     def test_apply_keeps_far_gates_and_sets_general(self):
         tuning = Tuning(farthest=3, trigger=[48, 42, 35, 34], hold=[45, 42, 34, 32])
         new = apply(WERK, tuning, delay_s=10)
+        # Geschwindigkeit wie beim Messen: mit "normal" statt "schnell" hielt das Radar am
+        # Geraet niemanden mehr, obwohl die Energie ueber der Halteschwelle lag (2026-11-03)
         self.assertEqual(new.general, {"farthest": 3, "nearest": 0, "delay_s": 10,
-                                       "status_hz10": 80, "distance_hz10": 40, "speed": 5})
+                                       "status_hz10": 80, "distance_hz10": 40,
+                                       "speed": WERK.general["speed"]})
         self.assertEqual(new.trigger, [48, 42, 35, 34] + WERK.trigger[4:])
         self.assertEqual(new.hold, [45, 42, 34, 32] + WERK.hold[4:])
         self.assertEqual(WERK.general["farthest"], 2)  # die alten Werte bleiben unberuehrt

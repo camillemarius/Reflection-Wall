@@ -16,9 +16,10 @@ HOLD_GAP_DB = 3
 NEAR_TRIGGER_FLOOR = (48, 42)
 NEAR_HOLD_FLOOR = (45, 42)
 THRESHOLD_MAX = 100
-# Am Ende geschrieben (Spec §6.7): naechstes Tor, Ansprechen normal, Meldetakte in 0,1 Hz
+# Am Ende geschrieben (Spec §6.7): naechstes Tor, Meldetakte in 0,1 Hz. Die Geschwindigkeit
+# bleibt, wie gemessen wurde: mit "normal" statt "schnell" hielt das Radar am Geraet niemanden
+# mehr, obwohl die Energie ueber der Halteschwelle lag (2026-11-03).
 NEAREST = 0
-SPEED_NORMAL = 5
 STATUS_HZ10 = 80
 DISTANCE_HZ10 = 40
 
@@ -104,7 +105,7 @@ def apply(old: RadarSettings, tuning: Tuning, delay_s: int) -> RadarSettings:
     n = tuning.farthest + 1
     general = {"farthest": tuning.farthest, "nearest": NEAREST, "delay_s": delay_s,
                "status_hz10": STATUS_HZ10, "distance_hz10": DISTANCE_HZ10,
-               "speed": SPEED_NORMAL}
+               "speed": old.general["speed"]}
     return RadarSettings(general, list(tuning.trigger) + list(old.trigger[n:]),
                          list(tuning.hold) + list(old.hold[n:]))
 

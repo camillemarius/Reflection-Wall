@@ -196,11 +196,14 @@ class SetupTest(unittest.TestCase):
         return [line for page in self.display.shown for line in page]
 
     def test_full_run_writes_tuning_and_final_delay(self):
-        self.assertEqual(self.run_setup(), "back")
+        with self.assertLogs("app.applications.radar_setup_app", level="INFO") as logs:
+            self.assertEqual(self.run_setup(), "back")
+        # die berechneten Werte stehen sofort im Protokoll, nicht erst im Bericht am Schluss
+        self.assertTrue(any("fernstes Tor 3" in line and "34" in line for line in logs.output))
         final = self.radar.writes[-1]
         self.assertEqual(final.general["farthest"], 3)
         self.assertEqual(final.general["delay_s"], 30)
-        self.assertEqual(final.general["speed"], 5)
+        self.assertEqual(final.general["speed"], WERK.general["speed"])  # wie gemessen
         self.assertEqual(final.trigger[3], 34)
         self.assertEqual(final.hold[3], 32)
         self.assertEqual(self.radar.writes[0].general["delay_s"], 10)  # waehrend der Tests

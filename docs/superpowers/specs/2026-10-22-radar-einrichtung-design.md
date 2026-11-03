@@ -163,8 +163,8 @@ schreibt der Pi die gesicherten Werte zurück und zeigt `FEHLER - ALTE WERTE` (R
 
 Der Test „Vorbeigehen“ der alten Fassung entfällt (Entscheid Claude): Die Grenze nach hinten
 prüft Schritt 14. Vorbeigehen in Reichweite lässt sich mit dem Radar nicht sicher von
-Stehen trennen; ein Test dafür würde nur einen Hinweis liefern. Das Ansprechen steht dafür
-auf „normal“ (Abschnitt 6).
+Stehen trennen; ein Test dafür würde nur einen Hinweis liefern. Das Ansprechen sollte dafür
+auf „normal“ stehen; seit dem Gerätetest bleibt es vorläufig, wie gemessen (Abschnitt 6.7).
 
 **Abbrechen:** BT4 oder BT2 jederzeit, auch im Countdown und während einer Messung. Hat der
 Pi schon etwas geschrieben, schreibt er die Sicherung zurück. Ohne Taste für 5 min in
@@ -198,8 +198,12 @@ Regeln (Abstände `M_N = 1,5 dB`, `M_O = 1,0 dB`):
    vielleicht still sind. Wer so nah steht, ist in Tor 2 ohnehin laut (bei 1 m 38,9 dB).
 6. Tore hinter F schaltet das fernste Tor ab; ihre Schwellen bleiben, wie sie sind.
 7. **Weitere Werte:** nächstes Tor 0, Nachlaufzeit 30 s (R5; während der Tests 10 s),
-   Ansprechen **normal** (5) gegen kurzes Vorbeigehen (R6), Meldetakt Zustand 8 Hz,
-   Entfernung 4 Hz.
+   Meldetakt Zustand 8 Hz, Entfernung 4 Hz. Das **Ansprechen bleibt, wie gemessen wurde**
+   (vorläufig, Entscheid Claude 2026-11-03): Mit „normal“ (5) statt „schnell“ (10) hielt
+   das Radar am Gerät niemanden, der still auf 2 m stand, obwohl dessen Median in Tor 3
+   39,2 dB war, Auslösen 37, Halten 34. Belegt ist nur, dass es mit „normal“ scheiterte,
+   nicht, dass „normal“ die Ursache ist. Offen: ob „schnell“ R6 (Vorbeigehen) verletzt;
+   zu prüfen am endgültigen Platz.
 8. **Angezeigte Reichweite:** der gewählte Zielwert; der Bericht hält zusätzlich F fest.
 9. **Neuer Anlauf:** misst alles neu; nichts aus dem vorigen Anlauf wird mitgenommen (eine
    verdorbene Leer-Messung soll nicht nachwirken). Nach einem verpatzten Leer-Test wird
