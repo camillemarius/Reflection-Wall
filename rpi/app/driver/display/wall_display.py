@@ -36,6 +36,8 @@ class WallDisplay:
         # None = Modul noch nie geschrieben (oder letzter Versuch fehlgeschlagen)
         self._sent: list = [None] * len(MODULE_ADDRESSES)
         self._canvas = [0] * TOTAL_CELLS
+        # Module, deren letzter Versuch scheiterte: gemeldet wird nur der Wechsel
+        self._failing: set = set()
 
     def start(self) -> None:
         if self._bus is None:
@@ -54,10 +56,15 @@ class WallDisplay:
             try:
                 with self._guard():
                     action()
+                if addr in self._failing:
+                    self._failing.discard(addr)
+                    log.info("Modul 0x%02X antwortet wieder", addr)
                 return True
             except OSError as exc:
-                if attempt == 2:
-                    log.warning("Schreiben an 0x%02X fehlgeschlagen: %s", addr, exc)
+                if attempt == 2 and addr not in self._failing:
+                    self._failing.add(addr)
+                    log.warning("Schreiben an 0x%02X fehlgeschlagen: %s (weitere Fehler erst "
+                                "wieder, wenn es einmal geantwortet hat)", addr, exc)
         return False
 
     @staticmethod
