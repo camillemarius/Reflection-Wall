@@ -12,6 +12,7 @@ from unittest import mock
 from app import main as app_main
 from app import topics
 from app.applications import settings_apps
+from app.applications.radar_setup_app import RadarSetupApp
 from app.driver.display.wall_display import WallDisplay
 from app.link.codec import Message, decode, encode, role_of
 from app.link.pi_link import LinkBusy
@@ -354,6 +355,11 @@ class BuildAppsTest(unittest.TestCase):
         apps, _ = app_main.build_apps("cfg", radar_app=radar)
         self.assertIs(apps[3], radar)
 
+    def test_radar_setup_app_is_taken_from_argument(self):
+        setup = FakeApp("RADAR EINRICHTEN")
+        _, settings = app_main.build_apps("cfg", radar_setup_app=setup)
+        self.assertIs(settings[1], setup)
+
     def test_pc_radar_placeholder_waits_for_bt4(self):
         placeholder = app_main.RadarPcPlaceholder()
         self.assertEqual(placeholder.name, "RADAR")
@@ -599,6 +605,12 @@ class MainTest(unittest.TestCase):
         # R13: die Anwesenheit kommt vom BusGuard; die Radar-Tasten teilen Bus und Guard
         self.assertEqual(activity.call_args.kwargs["person_present"], wall.guard.radar_high)
         kwargs["radar_factory"]()._buttons_factory()
+        self.assertIsInstance(expander.call_args.kwargs["bus"], _SmbusReader)
+        self.assertIs(expander.call_args.kwargs["bus_guard"], wall.guard)
+        setup = kwargs["radar_setup_factory"]()
+        self.assertIsInstance(setup, RadarSetupApp)
+        expander.reset_mock()
+        setup._buttons_factory()
         self.assertIsInstance(expander.call_args.kwargs["bus"], _SmbusReader)
         self.assertIs(expander.call_args.kwargs["bus_guard"], wall.guard)
         for event in (("link", "stop"), ("port", "close"), ("guard", "stop")):
