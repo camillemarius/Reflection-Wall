@@ -76,6 +76,9 @@ class BusGuard:
 
     def _on_edge(self, chip, gpio, level, timestamp) -> None:
         # laeuft im lgpio-Thread; Zeit aus der eingespeisten Uhr
+        if gpio == RADAR_GPIO and level in (0, 1):
+            log.info("Radar meldet eine Person (INT_HLK hoch)" if level else
+                     "Radar meldet niemanden mehr (INT_HLK tief)")
         if level != 1:
             return
         now = self._clock()
