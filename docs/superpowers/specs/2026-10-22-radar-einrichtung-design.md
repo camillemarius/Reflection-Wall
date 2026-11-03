@@ -180,12 +180,14 @@ Je Tor g:
 - **Dahinter** `O(g)` = Median der Messung dahinter (falls gemessen).
 
 Regeln (Abstände `M_N = 1,5 dB`, `M_O = 1,0 dB`):
-1. **Sichtbar** ist ein Tor, wenn `P(g) ≥ N(g) + M_N`.
+1. **Sichtbar** ist ein Tor, wenn die ganzzahlige Schwelle über dem Rauschen die Person
+   noch erreicht: `aufrunden(N(g) + M_N) ≤ P(g)`.
 2. **Fernstes Tor F** = das höchste sichtbare Tor, für das gilt: es gibt keine Messung
    dahinter, oder `P(g) ≥ O(g) + M_O`. Gibt es kein solches Tor: `NOCHMAL`.
 3. **Auslöseschwelle** für g ≤ F: `T(g) = aufrunden(N(g) + M_N)`. Am Rand (g = F) mit
    Messung dahinter: `T(F) = max(aufrunden(N(F) + M_N), runden((P(F) + O(F)) / 2))`
-   (runden: ab ,5 aufwärts). Gilt danach nicht `T(F) ≤ P(F)`, dann `NOCHMAL`.
+   (runden: ab ,5 aufwärts). Gilt danach nicht `T(F) ≤ P(F)` (möglich wegen Tor 0/1,
+   Regel 5), gilt das nächstniedrigere Tor aus Regel 2 als F; bleibt keines: `NOCHMAL`.
 4. **Halteschwelle** für g ≤ F: `H(g) = min(T(g), max(aufrunden(N95(g) + 1), T(g) - 3))`.
    So gibt das Radar im leeren Raum sicher frei. Eine Regel „Halteschwelle über dem
    Dahinter“ gibt es nicht: Am Gerät gab das Radar mit Halteschwelle 32 frei, obwohl der
@@ -206,8 +208,8 @@ Regeln (Abstände `M_N = 1,5 dB`, `M_O = 1,0 dB`):
    die Energien hängen nicht davon ab.
 
 Prüfung gegen die Messungen vom 2026-11-03 (Zielwert 2,0 m, dahinter 2,5 m; ohne die
-ersten Meldungen nach dem Umschalten): Tor 3 ist sichtbar (35,0 ≥ 31,3 + 1,5) und vom
-Dahinter getrennt (35,0 ≥ 33,2 + 1,0); Tor 4 ist sichtbar (34,1 ≥ 31,7 + 1,5), aber nicht
+ersten Meldungen nach dem Umschalten): Tor 3 ist sichtbar (aufrunden(31,3 + 1,5) = 33 ≤ 35,0)
+und vom Dahinter getrennt (35,0 ≥ 33,2 + 1,0); Tor 4 ist sichtbar (34 ≤ 34,1), aber nicht
 getrennt (34,1 < 33,7 + 1,0). Also F = 3, wie von Hand gefunden. Am Rand ergibt sich
 T(3) = max(33, runden(34,1)) = 34 und H(3) = max(32, 31) = 32: genau die Werks-Schwellen
 von Tor 3, mit denen die Wand am 2026-11-03 bei 2 m erkannt hat und bei 2,5 m nicht neu.
@@ -248,7 +250,8 @@ Die Messdaten liegen als Testdaten im Repo (Abschnitt 10).
 **Am PC:**
 - Befehle und Antworten gegen die Beispiele im Datenblatt.
 - Berechnung mit den Messdaten vom 2026-11-03 (leer, 1 m, 2 m, 2,5 m): Zielwert 2,0 m mit
-  dahinter 2,5 m ergibt F = 3, T(3) = 34, H(3) = 32; ohne dahinter F = 4; Zielwert 1 m mit
+  dahinter 2,5 m ergibt F = 3, T(3) = 34, H(3) = 32; ohne dahinter F = 4; Zielwert 2,5 m
+  ohne dahinter F = 3 (Tor 4 bräuchte 34 bei Median 33,7); Zielwert 1 m mit
   den Daten von 2 m als dahinter ergibt F = 2; die verdorbene Leer-Messung ergibt
   `NOCHMAL`.
 - Der ganze Ablauf mit nachgebildetem Radar, Tasten und Uhr: Erfolg, `NOCHMAL`, Leer-Test
