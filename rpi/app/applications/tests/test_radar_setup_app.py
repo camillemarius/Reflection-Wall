@@ -91,6 +91,8 @@ class FakeRadar:
         self.writes = []
         self.fail_write = None  # Nummer des Schreibvorgangs, der scheitert
         self.read_back = None  # was read_settings statt der Werte liefert
+        self.errors = {}  # Titel -> Fehler beim Messen oder Beobachten
+        self._first_watch = {}
 
     def _pick(self, table):
         options = table.get(self.display.title)
@@ -118,6 +120,8 @@ class FakeRadar:
     def measure(self, seconds, wait, settle_s=2.0):
         frames = self._pick(self.measurements)
         self.mode = "standard"
+        if self.display.title in self.errors:
+            raise self.errors[self.display.title]  # bleibt im Messmodus haengen
         try:
             self._run(seconds, wait)
         finally:
@@ -125,10 +129,18 @@ class FakeRadar:
         return frames
 
     def watch(self, seconds, wait):
+        """present ist ein Wahrheitswert oder eine Funktion der Zeit seit dem ersten Beobachten
+        unter diesem Titel."""
+        if self.display.title in self.errors:
+            raise self.errors[self.display.title]
         present = self._pick(self.presence)
+        base = self._first_watch.setdefault(self.display.title, self.clock.now)
         start = self.clock.now
         self._run(seconds, wait)
-        return [(t / 8.0, present) for t in range(1, int((self.clock.now - start) * 8) + 1)]
+        frames = range(1, int((self.clock.now - start) * 8) + 1)
+        if not callable(present):
+            return [(k / 8.0, present) for k in frames]
+        return [(k / 8.0, present(start + k / 8.0 - base)) for k in frames]
 
 
 class FakeSwitch:
@@ -246,6 +258,38 @@ class SetupTest(unittest.TestCase):
         self.assertEqual(self.report()["ergebnis"], "fertig")
         self.assertIs(self.report()["tests"]["dahinter"], False)
         self.assertIn("HINWEIS GRENZE UNSCHARF", self.all_text())
+
+    def test_behind_test_waits_for_release_after_walking_out(self):
+        # vom Weggehen an der Wand vorbei: noch 8 s gemeldet, dann frei
+        self.radar.presence["TEST AUF 2.7 M"] = [lambda t: t < 8.0]
+        self.assertEqual(self.run_setup(), "back")
+        self.assertIs(self.report()["tests"]["dahinter"], True)
+        self.assertNotIn("HINWEIS GRENZE UNSCHARF", self.all_text())
+
+    def test_unexpected_error_restores_then_crash_page(self):
+        self.radar.errors["TEST LEER"] = OSError("serieller Fehler")
+        self.wall_buttons.put(BT4)
+        self.assertEqual(self.run_setup(), "error")
+        self.assertEqual(self.radar.writes[-1], WERK)
+        self.assertEqual(self.radar.mode, "minimal")
+        self.assertEqual(self.report()["ergebnis"], "fehler")
+        self.assertEqual(self.backup_status(), "zurueck")
+
+    def test_radar_error_in_standard_mode_ends_in_minimal_mode(self):
+        self.radar.errors["MESSE LEER"] = LD2410SError("Befehl 0x00FE: keine Antwort")
+        self.assertEqual(self.run_setup(), "back")
+        self.assertEqual(self.radar.mode, "minimal")
+        self.assertIn("FEHLER RADAR", self.all_text())
+
+    def test_failed_pending_restore_is_not_reported_as_done(self):
+        older = RadarSettings.from_dict(WERK.to_dict())
+        older.trigger[5] = 40
+        RadarRecords(self.config).save_backup(older)
+        self.radar.fail_write = 1
+        self.assertEqual(self.run_setup(), "back")
+        self.assertIn("WERTE UNKLAR", self.all_text())
+        self.assertEqual(self.backup_status(), "laufend")
+        self.assertEqual(RadarRecords(self.config).pending_backup(), older)
 
     def test_bt4_before_write_writes_nothing(self):
         self.script = {"STELL DICH AUF 2.0 M": BT4}

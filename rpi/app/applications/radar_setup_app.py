@@ -22,7 +22,6 @@ RELEASE_WAIT_S = 20
 TEST_EMPTY_S = 30
 TEST_TARGET_S = 15
 TEST_END_S = 2  # am Ziel bestanden, wenn in den letzten 2 s nur "jemand" kommt
-AWAY_S = 15
 TEST_BEHIND_S = 20
 NOCHMAL_S = 3
 WAIT_KEY_S = 5 * 60
@@ -98,6 +97,7 @@ class _Session:
         self._started = self._clock()
         self._backup = None
         self._written = False
+        self._clean = True  # False, solange eine alte Sicherung halb zurueckgeschrieben ist
         self._report = None
         self.stopped = False
 
@@ -129,6 +129,10 @@ class _Session:
             log.error("Radar-Einrichtung: Tasten nicht lesbar: %s", error)
             restored = self._end("fehler_tasten")
             return ["FEHLER TASTEN", "ALTE WERTE ZURUECK" if restored else "WERTE UNKLAR", BACK]
+        except Exception:
+            log.exception("Radar-Einrichtung: unerwarteter Fehler")
+            self._end("fehler")
+            raise  # run_app zeigt das Fehlerbild
 
     def _end(self, result: str) -> bool:
         """Sicherung zurueck, falls schon geschrieben; Bericht. True, wenn die alten Werte gelten."""
@@ -137,21 +141,26 @@ class _Session:
         return restored
 
     def _restore(self) -> bool:
-        if self._backup is None:
-            return True
-        if not self._written:
-            self._records.close_backup("unveraendert")
-            return True
         try:
+            self._radar.minimal_mode()  # RADAR erwartet den Kurzmodus, wie auch immer es endete
+        except Exception as error:
+            log.error("Radar: Kurzmodus nicht zurueck: %s", error)
+        if self._backup is None:
+            return self._clean
+        try:
+            if not self._written:
+                self._records.close_backup("unveraendert")
+                return True
             self._radar.write_settings(self._backup)
             ok = self._radar.read_settings() == self._backup
-        except LD2410SError as error:
+            if ok:
+                self._written = False
+                self._records.close_backup("zurueck")
+            return ok
+        except Exception as error:
+            # die Sicherung bleibt "laufend": der naechste Start schreibt sie
             log.error("Radar-Sicherung nicht zurueckgeschrieben: %s", error)
-            return False  # die Sicherung bleibt "laufend": der naechste Start schreibt sie
-        if ok:
-            self._written = False
-            self._records.close_backup("zurueck")
-        return ok
+            return False
 
     def _finish(self, result: str) -> None:
         if self._report is None:
@@ -208,7 +217,11 @@ class _Session:
         if pending is not None:
             log.info("Radar-Einrichtung: unterbrochene Einrichtung, alte Werte zurueck")
             self._show("RADAR EINRICHTEN", "STELLE ALTE WERTE HER")
+            self._clean = False
             self._radar.write_settings(pending)
+            if self._radar.read_settings() != pending:
+                raise _Mismatch()
+            self._clean = True
             self._records.close_backup("zurueck")
         self._backup = self._radar.read_settings()
         self._records.save_backup(self._backup)
@@ -301,11 +314,13 @@ class _Session:
             raise _Retry("ziel_nicht_erkannt", "AM ZIEL NICHT ERKANNT")
         behind_ok = None
         if behind is not None:
-            self._countdown("BITTE WEGGEHEN", AWAY_S)
             self._key(["TEST AUF " + there, "STELL DICH HIN", "DANN BT5"])
             self._countdown("TEST AUF " + there, POSITION_S)
             self._show("TEST AUF " + there, "RUHIG STEHEN")
-            behind_ok = not any(present for _, present in self._watch(TEST_BEHIND_S))
+            # Wer BT5 drueckt, steht an der Wand: erst die Meldung vom Weggehen ablaufen lassen.
+            # Gibt das Radar nicht frei, haelt es die Person dahinter fest.
+            behind_ok = self._released() and not any(
+                present for _, present in self._watch(TEST_BEHIND_S))
         return tuning, {"leer": True, "ziel": True, "dahinter": behind_ok}
 
     def _watch(self, seconds: float) -> list:
@@ -314,13 +329,18 @@ class _Session:
             raise LD2410SError("keine Kurzmodus-Meldungen")
         return seen
 
-    def _test_empty(self) -> bool:
-        """Erst die Freigabe abwarten (Nachlaufzeit), dann darf niemand gemeldet werden (R10)."""
+    def _released(self) -> bool:
+        """Wartet hoechstens RELEASE_WAIT_S, bis das Radar niemanden mehr meldet."""
         start = self._clock()
         while self._watch(1.0)[-1][1]:
             if self._clock() - start >= RELEASE_WAIT_S:
                 return False
-        return not any(present for _, present in self._watch(TEST_EMPTY_S))
+        return True
+
+    def _test_empty(self) -> bool:
+        """Erst die Freigabe abwarten (Nachlaufzeit), dann darf niemand gemeldet werden (R10)."""
+        return self._released() and not any(
+            present for _, present in self._watch(TEST_EMPTY_S))
 
     def _write_checked(self, settings) -> None:
         """Schreiben und zuruecklesen; stimmt es nicht, einmal neu (Spec §8)."""

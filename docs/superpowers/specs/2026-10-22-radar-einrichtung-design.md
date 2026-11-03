@@ -155,7 +155,7 @@ Die Texte passen auf die Anzeige: 4 Zeilen zu 24 Zeichen, Umlaute umschrieben.
 | 11 | `SPEICHERE` | Alle Werte in einem Einstellvorgang schreiben, zurücklesen und vergleichen. Für die Tests Nachlaufzeit 10 s. |
 | 12 | `TEST LEER` / `RAUM VERLASSEN - BT5` | Countdown, dann 30 s: niemand darf gemeldet werden (R10). Sonst zurück zu Schritt 2. |
 | 13 | `TEST AUF 2,0 M` / `DANN BT5` | Countdown, dann bis 20 s: jemand muss gemeldet werden. Sonst zurück zu Schritt 2. |
-| 14 | `TEST AUF 2,7 M` / `DANN BT5` | Nur wenn Schritt 8 gemessen wurde. Erst 15 s leer (damit die Meldung von Schritt 13 abläuft), dann 20 s dahinter: es soll niemand gemeldet werden. Sonst nur ein Hinweis (R9). |
+| 14 | `TEST AUF 2,7 M` / `DANN BT5` | Nur wenn Schritt 8 gemessen wurde. Wer BT5 drückt, steht an der Wand: nach dem Countdown erst warten, bis das Radar freigibt (höchstens 20 s; gibt es nicht frei, hält es die Person dahinter fest), dann 20 s: es soll niemand gemeldet werden. Sonst nur ein Hinweis (R9). |
 | 15 | `FERTIG` / `BIS ETWA 2,0 M` oder `HINWEIS GRENZE` | Nachlaufzeit 30 s schreiben, Bericht abschliessen. Warten auf BT4/BT5, dann zurück. |
 
 Ein Fehlschlag in Schritt 12 oder 13 (oder `NOCHMAL`) zählt als Anlauf; nach dem dritten
@@ -234,6 +234,8 @@ Die Messdaten liegen als Testdaten im Repo (Abschnitt 10).
 | Zurückgelesene Werte stimmen nicht | einmal neu schreiben; dann `FEHLER - ALTE WERTE` |
 | Niemand drückt eine Taste | nach 5 min Abbruch wie BT4 |
 | Tasten nicht lesbar | Abbruch, Sicherung zurück, `FEHLER TASTEN` |
+| Jeder andere Fehler (z. B. serielle Schnittstelle, Datei) | Kurzmodus und Sicherung zurück, Bericht, dann das Fehlerbild der Anwendung |
+| Am Ende jedes Abbruchs oder Fehlers | Das Radar wird in den Kurzmodus geschaltet, auch wenn nichts geschrieben wurde (die Anwendung RADAR braucht ihn) |
 | Stromausfall mitten drin | Sicherung mit Status `laufend` liegt seit Schritt 0; beim nächsten Start der Einrichtung zurückschreiben (Abschnitt 7). Bis dahin können halbe Werte im Radar stehen; das nimmt der Entwurf in Kauf |
 
 ## 9. Was sich am Code ändert
