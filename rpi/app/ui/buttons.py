@@ -16,6 +16,8 @@ BT1, BT2, BT3, BT4, BT5, BT6 = 1, 2, 3, 4, 5, 6
 EXPANDER_ADDRESS = 0x20
 # Bitnummer im 16-Bit-Wert (erstes gelesenes Byte = unteres Byte), Reihenfolge BT1..BT6
 BUTTON_BITS = ((BT1, 3), (BT2, 4), (BT3, 5), (BT4, 8), (BT5, 9), (BT6, 10))
+READ_TRIES = 5      # ueber gut 0,15 s: so lange darf der ESP den Bus nach einem Druck haben
+RETRY_GAP_S = 0.04
 
 
 class ExpanderError(Exception):
@@ -101,14 +103,22 @@ class ExpanderButtons:
         return data[0] | (data[1] << 8)
 
     def _read(self) -> int:
-        try:
-            return self._read_once()
-        except OSError:
-            pass
-        try:
-            return self._read_once()
-        except OSError as exc:
-            raise ExpanderError("Expander 0x%02X nicht lesbar: %s" % (EXPANDER_ADDRESS, exc)) from exc
+        # Nach einem Druck startet der ESP neu und nimmt den Bus; am Geraet scheiterte dann auch
+        # der sofortige zweite Versuch (2026-11-03). Die Kippstufe haelt den Druck, Warten kostet nichts.
+        start = self._clock()
+        for attempt in range(1, READ_TRIES + 1):
+            try:
+                value = self._read_once()
+            except OSError as exc:
+                if attempt == READ_TRIES:
+                    raise ExpanderError("Expander 0x%02X nicht lesbar nach %d Versuchen: %s"
+                                        % (EXPANDER_ADDRESS, READ_TRIES, exc)) from exc
+                self._sleep(RETRY_GAP_S)
+                continue
+            if attempt > 1:
+                log.info("Expander 0x%02X erst im %d. Versuch gelesen, nach %.0f ms",
+                         EXPANDER_ADDRESS, attempt, (self._clock() - start) * 1000)
+            return value
 
     def _poll(self) -> None:
         value = self._read()

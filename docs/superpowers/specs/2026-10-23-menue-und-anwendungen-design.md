@@ -394,7 +394,7 @@ entfällt.
 | Kein Mikrofon | `KEIN MIKROFON`; BT4 geht zurück |
 | Anwendung wirft einen Fehler | `FEHLER IN <NAME>`, Grund im Log; BT4 geht zurück |
 | Radar antwortet nicht | `RADAR ANTWORTET NICHT`; der Pi schaltet zurück auf den ESP (Abschnitt 7, Schritt 5); BT4 geht zurück |
-| Tasten-Expander über I²C nicht lesbar (Radar-Modus) | einmal neu lesen; dann zurück auf den ESP und ins Menü, Grund im Log |
+| Tasten-Expander über I²C nicht lesbar (Radar-Modus) | bis zu fünfmal lesen, 40 ms auseinander; dann zurück auf den ESP und ins Menü, Grund im Log. Bis 2026-11-03 nur einmal neu: am Gerät scheiterte nach einem Druck auch der zweite Versuch, weil der ESP nach seinem Neustart den Bus noch hatte (Entscheid des Entwicklers, offener Punkt M-14) |
 | Webseite startet nicht (zum Beispiel Port belegt) | `WEBSEITE GEHT NICHT`; BT4 geht zurück |
 | Taste kommt während `DENKE NACH` | BT4 und BT2 wirken sofort; BT5 und BT6 zählen nicht |
 | `SESSION` bleibt ohne Antwort | der ESP wiederholt wie bei jeder Nachricht; nach der Frist fährt er den Pi herunter wie nach BT2 |

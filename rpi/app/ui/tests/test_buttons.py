@@ -62,10 +62,19 @@ class ExpanderButtonsTest(unittest.TestCase):
         b, _ = make([0x0000, OSError("x"), 1 << 9])
         self.assertEqual(b.get(0.2), BT5)
 
-    def test_second_read_error_raises(self):
-        b, _ = make([0x0000, OSError("x"), OSError("y"), OSError("z")])
+    def test_read_errors_over_a_short_while_are_ridden_out(self):
+        # am Geraet scheiterte nach einem Druck auch der sofortige zweite Versuch (2026-11-03):
+        # der ESP braucht den Bus nach seinem Neustart laenger; die Kippstufe haelt den Druck
+        b, _ = make([0x0000] + [OSError("busy")] * 4 + [1 << 9])
+        with self.assertLogs("app.ui.buttons", level="INFO") as logs:
+            self.assertEqual(b.get(1.0), BT5)
+        self.assertIn("5. Versuch", logs.output[0])
+
+    def test_read_error_raises_after_five_tries(self):
+        b, bus = make([0x0000] + [OSError("busy")] * 6)
         with self.assertRaises(ExpanderError):
-            b.get(0.2)
+            b.get(1.0)
+        self.assertEqual(bus.reads, 1 + 5)
 
     def test_bus_guard_used(self):
         calls = []
