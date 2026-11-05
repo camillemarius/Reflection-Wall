@@ -97,8 +97,8 @@ Menü. Eine Tastatur oder SSH braucht es nicht mehr.
 |---|---|
 | D1 | BT2 schaltet den Pi ein. Er bleibt an, bis jemand BT2 noch einmal drückt. Die Obergrenze von 3 h entfällt. |
 | D2 | Das automatische Ausschalten nach 15 min ohne Tastendruck wird gebaut, ist aber ausgeschaltet. Ein Schalter auf dem Pi schaltet es ein. |
-| D3 | Das Menü ist eine Liste mit einem Zeiger `>`. Die Anzeige zeigt vier Punkte, die Liste rollt mit. |
-| D4 | BT6 schiebt den Zeiger nach unten; nach dem letzten Punkt kommt wieder der erste. BT5 wählt aus und heisst in einer Anwendung „weiter“. BT4 geht zurück. |
+| D3 | Das Menü ist eine Liste mit einem Zeiger `>`. Die Anzeige zeigt vier Punkte. Der Zeiger steht immer in der zweiten Zeile, die Liste rollt unter ihm durch (Owner, 2026-11-05: „der Pfeil im Menü immer in der zweiten Zeile“). |
+| D4 | BT6 schiebt die Liste um einen Punkt nach oben; nach dem letzten Punkt kommt wieder der erste. BT5 wählt aus und heisst in einer Anwendung „weiter“. BT4 geht zurück. |
 | D5 | BT2 bleibt die Ein/Aus-Taste. BT1 schaltet ohne Sitzung die Zitate weiter. In einer Sitzung haben BT1 und BT3 keine Aufgabe. |
 | D6 | Das Menü hat diese Punkte, in dieser Reihenfolge: `CHAT`, `QUIZ`, `REFLECTION`, `RADAR`, `STRICHMAENNCHEN`, `EINSTELLUNGEN`. Die Einstellungen stehen immer am Ende. |
 | D7 | Radar und Strichmännchen werden repariert und stehen im Menü. |
@@ -210,7 +210,7 @@ Was die Zeichnung nicht zeigt:
 
 | Taste | Pi aus | Menü | Anwendung | Einstellungen |
 |---|---|---|---|---|
-| BT6 | – | Zeiger nach unten | je nach Anwendung, meist nichts | Zeiger nach unten |
+| BT6 | – | nächster Punkt | je nach Anwendung, meist nichts | nächster Punkt |
 | BT5 | – | auswählen | weiter | auswählen |
 | BT4 | – | nichts | zurück ins Menü | zurück ins Menü |
 | BT3 | Verbindungstest (Teil 1) | nichts | nichts | nichts |
@@ -234,16 +234,20 @@ Tasten selbst (Abschnitt 7); sonst kommen sie als `BUTTON|n` vom ESP.
 ### 5.3 Das Menü auf der Anzeige
 
 ```
+  EINSTELLUNGEN
 > CHAT
   QUIZ
   REFLECTION
-  RADAR
 ```
 
 - Spalte 1 zeigt den Zeiger `>`, ab Spalte 3 steht der Name.
-- Rutscht der Zeiger unter die vierte Zeile, rollt die Liste um eine Zeile.
-- Nach dem letzten Punkt springt der Zeiger auf den ersten, und die Liste steht
-  wieder oben.
+- Der Zeiger steht immer in der zweiten Zeile. Darüber steht der vorige Punkt,
+  darunter die zwei nächsten.
+- BT6 schiebt die Liste um einen Punkt nach oben. Die Liste ist ein Ring: Nach
+  dem letzten Punkt folgt der erste, über dem ersten steht der letzte.
+- Ein Menü mit weniger als vier Punkten zeigt jeden Punkt nur einmal. Der nächste
+  steht immer unter dem Zeiger, freie Zeilen bleiben leer. Beispiel mit zwei
+  Punkten: leer, `> THEMA AENDERN`, `  RADAR EINRICHTEN`, leer.
 - `>` bekommt das Muster `0x0840`: die Schräge von oben links zur Mitte und die
   Schräge von unten links zur Mitte. Es kommt in die Schrift von ESP und Pi und in
   die gemeinsamen Testfälle.
@@ -404,8 +408,9 @@ entfällt.
 ## 11. Prüfen
 
 **Auf dem PC, ohne Gerät:**
-- **Menü:** Zeiger nach unten, Rollen der Liste, Sprung vom letzten zum ersten
-  Punkt, Zeiger nach der Rückkehr aus einer Anwendung (V3).
+- **Menü:** Zeiger fest in der zweiten Zeile, Rollen der Liste, Ring vom letzten
+  zum ersten Punkt, kurze Menüs ohne doppelte Punkte, Zeiger nach der Rückkehr
+  aus einer Anwendung (V3).
 - **Tasten je Bildschirm:** jede Zeile der Tabelle 5.1 als Testfall.
 - **Tasten am ESP je Zustand:** jede Zelle der Tabelle 5.2 als Testfall, als reine
   Logik auf dem ESP.

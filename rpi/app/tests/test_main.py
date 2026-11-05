@@ -458,7 +458,7 @@ class RunWallTest(unittest.TestCase):
             thread, result = start_wall(display, buttons, Activity(), stop, link=link,
                                         on_shutdown=lambda: events.append(("on_shutdown",)))
             self.assertTrue(wait_for(lambda: display.shown))
-            self.assertEqual(display.shown[-1][:2], ["> A", "  B"])
+            self.assertEqual(display.shown[-1][1:3], ["> A", "  B"])
             link.incoming.put(Message(1, "BUTTON", "6"))
             self.assertTrue(wait_for(lambda: display.shown[-1][:2] == ["  A", "> B"]))
             link.incoming.put(Message(2, "BUTTON", "5"))
@@ -632,7 +632,7 @@ class MainTest(unittest.TestCase):
         wall.put("SESSION", "HAND")
         self.assertTrue(wait_for(lambda: wall.shown()))
         self.assertIn(("reply", "SESSION", "OK"), wall.events)
-        self.assertEqual(wall.shown()[0][:2], ["> A", "  B"])
+        self.assertEqual(wall.shown()[0][1:3], ["> A", "  B"])
         wall.put("BUTTON", "6")
         self.assertTrue(wait_for(lambda: wall.shown()[-1][:2] == ["  A", "> B"]))
         wall.put("SHUTDOWN")
@@ -704,7 +704,7 @@ class MainTest(unittest.TestCase):
         hand = wall.put("SESSION", "HAND")
         self.assertTrue(wait_for(lambda: wall.shown()))
         self.assertIn((hand, "OK"), wall.answers())
-        self.assertEqual(wall.shown()[0][:2], ["> A", "  B"])
+        self.assertEqual(wall.shown()[0][1:3], ["> A", "  B"])
         self.assertGreater(min(wall.display_writes()), wall.position(("put", "SESSION", "HAND")))
         return first_get
 

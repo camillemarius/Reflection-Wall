@@ -70,7 +70,7 @@ class ShellTest(unittest.TestCase):
         shell, display, _, stop = make([FakeApp("CHAT"), FakeApp("QUIZ")], [FakeApp("S1")])
         stop.set("shutdown")
         self.assertEqual(shell.run(), "shutdown")
-        self.assertEqual(display.calls[0], ["> CHAT", "  QUIZ", "  EINSTELLUNGEN", ""])
+        self.assertEqual(display.calls[0], ["  EINSTELLUNGEN", "> CHAT", "  QUIZ", ""])
 
     def test_shell_returns_to_selected_app(self):
         quiz = FakeApp("QUIZ")
@@ -102,8 +102,8 @@ class ShellTest(unittest.TestCase):
                [("> CHAT", 6), ("> EINSTELLUNGEN", 5), ("> THEMA AENDERN", 4)],
                stop, final="> EINSTELLUNGEN")
         self.assertEqual(shell.run(), "shutdown")
-        self.assertIn(["> THEMA AENDERN", "  RADAR EINRICHTEN", "", ""], display.calls)
-        self.assertEqual(display.last, ["  CHAT", "> EINSTELLUNGEN", "", ""])
+        self.assertIn(["", "> THEMA AENDERN", "  RADAR EINRICHTEN", ""], display.calls)
+        self.assertEqual(display.last, ["", "> EINSTELLUNGEN", "  CHAT", ""])
 
     def test_settings_app_starts_and_returns_to_submenu(self):
         thema = FakeApp("THEMA AENDERN")
@@ -125,7 +125,7 @@ class ShellTest(unittest.TestCase):
         threading.Thread(target=drive, daemon=True).start()
         self.assertEqual(shell.run(), "shutdown")
         self.assertEqual(thema.started, 1)
-        self.assertEqual(display.last[0], "> THEMA AENDERN")
+        self.assertEqual(display.last[1], "> THEMA AENDERN")
 
     def test_buttons_before_start_are_drained(self):
         app = FakeApp("CHAT")
