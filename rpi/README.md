@@ -144,6 +144,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Der I²C-Bus läuft auf dem Pi mit 50 kHz. Dazu steht in `/boot/firmware/config.txt` direkt unter `dtparam=i2c_arm=on` die Zeile `dtparam=i2c_arm_baudrate=50000`. Mit den voreingestellten 100 kHz antworten die acht Anzeigemodule direkt am Bus (0x70–0x77) hinter dem PCA9517A-Adapter nie. Die vier hinter den LTC4316 (0x79, 0x7B, 0x7D, 0x7F) antworten weiterhin. Gemessen am 5. November 2026: 50 und 75 kHz fehlerfrei, 100 kHz ohne ein einziges ACK. Der ESP fährt den Bus mit 10 kHz (`I2C_CLOCK_HZ` in `esp/lib/drivers/I2CMasterControl.h`).
+
 `pyserial` braucht die UART-Verbindung. Das Paket `piper-tts` liefert den Befehl `piper`, den die Sprachausgabe aufruft (Paketname ungeprüft). Zum Abspielen braucht es außerdem `aplay` (`sudo apt install alsa-utils`).
 
 Die einzelnen Komponenten lassen sich in `tests/<Komponente>/` getrennt testen (`chatbot_groq`, `ht16k33`, `ioExpander`, `ld2410s`, `lichtsensor`, `microphone`, `mysql`, `speechrecognition`, `wakeWord`); dort steht jeweils eine `installation.txt`. `tests/ld2410s` nutzt den App-Treiber und startet im Ordner `rpi/` mit `python -m tests.ld2410s.test [--simulation] [--seconds N]`; auf dem PC mit `--simulation` (Windows: `python -X utf8 …`, sonst scheitert die Konsole an den Zeichen für Balken und Pfeile). `tests/microphone` nimmt auf und legt die Aufnahmen in `tests/microphone/recordings/` ab (nicht im Repository).
