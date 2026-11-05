@@ -70,7 +70,7 @@ class ShellTest(unittest.TestCase):
         shell, display, _, stop = make([FakeApp("CHAT"), FakeApp("QUIZ")], [FakeApp("S1")])
         stop.set("shutdown")
         self.assertEqual(shell.run(), "shutdown")
-        self.assertEqual(display.calls[0], ["  EINSTELLUNGEN", "> CHAT", "  QUIZ", ""])
+        self.assertEqual(display.calls[0], ["", "> CHAT", "  QUIZ", "  EINSTELLUNGEN"])
 
     def test_shell_returns_to_selected_app(self):
         quiz = FakeApp("QUIZ")
@@ -103,7 +103,7 @@ class ShellTest(unittest.TestCase):
                stop, final="> EINSTELLUNGEN")
         self.assertEqual(shell.run(), "shutdown")
         self.assertIn(["", "> THEMA AENDERN", "  RADAR EINRICHTEN", ""], display.calls)
-        self.assertEqual(display.last, ["", "> EINSTELLUNGEN", "  CHAT", ""])
+        self.assertEqual(display.last, ["  CHAT", "> EINSTELLUNGEN", "", ""])
 
     def test_settings_app_starts_and_returns_to_submenu(self):
         thema = FakeApp("THEMA AENDERN")
