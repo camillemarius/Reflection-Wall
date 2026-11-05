@@ -2,12 +2,25 @@ import math
 import unittest
 
 from app.applications import dance_app
-from app.applications.dance_app import SHOW, SHOW_LEN, DanceApp, show_frame
+from app.applications.dance_app import (
+    D6, FULL, HEAD, SHOW, SHOW_LEN, SUB, T_IDLE, T_UP, DanceApp, show_frame, show_levels,
+)
+from app.driver.display.segments import center, new_buffer, put_line
 from app.ui.activity import Activity
 from app.ui.app_host import AppContext, StopApp, StopSignal
 from app.ui.buttons import BT4, BT5
 
-# Referenzbilder aus der Vorlage (Node): Halbtakt -> {Stelle: Muster}, Rest ist 0
+NAMES = ["Auftritt", "Solo", "Einmarsch", "Welle", "Spiegel", "Drehung", "Karussell", "Bravo", "Abgang"]
+LENGTHS = [22, 32, 30, 24, 16, 16, 46, 16, 20]
+START = {name: sum(LENGTHS[:i]) for i, name in enumerate(NAMES)}
+HEADS = set(HEAD.values())
+
+# Szenen der Vorlage mit ihrem ersten Halbtakt dort; die Show der Wand hat Klone und Stadion ersetzt
+TEMPLATE_STARTS = [("Auftritt", 0), ("Solo", 22), ("Klone", 54), ("Welle", 72), ("Spiegel", 96),
+                   ("Drehung", 112), ("Stadion", 128), ("Bravo", 161), ("Abgang", 169)]
+FROM_TEMPLATE = {"Auftritt", "Solo", "Welle", "Spiegel", "Drehung", "Abgang"}
+
+# Referenzbilder aus der Vorlage (Node): Halbtakt der Vorlage -> {Stelle: Muster}, Rest ist 0
 REFERENCE = {
     0: {},
     3: {1: 0xA6A3, 25: 0x5010, 49: 0x4810, 72: 0x0808, 74: 0x4040},
@@ -68,6 +81,29 @@ def dense(sparse):
     return cells
 
 
+def on_wall(template_h):
+    """Halbtakt der Vorlage -> (Szene, Halbtakt in der Show der Wand)."""
+    name, start = [s for s in TEMPLATE_STARTS if s[1] <= template_h][-1]
+    return name, START.get(name, 0) + template_h - start
+
+
+def text_row(text):
+    b = new_buffer()
+    put_line(b, 1, center(text))
+    return b[24:48]
+
+
+def heads(cells):
+    """Spalten der Koepfe in Zeile 0 (grosse Figuren)."""
+    return [c for c in range(24) if cells[c] in HEADS]
+
+
+def ticks(name):
+    """Alle (Halbtakt, Viertel) einer Szene."""
+    return [(h, q) for h in range(START[name], START[name] + LENGTHS[NAMES.index(name)])
+            for q in range(SUB)]
+
+
 class FakeDisplay:
     def __init__(self, clock):
         self.clock = clock
@@ -75,6 +111,15 @@ class FakeDisplay:
 
     def show_cells(self, cells):
         self.shown.append((self.clock.now, list(cells)))
+
+
+class LevelDisplay(FakeDisplay):
+    def __init__(self, clock):
+        super().__init__(clock)
+        self.levels = []  # (Zeit, Helligkeiten)
+
+    def set_levels(self, levels):
+        self.levels.append((self.clock.now, tuple(levels)))
 
 
 class FakeClock:
@@ -108,9 +153,9 @@ class Buttons:
         pass
 
 
-def play(stop_at, script=None):
+def play(stop_at, script=None, display_cls=FakeDisplay):
     clock = FakeClock()
-    display = FakeDisplay(clock)
+    display = display_cls(clock)
     buttons = Buttons(clock, script, stop_at)
     ctx = AppContext(display, buttons, Activity(), StopSignal())
     with_stop = False
@@ -119,41 +164,140 @@ def play(stop_at, script=None):
     except StopApp:
         with_stop = True
     assert with_stop
-    return [(round(t - 100.0, 6), cells) for t, cells in display.shown]
+    shown = [(round(t - 100.0, 6), cells) for t, cells in display.shown]
+    if display_cls is FakeDisplay:
+        return shown
+    return shown, [(round(t - 100.0, 6), lv) for t, lv in display.levels]
 
 
 class ShowTest(unittest.TestCase):
     def test_show_length_and_scene_lengths(self):
-        self.assertEqual(SHOW_LEN, 189)
-        self.assertEqual([length for _, length, _ in SHOW], [22, 32, 18, 24, 16, 16, 33, 8, 20])
-        self.assertEqual([n for n, _, _ in SHOW], ["Auftritt", "Solo", "Klone", "Welle",
-                         "Spiegel", "Drehung", "Stadion", "Bravo", "Abgang"])
+        self.assertEqual(SHOW_LEN, 222)
+        self.assertEqual([length for _, length, _ in SHOW], LENGTHS)
+        self.assertEqual([n for n, _, _ in SHOW], NAMES)
 
-    def test_frames_match_the_template(self):
-        for h, sparse in REFERENCE.items():
-            with self.subTest(h=h):
+    def test_scenes_kept_from_the_template_match_it(self):
+        checked = 0
+        for template_h, sparse in REFERENCE.items():
+            name, h = on_wall(template_h)
+            if name not in FROM_TEMPLATE:
+                continue
+            with self.subTest(template_h=template_h, scene=name, h=h):
                 self.assertEqual(show_frame(h), dense(sparse))
+            checked += 1
+        self.assertEqual(checked, 22)
 
-    def test_blitz_is_all_segments(self):
-        self.assertEqual(show_frame(54), [0xFFFF] * 96)
-        self.assertEqual(show_frame(63), [0xFFFF] * 96)
-        self.assertEqual(show_frame(128), [0xFFFF] * 96)
+    def test_never_lights_the_whole_wall(self):
+        for h in range(SHOW_LEN):
+            for q in range(SUB):
+                cells = show_frame(h, q)
+                with self.subTest(h=h, q=q):
+                    self.assertLessEqual(sum(1 for m in cells if m), 60)
+                    self.assertNotIn(0xFFFF, cells)
 
     def test_loops_with_modulo(self):
-        for h in (0, 5, 60, 150, 188):
+        for h in (0, 5, 60, 150, 188, 221):
             self.assertEqual(show_frame(h + SHOW_LEN), show_frame(h))
-            self.assertEqual(show_frame(h + 5 * SHOW_LEN), show_frame(h))
+            self.assertEqual(show_frame(h + 5 * SHOW_LEN, 2), show_frame(h, 2))
 
     def test_all_frames_have_96_masks_in_range(self):
         for h in range(SHOW_LEN):
-            cells = show_frame(h)
-            self.assertEqual(len(cells), 96)
-            self.assertTrue(all(0 <= m <= 0xFFFF for m in cells))
+            for q in range(SUB):
+                cells = show_frame(h, q)
+                self.assertEqual(len(cells), 96)
+                self.assertTrue(all(0 <= m <= 0xFFFF for m in cells))
 
     def test_frames_do_not_share_a_buffer(self):
         first = show_frame(10)
         first[0] = 1234
         self.assertNotEqual(show_frame(10)[0], 1234)
+
+    def test_scenes_on_the_beat_do_not_change_between_half_beats(self):
+        for name in ("Auftritt", "Solo", "Einmarsch", "Welle", "Spiegel", "Drehung", "Abgang"):
+            for h, q in ticks(name):
+                with self.subTest(scene=name, h=h, q=q):
+                    self.assertEqual(show_frame(h, q), show_frame(h))
+
+    def test_full_brightness_outside_karussell_and_bravo(self):
+        for name in NAMES:
+            if name in ("Karussell", "Bravo"):
+                continue
+            for h, q in ticks(name):
+                self.assertEqual(show_levels(h, q), FULL)
+
+
+class EinmarschTest(unittest.TestCase):
+    def test_dancers_arrive_one_by_one(self):
+        counts = [len(heads(show_frame(START["Einmarsch"] + k))) for k in range(30)]
+        self.assertEqual(counts[0], 1)
+        self.assertEqual(counts[-1], 6)
+        for k, (a, b) in enumerate(zip(counts, counts[1:])):
+            with self.subTest(k=k):
+                self.assertIn(b - a, (0, 1))
+
+    def test_ends_as_a_line_of_six_facing_front(self):
+        cells = show_frame(START["Einmarsch"] + 29)
+        self.assertEqual(heads(cells), D6)
+        self.assertTrue(all(cells[c] == HEAD["F"] for c in D6))
+
+    def test_soloist_steps_aside_to_ten(self):
+        self.assertEqual(heads(show_frame(START["Einmarsch"] - 1)), [12])
+        self.assertEqual(heads(show_frame(START["Einmarsch"])), [11])
+        self.assertEqual(heads(show_frame(START["Einmarsch"] + 1)), [10])
+
+
+class KarussellTest(unittest.TestCase):
+    def test_starts_from_the_line(self):
+        self.assertEqual(heads(show_frame(START["Karussell"])), D6)
+
+    def test_ends_with_one_dancer_in_the_middle(self):
+        cells = show_frame(START["Bravo"] - 1)
+        self.assertEqual(heads(cells), [12])
+        self.assertEqual(cells[12], HEAD["F"])
+
+    def test_far_dancers_are_small_and_dim(self):
+        dim = [show_levels(h, q) for h, q in ticks("Karussell") if show_levels(h, q) != FULL]
+        self.assertTrue(dim)
+        self.assertEqual(min(min(lv) for lv in dim), 3)
+        # Mitten in der Drehung: weniger als sechs grosse Figuren, aber Figuren in Zeile 1
+        mid = show_frame(START["Karussell"] + 16)
+        self.assertLess(len(heads(mid)), 6)
+        self.assertTrue(any(mid[24 + c] and not mid[c] for c in range(24)))
+
+    def test_moves_between_half_beats(self):
+        turn = range(START["Karussell"] + 5, START["Karussell"] + 27)
+        moving = [h for h in turn if show_frame(h, 2) != show_frame(h)]
+        self.assertGreaterEqual(len(moving), len(turn) - 2)
+
+    def test_back_in_line_at_full_brightness_before_leaving(self):
+        h = START["Karussell"] + 32
+        self.assertEqual(heads(show_frame(h)), D6)
+        self.assertEqual(show_levels(h), FULL)
+        self.assertEqual(show_levels(START["Karussell"]), FULL)
+
+
+class BravoTest(unittest.TestCase):
+    def test_audience_only_in_the_lower_two_rows(self):
+        for h, q in ticks("Bravo"):
+            cells = show_frame(h, q)
+            with self.subTest(h=h, q=q):
+                self.assertEqual(cells[:24], [0] * 24)
+                self.assertIn(cells[24:48], (text_row("* BRAVO *"), text_row("  BRAVO  ")))
+                self.assertTrue(all(m in (T_IDLE, T_UP) for m in cells[48:]))
+
+    def test_la_ola_runs_left_to_right(self):
+        centres = []
+        for h, q in ticks("Bravo")[:8 * SUB]:
+            ups = [c for c in range(24) if show_frame(h, q)[72 + c] == T_UP]
+            if ups:
+                centres.append(sum(ups) / len(ups))
+        self.assertGreater(len(centres), 20)
+        self.assertEqual(centres, sorted(centres))
+        self.assertLess(centres[0], 3)
+        self.assertGreater(centres[-1], 20)
+
+    def test_back_row_of_the_audience_is_dimmer(self):
+        self.assertEqual(show_levels(START["Bravo"], 1), (15,) * 6 + (7,) * 3 + (15,) * 3)
 
 
 class HashTest(unittest.TestCase):
@@ -189,9 +333,46 @@ class TimingTest(unittest.TestCase):
     def test_runs_past_the_end_of_the_show(self):
         stop = SHOW_LEN * self.HALF + 1.0
         shown = play(stop_at=stop)
-        self.assertGreater(len(shown), SHOW_LEN)
-        self.assertEqual(shown[SHOW_LEN][1], show_frame(0))
-        self.assertEqual(shown[SHOW_LEN + 3][1], show_frame(3))
+        on_beat = [cells for t, cells in shown if abs(t / self.HALF - round(t / self.HALF)) < 1e-4]
+        self.assertGreater(len(on_beat), SHOW_LEN)
+        self.assertEqual(on_beat[SHOW_LEN], show_frame(0))
+        self.assertEqual(on_beat[SHOW_LEN + 3], show_frame(3))
+
+    def test_frames_between_half_beats_only_where_the_picture_moves(self):
+        start, end = START["Karussell"], START["Abgang"]
+        shown = play(stop_at=end * self.HALF + 1.0)
+        between = [(t, cells) for t, cells in shown
+                   if abs(t / self.HALF - round(t / self.HALF)) > 1e-4]
+        self.assertGreater(len(between), 60)
+        for t, cells in between:
+            self.assertTrue(start * self.HALF < t < end * self.HALF)
+            h, q = divmod(math.floor(t / self.HALF * SUB + 1e-6), SUB)
+            self.assertEqual(cells, show_frame(h, q))
+        for (t0, a), (t1, b) in zip(shown, shown[1:]):
+            if abs(t1 / self.HALF - round(t1 / self.HALF)) > 1e-4:
+                self.assertNotEqual(a, b)
+
+
+class LevelsTest(unittest.TestCase):
+    HALF = 30 / 116
+
+    def test_karussell_dims_far_modules_and_stop_restores_full_brightness(self):
+        mid = (START["Karussell"] + 16) * self.HALF
+        shown, levels = play(stop_at=mid, display_cls=LevelDisplay)
+        self.assertTrue(any(min(lv) < 15 for _, lv in levels[:-1]))
+        self.assertEqual(levels[-1][1], FULL)
+
+    def test_no_brightness_writes_before_the_karussell(self):
+        shown, levels = play(stop_at=(START["Karussell"] - 1) * self.HALF, display_cls=LevelDisplay)
+        self.assertEqual(levels, [])
+
+    def test_restart_inside_karussell_returns_to_full_brightness(self):
+        # ein Halbtakt, an dem Module gedimmt sind (hinten verdeckt vorne manchmal ganz)
+        h = next(h for h in range(START["Karussell"] + 8, START["Bravo"]) if show_levels(h) != FULL)
+        at = h * self.HALF + 0.01
+        shown, levels = play(stop_at=at + 0.5, script={at: BT5}, display_cls=LevelDisplay)
+        after = [lv for t, lv in levels if t >= at - 1e-6]
+        self.assertEqual(after, [FULL])
 
 
 class RestartTest(unittest.TestCase):

@@ -11,7 +11,7 @@ Drei neue Anwendungen im Hauptmenü, zwischen `STRICHMAENNCHEN` und `EINSTELLUNG
 
 | Menüpunkt | Inhalt | Tasten |
 |---|---|---|
-| `TANZ 3D` | Die Tanz-Show der Werkstatt: neun Szenen (Auftritt, Solo, Klone, Welle, Spiegel, Drehung, Stadion, Bravo, Abgang), 116 Schläge pro Minute, in einer Schleife | BT5 startet die Show neu, BT4 zurück |
+| `TANZ 3D` | Die Tanz-Show: neun Szenen (Auftritt, Solo, Einmarsch, Welle, Spiegel, Drehung, Karussell, Bravo, Abgang), 116 Schläge pro Minute, in einer Schleife; seit 2026-11-05 ohne Klone und Stadion (Abschnitt 5) | BT5 startet die Show neu, BT4 zurück |
 | `ANIMATIONEN` | Die elf Animationen der Werkstatt (Equalizer, Regen, Welle, Tunnel, Feuerwerk, Pac-Man, Laufschrift, Schlange, Pong, Matrix, Lauflicht); alle 10 s die nächste | BT6 nächste Animation, BT4 zurück |
 | `SPIEL` | Das Spiel „Läufer“: Kakteen überspringen, unter Vögeln ducken; Punkte und Rekord | BT5 starten / springen, BT6 ducken, BT4 zurück |
 
@@ -46,3 +46,35 @@ Drei neue Anwendungen im Hauptmenü, zwischen `STRICHMAENNCHEN` und `EINSTELLUNG
   Sitzung endet.
 - **Menü**: `CHAT`, `QUIZ`, `REFLECTION`, `RADAR`, `STRICHMAENNCHEN`, `TANZ 3D`,
   `ANIMATIONEN`, `SPIEL`, `EINSTELLUNGEN`.
+
+## 5. Neue Tanz-Show (2026-11-05)
+
+Der Owner hat die Show auf der Wand gesehen. Sein Urteil: die Blitze und Momente, in denen
+die ganze Wand leuchtet, wirken mässig; das Hinein- und Hinauslaufen wirkt am besten, «ein
+bisschen 3D». Statt der vollen Wand sollen die Tänzer einzeln hereinlaufen. Das Publikum
+(die kleinen Figuren) findet er lustig, er hat es aber nicht als Publikum erkannt. Aus
+einer Probe an der Wand fand er «Einmarsch» und «Karussell» gut. Die Reihenfolge unten hat
+er am 2026-11-05 gutgeheissen («ja passt, mach so»).
+
+| # | Szene | Halbtakte | Inhalt |
+|---|---|---|---|
+| 1 | Auftritt | 22 | wie Werkstatt |
+| 2 | Solo | 32 | wie Werkstatt |
+| 3 | Einmarsch | 30 | ersetzt Klone: Der Solist geht auf Platz 10, die fünf anderen laufen einzeln abwechselnd von rechts und links herein (innen zuerst), drehen sich nach vorne, jubeln; dann tanzen alle sechs |
+| 4–6 | Welle, Spiegel, Drehung | 24, 16, 16 | wie Werkstatt |
+| 7 | Karussell | 46 | ersetzt Stadion: Die sechs schwenken aus der Reihe in einen Kreis, drehen eine Runde und kommen in die Reihe zurück; vorne gross (4 Zeilen), seitlich mittel (2 Zeilen), hinten klein (1 Stelle); dann gehen fünf einzeln ab, einer stellt sich in die Mitte |
+| 8 | Bravo | 16 | «BRAVO» in Zeile 2, darunter das Publikum in den unteren zwei Reihen: erst eine La Ola von links nach rechts, dann Jubel |
+| 9 | Abgang | 20 | wie Werkstatt |
+
+- **Die ganze Wand leuchtet nie**: kein Bild hat mehr als 60 der 96 Stellen an, keine Stelle
+  hat alle Segmente an.
+- **Fein zwischen den Halbtakten** (Entscheid Claude): Karussell und La Ola rechnen in Vierteln
+  eines Halbtakts, also etwa 15 Bilder pro Sekunde. Die anderen Szenen ändern sich nur auf
+  den Halbtakt. Zwischen den Halbtakten geht nur ein Bild hinaus, wenn es sich geändert hat.
+- **Helligkeit je Modul** (Entscheid Claude): `WallDisplay.set_levels` setzt die Helligkeit
+  der zwölf Module (0..15) und schreibt nur Änderungen. Im Karussell bekommt jedes Modul die
+  Helligkeit der vordersten Figur darin (gross 15, mittel 8, klein 3), beim Bravo ist die
+  hintere Publikumsreihe dunkler (7). Beim Verlassen der Show, auch mitten im Karussell, gehen
+  alle Module auf 15 zurück. Anzeigen ohne `set_levels` (Terminal) zeigen alles gleich hell.
+- **Verdecken**: Im Karussell deckt eine vordere Figur die hintere zu; stehen beide in
+  derselben Spalte, sieht man nur die vordere.

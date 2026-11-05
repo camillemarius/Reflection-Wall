@@ -35,6 +35,7 @@ class WallDisplay:
         self._guard = bus_guard or _no_guard
         # None = Modul noch nie geschrieben (oder letzter Versuch fehlgeschlagen)
         self._sent: list = [None] * len(MODULE_ADDRESSES)
+        self._levels: list = [None] * len(MODULE_ADDRESSES)
         self._canvas = [0] * TOTAL_CELLS
 
     def start(self) -> None:
@@ -46,6 +47,7 @@ class WallDisplay:
             for value in (CMD_SYSTEM_SETUP | 0x01, CMD_DISPLAY_SETUP | 0x01, CMD_BRIGHTNESS | 0x0F):
                 self._transfer(lambda a=addr, v=value: self._bus.write_byte(a, v), addr)
         self._sent = [None] * len(MODULE_ADDRESSES)
+        self._levels = [15] * len(MODULE_ADDRESSES)
         self.clear()
 
     def _transfer(self, action, addr) -> bool:
@@ -79,6 +81,15 @@ class WallDisplay:
                 data.append((mask >> 8) & 0xFF)
             ok = self._transfer(lambda a=addr, d=data: self._bus.write_i2c_block_data(a, 0x00, d), addr)
             self._sent[module] = cells if ok else None
+
+    def set_levels(self, levels: Sequence[int]) -> None:
+        """Helligkeit je Modul (0..15, Zeile fuer Zeile); geschrieben werden nur Aenderungen."""
+        for module, addr in enumerate(MODULE_ADDRESSES):
+            level = max(0, min(15, int(levels[module])))
+            if level == self._levels[module]:
+                continue
+            ok = self._transfer(lambda a=addr, v=level: self._bus.write_byte(a, CMD_BRIGHTNESS | v), addr)
+            self._levels[module] = level if ok else None
 
     # show_lines/show_text lassen die Zeichenflaeche unberuehrt
     def show_lines(self, lines: Sequence[str], dots_own_cell: bool = False) -> None:
