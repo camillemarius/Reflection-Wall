@@ -170,6 +170,18 @@ class RadarAppTest(unittest.TestCase):
                          ["clear", "clear_canvas", ("draw", 2), "clear_canvas", ("draw", 21),
                           "clear"])
 
+    def test_logs_first_data_and_the_reading_every_2_s(self):
+        # Ohne Anzeige sieht man das Radar nur im Protokoll (Abnahme HLK, 2026-11-03)
+        self.sensor = FakeSensor([150] * 30 + [0] * 15)
+        app = self.app([None] * 44 + [BT4])
+        with self.assertLogs("app.applications.radar_app", "INFO") as logs:
+            run_app(app, self.ctx)
+        lines = [r.getMessage() for r in logs.records]
+        self.assertEqual(lines.count("Radar: erste Daten"), 1)
+        readings = [line for line in lines if line != "Radar: erste Daten"]
+        self.assertEqual(readings, ["Radar: Person in 150 cm", "Radar: Person in 150 cm",
+                                    "Radar: niemand"])  # bei 0 s, 2 s und 4 s
+
     def test_no_data_for_5_s_switches_back_and_shows_message(self):
         self.sensor = FakeSensor([100])
         self.link_buttons.put(BT4)

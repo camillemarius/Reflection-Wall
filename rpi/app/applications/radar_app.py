@@ -13,6 +13,7 @@ log = logging.getLogger(__name__)
 
 SENSOR_TIMEOUT_S = 5.0
 FRAME_S = 0.1
+LOG_EVERY_S = 2.0  # Messwert ins Protokoll: ohne Anzeige der einzige Blick aufs Radar
 NO_RADAR = ["RADAR ANTWORTET NICHT", "BT4 ZURUECK"]
 # R15 (zu V6): Im Radar-Modus gehoert die UART dem Radar, ein SHUTDOWN des ESP kaeme nie an.
 # Darum endet die Anwendung nach 55 min selbst, schaltet zurueck, und der Pi bittet mit DONE
@@ -64,6 +65,7 @@ class RadarApp:
         last_stamp = sensor.data.timestamp
         started = last_data = self._clock()
         present = False
+        logged = None
         while True:
             if ctx.stop_event.is_set():
                 return _STOPPED
@@ -73,7 +75,15 @@ class RadarApp:
             sensor.update()
             now = self._clock()
             if sensor.data.timestamp != last_stamp:
+                if logged is None:
+                    log.info("Radar: erste Daten")
                 last_stamp, last_data = sensor.data.timestamp, now
+                if logged is None or now - logged >= LOG_EVERY_S:
+                    logged = now
+                    if sensor.present:
+                        log.info("Radar: Person in %d cm", sensor.distance)
+                    else:
+                        log.info("Radar: niemand")
             elif now - last_data > SENSOR_TIMEOUT_S:
                 log.warning("Radar: seit %.0f s keine Daten", SENSOR_TIMEOUT_S)
                 return _NO_DATA

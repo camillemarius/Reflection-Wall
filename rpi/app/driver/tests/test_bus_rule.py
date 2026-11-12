@@ -107,6 +107,15 @@ class BusGuardTest(unittest.TestCase):
         self.assertGreaterEqual(waited, 0.25)
         self.assertLess(waited, 0.3)
 
+    def test_logs_when_the_radar_line_changes(self):
+        with self.assertLogs("app.driver.bus_rule", "INFO") as logs:
+            self.lg.edge(22, 1)
+            self.lg.edge(4, 0)
+            self.lg.edge(22, 0)
+        self.assertEqual([r.getMessage() for r in logs.records],
+                         ["Radar meldet eine Person (INT_HLK hoch)",
+                          "Radar meldet niemanden mehr (INT_HLK tief)"])
+
     def test_gives_up_after_max_wait_with_warning(self):
         self.lg.edge(4, 0)
         with self.assertLogs(bus_rule.log, level="WARNING"):

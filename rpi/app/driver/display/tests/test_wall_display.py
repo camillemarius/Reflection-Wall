@@ -90,6 +90,18 @@ class WallDisplayTest(unittest.TestCase):
             self.d.show_cells(m)
         self.assertEqual(self.bus.block_writes, [])
 
+    def test_a_missing_module_is_logged_once_until_it_answers_again(self):
+        # Ohne Anzeige schrieb jedes Bild 12 Warnungen, bei Animationen viele pro Sekunde
+        self.prime()
+        self.bus.fail_next_block = 6
+        m = [0] * 96
+        with self.assertLogs("app.driver.display.wall_display", level="INFO") as logs:
+            for value in (1, 2, 3, 4):
+                m[0] = value
+                self.d.show_cells(m)  # die ersten drei scheitern je zweimal
+        self.assertEqual([r.levelname for r in logs.records], ["WARNING", "INFO"])
+        self.assertIn("0x70", logs.records[1].getMessage())
+
     def test_failed_module_is_retried_on_next_show(self):
         self.prime()
         self.bus.fail_next_block = 2
