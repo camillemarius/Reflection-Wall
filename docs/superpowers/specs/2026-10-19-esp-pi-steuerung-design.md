@@ -558,7 +558,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | `T_shutdown` | 60 s | auf `SHUTDOWN` keine Antwort | Entwurf |
 | BUSY-Wiederholung | 30 s | | Entwurf |
 | BUSY höchstens | 10 min | ab Eintritt in HERUNTERFAHREN, also ab dem Moment, in dem das erste `SHUTDOWN` fällig ist | Entscheid (S1-a) |
-| `T_halt` | 30 s | **wird bei der Inbetriebnahme gemessen** und auf das Doppelte gesetzt | Entscheid (E4-a) |
+| `T_halt` | 120 s | gemessen am 2026-11-02: 3.6 s vom `OK` bis zum Halt (mit wayvnc 57–82 s, das ignorierte SIGTERM bis zum Stop-Timeout). Bewusst nicht verdoppelt: 120 s decken auch einen Dienst, der bis zum Stop-Timeout von systemd (90 s) hängt. Preis: BT2 bleibt nach dem Ausschalten 2 min ohne Wirkung | Entscheid (E4-a), Wert vom Owner 2026-11-02 |
 | ~~Sitzung höchstens~~ | ~~3 h~~ | entfällt | Teil 4 D1 |
 | Pi ohne Aktivität bis `DONE` | 15 min | nur wenn der Schalter an ist, Standard aus | Teil 4 D2, F6 |
 | Webseite ohne Speichern höchstens | 15 min | | Teil 4 D11 |
@@ -637,7 +637,7 @@ angenommen. „Entwurf“ heisst: Startwert dieses Entwurfs (Z14), zum Einstelle
 | Punkt | Warum offen | Wie es geschlossen wird |
 |---|---|---|
 | 74 880 Baud am Pi 5 | nicht gemessen | Abnahme 1; sonst überall 115 200 (E2-b) |
-| `T_halt` | nicht gemessen | Abnahme 2 |
+| ~~`T_halt`~~ | ~~nicht gemessen~~ | geschlossen 2026-11-02: gemessen, 120 s (§12) |
 | Strom bei 100 % Helligkeit | nicht gemessen; Anzeigen und Pi am selben 5-V-Wandler | Abnahme 7 |
 | ESP startet ständig neu, solange der Pi läuft | 2026-11-01, ohne Flasher, vom Owner wiederholt: Jedes Einschalten des Pi mit BT2 bringt den ESP in eine Schleife aus `rst cause:2`, `boot mode:(3,6)`, etwa alle 0,12 s (der Pi hat sie über die UART mitgeschrieben). Jeder Neustart endet an derselben Stelle, gleich nach `rf cal sector` und `rf[112]`, also bei der Kalibrierung des Funks mit ihrem Stromstoß. Mit eingestecktem Flasher (16:05) gab es dagegen nur je einen Reset beim Schalten des Relais, dazwischen lief der ESP 120 s ohne Neustart bei eingeschaltetem Pi. Der Flasher speist den ESP mit (ein Stromunterbruch braucht Speisung und Flasher getrennt). Zwei Ursachen sind möglich. Erstens bricht die Speisung unter der Last des Pi ein, und der USB des Flashers stützte sie. Zweitens lösen die Monoflops (F4) aus: Der Pi hängt an INT_GPIO_EXP und INT_HLK (F6), BT4–BT6 kippten beim Einschalten von selbst, und INT_HLK hängt ohne Radar nur an einem Pull-up | Zuerst trennen, ohne Oszilloskop: (a) Pi vom Relais abhängen, BT2: Setzt schon das Schalten ohne Last zurück? (b) Pi über ein eigenes Netzteil speisen, Leitungen bleiben verbunden: Läuft der ESP durch, liegt es an der Speisung; startet er weiter neu, an den Leitungen. Danach messen: 3,3 V am ESP (ein Multimeter zeigt in der Schleife schon einen Einbruch), mit Oszilloskop 5 V, 3,3 V, RST und INT_GPIO_EXP beim Einschalten; den 5-V-Wandler mit dem Bedarf des Pi 5 vergleichen. Ohne Behebung keine Abnahme von Teil 2 |
 | Rückspeisung | ESP-TX liegt kurz am RX des stromlosen Pi | prüfen, ob der ESP seinen TX bei ausgeschaltetem Pi hochohmig lassen kann |

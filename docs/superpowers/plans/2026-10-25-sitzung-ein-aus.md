@@ -19,7 +19,7 @@
 - Wer einen Testlauf startet, beendet nur diesen eigenen Lauf. Nie alle `python.exe` beenden.
 - Die Logik des ESP steht in `esp/lib/core`, ohne Arduino-Typen. Zeit, Port und Pin kommen als Parameter oder Schnittstelle.
 - Neue Nachricht `SESSION` (ESP → Pi), Daten `HAND` oder `NACHT`, Antwort `OK`, Frist 3 s. Rolle „ESP-Anfrage“ auf beiden Seiten.
-- Fristen und Startwerte (Spec §12). `T_halt` wird bei der Abnahme gemessen.
+- Fristen und Startwerte (Spec §12). `T_halt` wurde bei der Abnahme gemessen (2026-11-02: 3.6 s) und auf 120 s gesetzt.
 
   | Name | Wert |
   |---|---|
@@ -29,7 +29,7 @@
   | `T_shutdown` (Frist von `SHUTDOWN`) | 60 000 ms (steht schon im Codec) |
   | BUSY-Wiederholung | 30 000 ms |
   | BUSY höchstens (ab Eintritt in HERUNTERFAHREN) | 600 000 ms |
-  | `T_halt` (nach `OK` bis Speisung aus) | 30 000 ms, Startwert |
+  | `T_halt` (nach `OK` bis Speisung aus) | 120 000 ms (Startwert 30 000 ms reichte nicht, Abnahme 2026-11-02) |
   | Radar-Debug höchstens | 3 600 000 ms |
   | `PI ANTWORTET NICHT` sichtbar (D18) | 10 000 ms |
   | `T_bus_frei` (Pi nach INT_GPIO_EXP HIGH) | 5 ms |
@@ -461,7 +461,7 @@ Diese Abnahme folgt erst, wenn der Pi eingerichtet ist (Teil 0) und der Owner fl
 0. Vor dem ersten Flashen: Läuft der Pi, die Wand kurz stromlos machen (Task 5, Schritt 7).
 1. Die Verbindung mit 74 880 Baud am Pi 5 prüfen.
 2. BT2 → `PI STARTET` → Menü. BT2 → `PI FAEHRT HERUNTER` → der Pi fährt sauber herunter, die Wand wird dunkel.
-3. `T_halt` messen, verdoppeln und eintragen.
+3. `T_halt` messen und eintragen. 2026-11-02: 3.6 s gemessen; der Owner hat 120 s statt des Doppelten gewählt (Spec §12).
 4. Den Dienst stoppen → nach drei PING `PI ANTWORTET NICHT`, nach 10 s dunkel.
 5. Den Dienst während der Sitzung neu starten → das Menü kommt wieder (L3).
 6. Regel B: den Abstand von der INT_GPIO_EXP-Flanke bis zur ersten SCL-Flanke des ESP und die Reaktion des Pi messen. Dasselbe nach einer Radar-Flanke (R3).
