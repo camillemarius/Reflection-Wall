@@ -1,0 +1,398 @@
+import math
+import unittest
+
+from app.applications import dance_app
+from app.applications.dance_app import (
+    D6, FULL, HEAD, SHOW, SHOW_LEN, SUB, T_IDLE, T_UP, DanceApp, show_frame, show_levels,
+)
+from app.driver.display.segments import center, new_buffer, put_line
+from app.ui.activity import Activity
+from app.ui.app_host import AppContext, StopApp, StopSignal
+from app.ui.buttons import BT4, BT5
+
+NAMES = ["Auftritt", "Solo", "Einmarsch", "Welle", "Spiegel", "Drehung", "Karussell", "Bravo", "Abgang"]
+LENGTHS = [22, 32, 30, 24, 16, 16, 46, 16, 20]
+START = {name: sum(LENGTHS[:i]) for i, name in enumerate(NAMES)}
+HEADS = set(HEAD.values())
+
+# Szenen der Vorlage mit ihrem ersten Halbtakt dort; die Show der Wand hat Klone und Stadion ersetzt
+TEMPLATE_STARTS = [("Auftritt", 0), ("Solo", 22), ("Klone", 54), ("Welle", 72), ("Spiegel", 96),
+                   ("Drehung", 112), ("Stadion", 128), ("Bravo", 161), ("Abgang", 169)]
+FROM_TEMPLATE = {"Auftritt", "Solo", "Welle", "Spiegel", "Drehung", "Abgang"}
+
+# Referenzbilder aus der Vorlage (Node): Halbtakt der Vorlage -> {Stelle: Muster}, Rest ist 0
+REFERENCE = {
+    0: {},
+    3: {1: 0xA6A3, 25: 0x5010, 49: 0x4810, 72: 0x0808, 74: 0x4040},
+    5: {3: 0xA6A3, 27: 0x5010, 51: 0x4810, 74: 0x0808, 76: 0x4040},
+    11: {9: 0xA6A3, 33: 0x5010, 57: 0x4810, 80: 0x0808, 82: 0x4040},
+    16: {12: 0xA7EB, 13: 0x0808, 35: 0x8002, 36: 0x1030, 60: 0x4810, 84: 0x8282},
+    21: {12: 0xA7EB, 35: 0x0020, 36: 0x1030, 37: 0x0020, 60: 0x4810, 84: 0x8282},
+    25: {12: 0xA7EB, 35: 0x4008, 36: 0x1030, 37: 0x4040, 60: 0x4810, 83: 0x0808, 85: 0x4040},
+    38: {12: 0xA7EB, 35: 0x0020, 36: 0x1030, 37: 0x0020, 60: 0x0811, 61: 0x0101, 84: 0x0280},
+    53: {11: 0x8002, 12: 0xA7EB, 13: 0x0280, 36: 0x1030, 60: 0x4810, 83: 0x0808, 85: 0x4040},
+    54: {0: 0xFFFF, 1: 0xFFFF, 2: 0xFFFF, 3: 0xFFFF, 4: 0xFFFF, 5: 0xFFFF, 6: 0xFFFF, 7: 0xFFFF, 8: 0xFFFF, 9: 0xFFFF, 10: 0xFFFF, 11: 0xFFFF, 12: 0xFFFF, 13: 0xFFFF, 14: 0xFFFF, 15: 0xFFFF, 16: 0xFFFF, 17: 0xFFFF, 18: 0xFFFF, 19: 0xFFFF, 20: 0xFFFF, 21: 0xFFFF, 22: 0xFFFF, 23: 0xFFFF, 24: 0xFFFF, 25: 0xFFFF, 26: 0xFFFF, 27: 0xFFFF, 28: 0xFFFF, 29: 0xFFFF, 30: 0xFFFF, 31: 0xFFFF, 32: 0xFFFF, 33: 0xFFFF, 34: 0xFFFF, 35: 0xFFFF, 36: 0xFFFF, 37: 0xFFFF, 38: 0xFFFF, 39: 0xFFFF, 40: 0xFFFF, 41: 0xFFFF, 42: 0xFFFF, 43: 0xFFFF, 44: 0xFFFF, 45: 0xFFFF, 46: 0xFFFF, 47: 0xFFFF, 48: 0xFFFF, 49: 0xFFFF, 50: 0xFFFF, 51: 0xFFFF, 52: 0xFFFF, 53: 0xFFFF, 54: 0xFFFF, 55: 0xFFFF, 56: 0xFFFF, 57: 0xFFFF, 58: 0xFFFF, 59: 0xFFFF, 60: 0xFFFF, 61: 0xFFFF, 62: 0xFFFF, 63: 0xFFFF, 64: 0xFFFF, 65: 0xFFFF, 66: 0xFFFF, 67: 0xFFFF, 68: 0xFFFF, 69: 0xFFFF, 70: 0xFFFF, 71: 0xFFFF, 72: 0xFFFF, 73: 0xFFFF, 74: 0xFFFF, 75: 0xFFFF, 76: 0xFFFF, 77: 0xFFFF, 78: 0xFFFF, 79: 0xFFFF, 80: 0xFFFF, 81: 0xFFFF, 82: 0xFFFF, 83: 0xFFFF, 84: 0xFFFF, 85: 0xFFFF, 86: 0xFFFF, 87: 0xFFFF, 88: 0xFFFF, 89: 0xFFFF, 90: 0xFFFF, 91: 0xFFFF, 92: 0xFFFF, 93: 0xFFFF, 94: 0xFFFF, 95: 0xFFFF},
+    57: {6: 0xA7EB, 12: 0xA7EB, 18: 0xA7EB, 29: 0x0020, 30: 0x1030, 31: 0x0020, 35: 0x0020, 36: 0x1030, 37: 0x0020, 41: 0x0020, 42: 0x1030, 43: 0x0020, 54: 0x4810, 60: 0x4810, 66: 0x4810, 78: 0x8282, 84: 0x8282, 90: 0x8282},
+    63: {0: 0xFFFF, 1: 0xFFFF, 2: 0xFFFF, 3: 0xFFFF, 4: 0xFFFF, 5: 0xFFFF, 6: 0xFFFF, 7: 0xFFFF, 8: 0xFFFF, 9: 0xFFFF, 10: 0xFFFF, 11: 0xFFFF, 12: 0xFFFF, 13: 0xFFFF, 14: 0xFFFF, 15: 0xFFFF, 16: 0xFFFF, 17: 0xFFFF, 18: 0xFFFF, 19: 0xFFFF, 20: 0xFFFF, 21: 0xFFFF, 22: 0xFFFF, 23: 0xFFFF, 24: 0xFFFF, 25: 0xFFFF, 26: 0xFFFF, 27: 0xFFFF, 28: 0xFFFF, 29: 0xFFFF, 30: 0xFFFF, 31: 0xFFFF, 32: 0xFFFF, 33: 0xFFFF, 34: 0xFFFF, 35: 0xFFFF, 36: 0xFFFF, 37: 0xFFFF, 38: 0xFFFF, 39: 0xFFFF, 40: 0xFFFF, 41: 0xFFFF, 42: 0xFFFF, 43: 0xFFFF, 44: 0xFFFF, 45: 0xFFFF, 46: 0xFFFF, 47: 0xFFFF, 48: 0xFFFF, 49: 0xFFFF, 50: 0xFFFF, 51: 0xFFFF, 52: 0xFFFF, 53: 0xFFFF, 54: 0xFFFF, 55: 0xFFFF, 56: 0xFFFF, 57: 0xFFFF, 58: 0xFFFF, 59: 0xFFFF, 60: 0xFFFF, 61: 0xFFFF, 62: 0xFFFF, 63: 0xFFFF, 64: 0xFFFF, 65: 0xFFFF, 66: 0xFFFF, 67: 0xFFFF, 68: 0xFFFF, 69: 0xFFFF, 70: 0xFFFF, 71: 0xFFFF, 72: 0xFFFF, 73: 0xFFFF, 74: 0xFFFF, 75: 0xFFFF, 76: 0xFFFF, 77: 0xFFFF, 78: 0xFFFF, 79: 0xFFFF, 80: 0xFFFF, 81: 0xFFFF, 82: 0xFFFF, 83: 0xFFFF, 84: 0xFFFF, 85: 0xFFFF, 86: 0xFFFF, 87: 0xFFFF, 88: 0xFFFF, 89: 0xFFFF, 90: 0xFFFF, 91: 0xFFFF, 92: 0xFFFF, 93: 0xFFFF, 94: 0xFFFF, 95: 0xFFFF},
+    71: {1: 0x4040, 2: 0xA7EB, 3: 0x0808, 5: 0x4040, 6: 0xA7EB, 7: 0x0808, 9: 0x4040, 10: 0xA7EB, 11: 0x0808, 13: 0x4040, 14: 0xA7EB, 15: 0x0808, 17: 0x4040, 18: 0xA7EB, 19: 0x0808, 21: 0x4040, 22: 0xA7EB, 23: 0x0808, 26: 0x1030, 30: 0x1030, 34: 0x1030, 38: 0x1030, 42: 0x1030, 46: 0x1030, 50: 0x4810, 54: 0x4810, 58: 0x4810, 62: 0x4810, 66: 0x4810, 70: 0x4810, 74: 0x8282, 78: 0x8282, 82: 0x8282, 86: 0x8282, 90: 0x8282, 94: 0x8282},
+    75: {2: 0xA7EB, 5: 0x4040, 6: 0xA7EB, 7: 0x0808, 9: 0x8002, 10: 0xA7EB, 11: 0x0280, 13: 0x4040, 14: 0xA7EB, 15: 0x0808, 18: 0xA7EB, 22: 0xA7EB, 25: 0x8002, 26: 0x1030, 27: 0x0280, 30: 0x1030, 34: 0x1030, 38: 0x1030, 41: 0x8002, 42: 0x1030, 43: 0x0280, 45: 0x8002, 46: 0x1030, 47: 0x0280, 50: 0x4810, 54: 0x4810, 58: 0x4810, 62: 0x4810, 66: 0x4810, 70: 0x4810, 74: 0x8282, 78: 0x8282, 81: 0x0808, 83: 0x4040, 86: 0x8282, 90: 0x8282, 94: 0x8282},
+    81: {1: 0x8002, 2: 0xA7EB, 3: 0x0280, 5: 0x4040, 6: 0xA7EB, 7: 0x0808, 10: 0xA7EB, 14: 0xA7EB, 18: 0xA7EB, 22: 0xA7EB, 26: 0x1030, 30: 0x1030, 33: 0x8002, 34: 0x1030, 35: 0x0280, 37: 0x8002, 38: 0x1030, 39: 0x0280, 41: 0x8002, 42: 0x1030, 43: 0x0280, 45: 0x8002, 46: 0x1030, 47: 0x0280, 50: 0x4810, 54: 0x4810, 58: 0x4810, 62: 0x4810, 66: 0x4810, 70: 0x4810, 73: 0x0808, 75: 0x4040, 78: 0x8282, 82: 0x8282, 86: 0x8282, 90: 0x8282, 94: 0x8282},
+    84: {2: 0xA7EB, 6: 0xA7EB, 9: 0x4040, 10: 0xA7EB, 11: 0x0808, 13: 0x8002, 14: 0xA7EB, 15: 0x0280, 17: 0x4040, 18: 0xA7EB, 19: 0x0808, 22: 0xA7EB, 25: 0x8002, 26: 0x1030, 27: 0x0280, 29: 0x8002, 30: 0x1030, 31: 0x0280, 34: 0x1030, 38: 0x1030, 42: 0x1030, 45: 0x8002, 46: 0x1030, 47: 0x0280, 50: 0x4810, 54: 0x4810, 58: 0x4810, 62: 0x4810, 66: 0x4810, 70: 0x4810, 74: 0x8282, 78: 0x8282, 82: 0x8282, 85: 0x0808, 87: 0x4040, 90: 0x8282, 94: 0x8282},
+    95: {1: 0x4040, 2: 0xA7EB, 3: 0x0808, 6: 0xA7EB, 10: 0xA7EB, 14: 0xA7EB, 18: 0xA7EB, 22: 0xA7EB, 26: 0x1030, 29: 0x8002, 30: 0x1030, 31: 0x0280, 33: 0x8002, 34: 0x1030, 35: 0x0280, 37: 0x8002, 38: 0x1030, 39: 0x0280, 41: 0x8002, 42: 0x1030, 43: 0x0280, 45: 0x8002, 46: 0x1030, 47: 0x0280, 50: 0x4810, 54: 0x4810, 58: 0x4810, 62: 0x4810, 66: 0x4810, 70: 0x4810, 74: 0x8282, 78: 0x8282, 82: 0x8282, 86: 0x8282, 90: 0x8282, 94: 0x8282},
+    99: {2: 0xA6A3, 6: 0xA6A3, 10: 0xA6A3, 14: 0xA7A2, 18: 0xA7A2, 22: 0xA7A2, 26: 0x1011, 27: 0x0101, 30: 0x1011, 31: 0x0101, 34: 0x1011, 35: 0x0101, 37: 0x0101, 38: 0x1110, 41: 0x0101, 42: 0x1110, 45: 0x0101, 46: 0x1110, 50: 0x4810, 54: 0x4810, 58: 0x4810, 62: 0x4810, 66: 0x4810, 70: 0x4810, 74: 0x8282, 78: 0x8282, 82: 0x8282, 86: 0x8282, 90: 0x8282, 94: 0x8282},
+    104: {2: 0xA6A3, 3: 0x0808, 6: 0xA6A3, 7: 0x0808, 10: 0xA6A3, 11: 0x0808, 13: 0x4040, 14: 0xA7A2, 17: 0x4040, 18: 0xA7A2, 21: 0x4040, 22: 0xA7A2, 26: 0x1010, 30: 0x1010, 34: 0x1010, 38: 0x1010, 42: 0x1010, 46: 0x1010, 50: 0x8811, 54: 0x8811, 58: 0x8811, 62: 0x4310, 66: 0x4310, 70: 0x4310, 74: 0x0280, 78: 0x0280, 82: 0x0280, 86: 0x8002, 90: 0x8002, 94: 0x8002},
+    111: {1: 0x4040, 2: 0xA7EB, 3: 0x0808, 5: 0x4040, 6: 0xA7EB, 7: 0x0808, 9: 0x4040, 10: 0xA7EB, 11: 0x0808, 13: 0x4040, 14: 0xA7EB, 15: 0x0808, 17: 0x4040, 18: 0xA7EB, 19: 0x0808, 21: 0x4040, 22: 0xA7EB, 23: 0x0808, 26: 0x1030, 30: 0x1030, 34: 0x1030, 38: 0x1030, 42: 0x1030, 46: 0x1030, 50: 0x4810, 54: 0x4810, 58: 0x4810, 62: 0x4810, 66: 0x4810, 70: 0x4810, 73: 0x0808, 75: 0x4040, 77: 0x0808, 79: 0x4040, 81: 0x0808, 83: 0x4040, 85: 0x0808, 87: 0x4040, 89: 0x0808, 91: 0x4040, 93: 0x0808, 95: 0x4040},
+    115: {2: 0xA7A2, 6: 0xA6A2, 10: 0xA6A3, 14: 0xA7EB, 18: 0xA7EB, 22: 0xA7EB, 25: 0x0101, 26: 0x1110, 29: 0x0020, 30: 0x1030, 31: 0x0020, 34: 0x1011, 35: 0x0101, 37: 0x0020, 38: 0x1030, 39: 0x0020, 41: 0x0020, 42: 0x1030, 43: 0x0020, 45: 0x0020, 46: 0x1030, 47: 0x0020, 50: 0x4810, 54: 0x4810, 58: 0x4810, 62: 0x4810, 66: 0x4810, 70: 0x4810, 74: 0x8282, 78: 0x8282, 82: 0x8282, 86: 0x8282, 90: 0x8282, 94: 0x8282},
+    120: {2: 0xA7EB, 6: 0xA7A2, 10: 0xA6A2, 14: 0xA6A3, 18: 0xA7EB, 22: 0xA7A2, 25: 0x0020, 26: 0x1030, 27: 0x0020, 29: 0x0101, 30: 0x1110, 33: 0x0020, 34: 0x1030, 35: 0x0020, 38: 0x1011, 39: 0x0101, 41: 0x0020, 42: 0x1030, 43: 0x0020, 45: 0x0101, 46: 0x1110, 50: 0x4810, 54: 0x4810, 58: 0x4810, 62: 0x4810, 66: 0x4810, 70: 0x4810, 74: 0x8282, 78: 0x8282, 82: 0x8282, 86: 0x8282, 90: 0x8282, 94: 0x8282},
+    127: {2: 0xA7A2, 6: 0xA6A2, 10: 0xA6A3, 14: 0xA7EB, 18: 0xA7A2, 22: 0xA6A2, 25: 0x0101, 26: 0x1110, 29: 0x0020, 30: 0x1030, 31: 0x0020, 34: 0x1011, 35: 0x0101, 37: 0x0020, 38: 0x1030, 39: 0x0020, 41: 0x0101, 42: 0x1110, 45: 0x0020, 46: 0x1030, 47: 0x0020, 50: 0x4810, 54: 0x4810, 58: 0x4810, 62: 0x4810, 66: 0x4810, 70: 0x4810, 74: 0x8282, 78: 0x8282, 82: 0x8282, 86: 0x8282, 90: 0x8282, 94: 0x8282},
+    131: {0: 0x4911, 1: 0x4858, 2: 0x4858, 3: 0x4858, 4: 0x4911, 5: 0x4911, 6: 0x4911, 7: 0x4911, 8: 0x4911, 9: 0x4911, 10: 0x4911, 11: 0x4911, 12: 0x4911, 13: 0x4911, 14: 0x4911, 15: 0x4911, 16: 0x4911, 17: 0x4911, 18: 0x4911, 19: 0x4911, 20: 0x4911, 21: 0x4911, 22: 0x4911, 23: 0x4911, 24: 0x4858, 25: 0x4858, 26: 0x4911, 27: 0x4911, 28: 0x4911, 29: 0x4911, 30: 0x4911, 31: 0x4911, 32: 0x4911, 33: 0x4911, 34: 0x4911, 35: 0x4911, 36: 0x4911, 37: 0x4911, 38: 0x4911, 39: 0x4911, 40: 0x4911, 41: 0x4911, 42: 0x4911, 43: 0x4911, 44: 0x4911, 45: 0x4911, 46: 0x4911, 47: 0x4911, 48: 0x4858, 49: 0x4911, 50: 0x4911, 51: 0x4911, 52: 0x4911, 53: 0x4911, 54: 0x4911, 55: 0x4911, 56: 0x4911, 57: 0x4911, 58: 0x4911, 59: 0x4911, 60: 0x4911, 61: 0x4911, 62: 0x4911, 63: 0x4911, 64: 0x4911, 65: 0x4911, 66: 0x4911, 67: 0x4911, 68: 0x4911, 69: 0x4911, 70: 0x4911, 71: 0x4911, 72: 0x4911, 73: 0x4911, 74: 0x4911, 75: 0x4911, 76: 0x4911, 77: 0x4911, 78: 0x4911, 79: 0x4911, 80: 0x4911, 81: 0x4911, 82: 0x4911, 83: 0x4911, 84: 0x4911, 85: 0x4911, 86: 0x4911, 87: 0x4911, 88: 0x4911, 89: 0x4911, 90: 0x4911, 91: 0x4911, 92: 0x4911, 93: 0x4911, 94: 0x4911, 95: 0x4911},
+    133: {0: 0x4911, 1: 0x4911, 2: 0x4911, 3: 0x4911, 4: 0x4911, 5: 0x4911, 6: 0x4911, 7: 0x4858, 8: 0x4858, 9: 0x4911, 10: 0x4911, 11: 0x4911, 12: 0x4911, 13: 0x4911, 14: 0x4911, 15: 0x4911, 16: 0x4911, 17: 0x4911, 18: 0x4911, 19: 0x4911, 20: 0x4911, 21: 0x4911, 22: 0x4911, 23: 0x4911, 24: 0x4911, 25: 0x4911, 26: 0x4911, 27: 0x4911, 28: 0x4911, 29: 0x4858, 30: 0x4858, 31: 0x4858, 32: 0x4911, 33: 0x4911, 34: 0x4911, 35: 0x4911, 36: 0x4911, 37: 0x4911, 38: 0x4911, 39: 0x4911, 40: 0x4911, 41: 0x4911, 42: 0x4911, 43: 0x4911, 44: 0x4911, 45: 0x4911, 46: 0x4911, 47: 0x4911, 48: 0x4911, 49: 0x4911, 50: 0x4911, 51: 0x4911, 52: 0x4858, 53: 0x4858, 54: 0x4911, 55: 0x4911, 56: 0x4911, 57: 0x4911, 58: 0x4911, 59: 0x4911, 60: 0x4911, 61: 0x4911, 62: 0x4911, 63: 0x4911, 64: 0x4911, 65: 0x4911, 66: 0x4911, 67: 0x4911, 68: 0x4911, 69: 0x4911, 70: 0x4911, 71: 0x4911, 72: 0x4911, 73: 0x4911, 74: 0x4858, 75: 0x4858, 76: 0x4858, 77: 0x4911, 78: 0x4911, 79: 0x4911, 80: 0x4911, 81: 0x4911, 82: 0x4911, 83: 0x4911, 84: 0x4911, 85: 0x4911, 86: 0x4911, 87: 0x4911, 88: 0x4911, 89: 0x4911, 90: 0x4911, 91: 0x4911, 92: 0x4911, 93: 0x4911, 94: 0x4911, 95: 0x4911},
+    144: {0: 0x4911, 1: 0x4911, 2: 0x4911, 3: 0x4911, 4: 0x4858, 5: 0x4858, 6: 0x4858, 7: 0x4911, 8: 0x4911, 9: 0x4911, 10: 0x4911, 11: 0x4911, 12: 0x4911, 13: 0x4911, 14: 0x4911, 15: 0x4911, 16: 0x4911, 17: 0x4911, 18: 0x4911, 19: 0x4911, 20: 0x4911, 21: 0x4911, 22: 0x4911, 23: 0x4911, 24: 0x4911, 25: 0x4911, 26: 0x4858, 27: 0x4858, 28: 0x4858, 29: 0x4911, 30: 0x4911, 31: 0x4911, 32: 0x4911, 33: 0x4911, 34: 0x4911, 35: 0x4911, 36: 0x4911, 37: 0x4911, 38: 0x4911, 39: 0x4911, 40: 0x4911, 41: 0x4911, 42: 0x4911, 43: 0x4911, 44: 0x4911, 45: 0x4911, 46: 0x4911, 47: 0x4911, 48: 0x4911, 49: 0x4858, 50: 0x4858, 51: 0x4858, 52: 0x4911, 53: 0x4911, 54: 0x4911, 55: 0x4911, 56: 0x4911, 57: 0x4911, 58: 0x4911, 59: 0x4911, 60: 0x4911, 61: 0x4911, 62: 0x4911, 63: 0x4911, 64: 0x4911, 65: 0x4911, 66: 0x4911, 67: 0x4911, 68: 0x4911, 69: 0x4911, 70: 0x4911, 71: 0x4911, 72: 0x4858, 73: 0x4858, 74: 0x4911, 75: 0x4911, 76: 0x4911, 77: 0x4911, 78: 0x4911, 79: 0x4911, 80: 0x4911, 81: 0x4911, 82: 0x4911, 83: 0x4911, 84: 0x4911, 85: 0x4911, 86: 0x4911, 87: 0x4911, 88: 0x4911, 89: 0x4911, 90: 0x4911, 91: 0x4911, 92: 0x4911, 93: 0x4911, 94: 0x4911, 95: 0x4911},
+    153: {0: 0x4858, 1: 0x4911, 2: 0x4911, 3: 0x4911, 4: 0x4911, 5: 0x4858, 6: 0x4858, 7: 0x4858, 8: 0x4858, 9: 0x4911, 10: 0x4911, 11: 0x4858, 12: 0x4911, 13: 0x4858, 14: 0x4858, 15: 0x4858, 16: 0x4911, 17: 0x4911, 18: 0x4858, 19: 0x4911, 20: 0x4911, 21: 0x4858, 22: 0x4911, 23: 0x4911, 24: 0x4858, 25: 0x4911, 26: 0x4858, 27: 0x4911, 28: 0x4858, 29: 0x4858, 30: 0x4911, 31: 0x4858, 32: 0x4858, 33: 0x4858, 34: 0x4858, 35: 0x4858, 36: 0x4858, 37: 0x4911, 38: 0x4911, 39: 0x4858, 40: 0x4858, 41: 0x4911, 42: 0x4911, 43: 0x4911, 44: 0x4858, 45: 0x4911, 46: 0x4911, 47: 0x4858, 48: 0x4858, 49: 0x4911, 50: 0x4858, 51: 0x4911, 52: 0x4858, 53: 0x4858, 54: 0x4858, 55: 0x4911, 56: 0x4858, 57: 0x4858, 58: 0x4911, 59: 0x4911, 60: 0x4911, 61: 0x4911, 62: 0x4911, 63: 0x4858, 64: 0x4911, 65: 0x4911, 66: 0x4911, 67: 0x4911, 68: 0x4858, 69: 0x4911, 70: 0x4858, 71: 0x4858, 72: 0x4911, 73: 0x4858, 74: 0x4858, 75: 0x4858, 76: 0x4911, 77: 0x4911, 78: 0x4911, 79: 0x4858, 80: 0x4858, 81: 0x4858, 82: 0x4858, 83: 0x4858, 84: 0x4858, 85: 0x4858, 86: 0x4858, 87: 0x4858, 88: 0x4911, 89: 0x4858, 90: 0x4858, 91: 0x4858, 92: 0x4911, 93: 0x4911, 94: 0x4858, 95: 0x4911},
+    160: {0: 0x4858, 1: 0x4858, 2: 0x4911, 3: 0x4911, 4: 0x4858, 5: 0x4911, 6: 0x4911, 7: 0x4911, 8: 0x4911, 9: 0x4911, 10: 0x4858, 11: 0x4911, 12: 0x4911, 13: 0x4911, 14: 0x4911, 15: 0x4858, 16: 0x4911, 17: 0x4911, 18: 0x4858, 19: 0x4911, 20: 0x4858, 21: 0x4911, 22: 0x4858, 23: 0x4911, 24: 0x4858, 25: 0x4911, 26: 0x4911, 27: 0x4858, 28: 0x4858, 29: 0x4858, 30: 0x4858, 31: 0x4911, 32: 0x4911, 33: 0x4911, 34: 0x4858, 35: 0x4911, 36: 0x4858, 37: 0x4858, 38: 0x4911, 39: 0x4858, 40: 0x4858, 41: 0x4858, 42: 0x4911, 43: 0x4911, 44: 0x4858, 45: 0x4858, 46: 0x4911, 47: 0x4911, 48: 0x4858, 49: 0x4858, 50: 0x4858, 51: 0x4911, 52: 0x4858, 53: 0x4858, 54: 0x4858, 55: 0x4911, 56: 0x4911, 57: 0x4858, 58: 0x4858, 59: 0x4858, 60: 0x4858, 61: 0x4911, 62: 0x4911, 63: 0x4858, 64: 0x4858, 65: 0x4911, 66: 0x4858, 67: 0x4911, 68: 0x4858, 69: 0x4858, 70: 0x4858, 71: 0x4911, 72: 0x4858, 73: 0x4858, 74: 0x4858, 75: 0x4858, 76: 0x4858, 77: 0x4911, 78: 0x4911, 79: 0x4911, 80: 0x4911, 81: 0x4858, 82: 0x4911, 83: 0x4858, 84: 0x4858, 85: 0x4911, 86: 0x4911, 87: 0x4858, 88: 0x4911, 89: 0x4911, 90: 0x4858, 91: 0x4858, 92: 0x4911, 93: 0x4911, 94: 0x4858, 95: 0x4858},
+    162: {31: 0x4848, 33: 0xB433, 34: 0x43A3, 35: 0x83A3, 36: 0x0A88, 37: 0xA6A2, 39: 0x4848, 48: 0x4858, 49: 0x4911, 50: 0x4911, 51: 0x4911, 52: 0x4858, 53: 0x4911, 54: 0x4858, 55: 0x4858, 56: 0x4911, 57: 0x4911, 58: 0x4858, 59: 0x4858, 60: 0x4858, 61: 0x4911, 62: 0x4911, 63: 0x4858, 64: 0x4858, 65: 0x4911, 66: 0x4911, 67: 0x4911, 68: 0x4858, 69: 0x4911, 70: 0x4858, 71: 0x4911, 72: 0x4911, 73: 0x4911, 74: 0x4858, 75: 0x4911, 76: 0x4858, 77: 0x4911, 78: 0x4911, 79: 0x4858, 80: 0x4911, 81: 0x4858, 82: 0x4858, 83: 0x4911, 84: 0x4911, 85: 0x4911, 86: 0x4911, 87: 0x4911, 88: 0x4858, 89: 0x4911, 90: 0x4858, 91: 0x4858, 92: 0x4858, 93: 0x4911, 94: 0x4858, 95: 0x4911},
+    163: {33: 0xB433, 34: 0x43A3, 35: 0x83A3, 36: 0x0A88, 37: 0xA6A2, 48: 0x4858, 49: 0x4858, 50: 0x4911, 51: 0x4858, 52: 0x4858, 53: 0x4911, 54: 0x4911, 55: 0x4858, 56: 0x4858, 57: 0x4858, 58: 0x4858, 59: 0x4858, 60: 0x4858, 61: 0x4911, 62: 0x4911, 63: 0x4911, 64: 0x4858, 65: 0x4911, 66: 0x4911, 67: 0x4911, 68: 0x4858, 69: 0x4858, 70: 0x4911, 71: 0x4858, 72: 0x4858, 73: 0x4858, 74: 0x4911, 75: 0x4858, 76: 0x4858, 77: 0x4911, 78: 0x4911, 79: 0x4911, 80: 0x4911, 81: 0x4911, 82: 0x4911, 83: 0x4911, 84: 0x4911, 85: 0x4858, 86: 0x4911, 87: 0x4911, 88: 0x4911, 89: 0x4858, 90: 0x4858, 91: 0x4911, 92: 0x4911, 93: 0x4858, 94: 0x4858, 95: 0x4911},
+    164: {31: 0x4848, 33: 0xB433, 34: 0x43A3, 35: 0x83A3, 36: 0x0A88, 37: 0xA6A2, 39: 0x4848, 48: 0x4858, 49: 0x4911, 50: 0x4858, 51: 0x4858, 52: 0x4858, 53: 0x4911, 54: 0x4911, 55: 0x4858, 56: 0x4911, 57: 0x4911, 58: 0x4858, 59: 0x4911, 60: 0x4858, 61: 0x4858, 62: 0x4858, 63: 0x4911, 64: 0x4911, 65: 0x4911, 66: 0x4911, 67: 0x4858, 68: 0x4858, 69: 0x4911, 70: 0x4911, 71: 0x4911, 72: 0x4911, 73: 0x4858, 74: 0x4911, 75: 0x4858, 76: 0x4858, 77: 0x4858, 78: 0x4858, 79: 0x4858, 80: 0x4911, 81: 0x4858, 82: 0x4911, 83: 0x4858, 84: 0x4858, 85: 0x4858, 86: 0x4858, 87: 0x4911, 88: 0x4911, 89: 0x4911, 90: 0x4858, 91: 0x4911, 92: 0x4911, 93: 0x4858, 94: 0x4858, 95: 0x4911},
+    165: {33: 0xB433, 34: 0x43A3, 35: 0x83A3, 36: 0x0A88, 37: 0xA6A2, 48: 0x4858, 49: 0x4911, 50: 0x4911, 51: 0x4911, 52: 0x4911, 53: 0x4858, 54: 0x4858, 55: 0x4911, 56: 0x4911, 57: 0x4911, 58: 0x4911, 59: 0x4911, 60: 0x4858, 61: 0x4911, 62: 0x4911, 63: 0x4911, 64: 0x4911, 65: 0x4911, 66: 0x4911, 67: 0x4911, 68: 0x4858, 69: 0x4858, 70: 0x4911, 71: 0x4858, 72: 0x4911, 73: 0x4911, 74: 0x4858, 75: 0x4911, 76: 0x4858, 77: 0x4858, 78: 0x4858, 79: 0x4858, 80: 0x4911, 81: 0x4911, 82: 0x4858, 83: 0x4911, 84: 0x4858, 85: 0x4858, 86: 0x4911, 87: 0x4911, 88: 0x4911, 89: 0x4858, 90: 0x4911, 91: 0x4858, 92: 0x4911, 93: 0x4911, 94: 0x4911, 95: 0x4911},
+    168: {31: 0x4848, 33: 0xB433, 34: 0x43A3, 35: 0x83A3, 36: 0x0A88, 37: 0xA6A2, 39: 0x4848, 48: 0x4911, 49: 0x4858, 50: 0x4911, 51: 0x4911, 52: 0x4911, 53: 0x4911, 54: 0x4911, 55: 0x4911, 56: 0x4858, 57: 0x4911, 58: 0x4911, 59: 0x4858, 60: 0x4911, 61: 0x4911, 62: 0x4858, 63: 0x4911, 64: 0x4858, 65: 0x4911, 66: 0x4911, 67: 0x4858, 68: 0x4911, 69: 0x4911, 70: 0x4911, 71: 0x4911, 72: 0x4858, 73: 0x4858, 74: 0x4858, 75: 0x4911, 76: 0x4858, 77: 0x4858, 78: 0x4858, 79: 0x4911, 80: 0x4911, 81: 0x4858, 82: 0x4911, 83: 0x4858, 84: 0x4858, 85: 0x4911, 86: 0x4911, 87: 0x4911, 88: 0x4858, 89: 0x4858, 90: 0x4858, 91: 0x4911, 92: 0x4858, 93: 0x4858, 94: 0x4911, 95: 0x4911},
+    172: {36: 0xA7EB, 59: 0x8002, 60: 0x1030, 61: 0x0280, 84: 0x4810},
+    179: {6: 0xA6A3, 30: 0x1010, 54: 0x1010, 78: 0x1010},
+    188: {},
+}
+HASH_REFERENCE = [
+    (0, 0, 0),
+    (1, 2, 0.8503633479122072),
+    (5, 17, 0.3056777757592499),
+    (33, 95, 0.4534685774706304),
+    (124, 63, 0.18295075302012265),
+    (100, 0, 0.5828546122647822),
+    (189, 50, 0.5012654480524361),
+    (-7, 3, 0.016440438339486718),
+    (123456, 95, 0.2631537525448948),
+    (2147483647, 77, 0.9477833085693419),
+    (1, 1, 0.8959708327893168),
+]
+
+
+def dense(sparse):
+    cells = [0] * 96
+    for index, mask in sparse.items():
+        cells[index] = mask
+    return cells
+
+
+def on_wall(template_h):
+    """Halbtakt der Vorlage -> (Szene, Halbtakt in der Show der Wand)."""
+    name, start = [s for s in TEMPLATE_STARTS if s[1] <= template_h][-1]
+    return name, START.get(name, 0) + template_h - start
+
+
+def text_row(text):
+    b = new_buffer()
+    put_line(b, 1, center(text))
+    return b[24:48]
+
+
+def heads(cells):
+    """Spalten der Koepfe in Zeile 0 (grosse Figuren)."""
+    return [c for c in range(24) if cells[c] in HEADS]
+
+
+def ticks(name):
+    """Alle (Halbtakt, Viertel) einer Szene."""
+    return [(h, q) for h in range(START[name], START[name] + LENGTHS[NAMES.index(name)])
+            for q in range(SUB)]
+
+
+class FakeDisplay:
+    def __init__(self, clock):
+        self.clock = clock
+        self.shown = []  # (Zeit, Bild)
+
+    def show_cells(self, cells):
+        self.shown.append((self.clock.now, list(cells)))
+
+
+class LevelDisplay(FakeDisplay):
+    def __init__(self, clock):
+        super().__init__(clock)
+        self.levels = []  # (Zeit, Helligkeiten)
+
+    def set_levels(self, levels):
+        self.levels.append((self.clock.now, tuple(levels)))
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 100.0  # beliebiger Start der monotonen Uhr
+
+    def __call__(self):
+        return self.now
+
+
+class Buttons:
+    """Fake-Tasten: wait laesst die Uhr vorgehen; `script` = {Zeit seit Start: Taste}."""
+
+    def __init__(self, clock, script=None, stop_at=None):
+        self.clock, self.script, self.stop_at = clock, dict(script or {}), stop_at
+        self.start = clock.now
+
+    def get(self, timeout):
+        target = self.clock.now + (timeout if timeout is not None else 1e9)
+        for at in sorted(self.script):
+            when = self.start + at
+            if self.clock.now <= when <= target:
+                self.clock.now = when
+                return self.script.pop(at)
+        self.clock.now = target
+        if self.clock.now - self.start >= self.stop_at:
+            return BT4
+        return None
+
+    def drain(self):
+        pass
+
+
+def play(stop_at, script=None, display_cls=FakeDisplay):
+    clock = FakeClock()
+    display = display_cls(clock)
+    buttons = Buttons(clock, script, stop_at)
+    ctx = AppContext(display, buttons, Activity(), StopSignal())
+    with_stop = False
+    try:
+        DanceApp(clock=clock).run(ctx)
+    except StopApp:
+        with_stop = True
+    assert with_stop
+    shown = [(round(t - 100.0, 6), cells) for t, cells in display.shown]
+    if display_cls is FakeDisplay:
+        return shown
+    return shown, [(round(t - 100.0, 6), lv) for t, lv in display.levels]
+
+
+class ShowTest(unittest.TestCase):
+    def test_show_length_and_scene_lengths(self):
+        self.assertEqual(SHOW_LEN, 222)
+        self.assertEqual([length for _, length, _ in SHOW], LENGTHS)
+        self.assertEqual([n for n, _, _ in SHOW], NAMES)
+
+    def test_scenes_kept_from_the_template_match_it(self):
+        checked = 0
+        for template_h, sparse in REFERENCE.items():
+            name, h = on_wall(template_h)
+            if name not in FROM_TEMPLATE:
+                continue
+            with self.subTest(template_h=template_h, scene=name, h=h):
+                self.assertEqual(show_frame(h), dense(sparse))
+            checked += 1
+        self.assertEqual(checked, 22)
+
+    def test_never_lights_the_whole_wall(self):
+        for h in range(SHOW_LEN):
+            for q in range(SUB):
+                cells = show_frame(h, q)
+                with self.subTest(h=h, q=q):
+                    self.assertLessEqual(sum(1 for m in cells if m), 60)
+                    self.assertNotIn(0xFFFF, cells)
+
+    def test_loops_with_modulo(self):
+        for h in (0, 5, 60, 150, 188, 221):
+            self.assertEqual(show_frame(h + SHOW_LEN), show_frame(h))
+            self.assertEqual(show_frame(h + 5 * SHOW_LEN, 2), show_frame(h, 2))
+
+    def test_all_frames_have_96_masks_in_range(self):
+        for h in range(SHOW_LEN):
+            for q in range(SUB):
+                cells = show_frame(h, q)
+                self.assertEqual(len(cells), 96)
+                self.assertTrue(all(0 <= m <= 0xFFFF for m in cells))
+
+    def test_frames_do_not_share_a_buffer(self):
+        first = show_frame(10)
+        first[0] = 1234
+        self.assertNotEqual(show_frame(10)[0], 1234)
+
+    def test_scenes_on_the_beat_do_not_change_between_half_beats(self):
+        for name in ("Auftritt", "Solo", "Einmarsch", "Welle", "Spiegel", "Drehung", "Abgang"):
+            for h, q in ticks(name):
+                with self.subTest(scene=name, h=h, q=q):
+                    self.assertEqual(show_frame(h, q), show_frame(h))
+
+    def test_full_brightness_outside_karussell_and_bravo(self):
+        for name in NAMES:
+            if name in ("Karussell", "Bravo"):
+                continue
+            for h, q in ticks(name):
+                self.assertEqual(show_levels(h, q), FULL)
+
+
+class EinmarschTest(unittest.TestCase):
+    def test_dancers_arrive_one_by_one(self):
+        counts = [len(heads(show_frame(START["Einmarsch"] + k))) for k in range(30)]
+        self.assertEqual(counts[0], 1)
+        self.assertEqual(counts[-1], 6)
+        for k, (a, b) in enumerate(zip(counts, counts[1:])):
+            with self.subTest(k=k):
+                self.assertIn(b - a, (0, 1))
+
+    def test_ends_as_a_line_of_six_facing_front(self):
+        cells = show_frame(START["Einmarsch"] + 29)
+        self.assertEqual(heads(cells), D6)
+        self.assertTrue(all(cells[c] == HEAD["F"] for c in D6))
+
+    def test_soloist_steps_aside_to_ten(self):
+        self.assertEqual(heads(show_frame(START["Einmarsch"] - 1)), [12])
+        self.assertEqual(heads(show_frame(START["Einmarsch"])), [11])
+        self.assertEqual(heads(show_frame(START["Einmarsch"] + 1)), [10])
+
+
+class KarussellTest(unittest.TestCase):
+    def test_starts_from_the_line(self):
+        self.assertEqual(heads(show_frame(START["Karussell"])), D6)
+
+    def test_ends_with_one_dancer_in_the_middle(self):
+        cells = show_frame(START["Bravo"] - 1)
+        self.assertEqual(heads(cells), [12])
+        self.assertEqual(cells[12], HEAD["F"])
+
+    def test_far_dancers_are_small_and_dim(self):
+        dim = [show_levels(h, q) for h, q in ticks("Karussell") if show_levels(h, q) != FULL]
+        self.assertTrue(dim)
+        self.assertEqual(min(min(lv) for lv in dim), 3)
+        # Mitten in der Drehung: weniger als sechs grosse Figuren, aber Figuren in Zeile 1
+        mid = show_frame(START["Karussell"] + 16)
+        self.assertLess(len(heads(mid)), 6)
+        self.assertTrue(any(mid[24 + c] and not mid[c] for c in range(24)))
+
+    def test_moves_between_half_beats(self):
+        turn = range(START["Karussell"] + 5, START["Karussell"] + 27)
+        moving = [h for h in turn if show_frame(h, 2) != show_frame(h)]
+        self.assertGreaterEqual(len(moving), len(turn) - 2)
+
+    def test_back_in_line_at_full_brightness_before_leaving(self):
+        h = START["Karussell"] + 32
+        self.assertEqual(heads(show_frame(h)), D6)
+        self.assertEqual(show_levels(h), FULL)
+        self.assertEqual(show_levels(START["Karussell"]), FULL)
+
+
+class BravoTest(unittest.TestCase):
+    def test_audience_only_in_the_lower_two_rows(self):
+        for h, q in ticks("Bravo"):
+            cells = show_frame(h, q)
+            with self.subTest(h=h, q=q):
+                self.assertEqual(cells[:24], [0] * 24)
+                self.assertIn(cells[24:48], (text_row("* BRAVO *"), text_row("  BRAVO  ")))
+                self.assertTrue(all(m in (T_IDLE, T_UP) for m in cells[48:]))
+
+    def test_la_ola_runs_left_to_right(self):
+        centres = []
+        for h, q in ticks("Bravo")[:8 * SUB]:
+            ups = [c for c in range(24) if show_frame(h, q)[72 + c] == T_UP]
+            if ups:
+                centres.append(sum(ups) / len(ups))
+        self.assertGreater(len(centres), 20)
+        self.assertEqual(centres, sorted(centres))
+        self.assertLess(centres[0], 3)
+        self.assertGreater(centres[-1], 20)
+
+    def test_back_row_of_the_audience_is_dimmer(self):
+        self.assertEqual(show_levels(START["Bravo"], 1), (15,) * 6 + (7,) * 3 + (15,) * 3)
+
+
+class HashTest(unittest.TestCase):
+    def test_matches_javascript(self):
+        for a, b, expected in HASH_REFERENCE:
+            with self.subTest(a=a, b=b):
+                self.assertEqual(dance_app._hash(a, b), expected)
+
+    def test_imul_wraps_signed(self):
+        self.assertEqual(dance_app._imul(0x7FFFFFFF, 2), -2)
+        self.assertEqual(dance_app._imul(-1, 1), -1)
+
+
+class TimingTest(unittest.TestCase):
+    HALF = 30 / 116
+
+    def test_new_frame_exactly_at_each_half_beat(self):
+        shown = play(stop_at=3.0)
+        expected = math.floor(3.0 / self.HALF - 1e-9) + 1
+        self.assertEqual(len(shown), expected)
+        for h, (t, cells) in enumerate(shown):
+            self.assertLess(abs(t - h * self.HALF), 1e-5)
+            self.assertEqual(cells, show_frame(h))
+
+    def test_no_image_without_new_half_beat(self):
+        # BT6 mitten im Halbtakt: wait kehrt vorzeitig zurueck, aber nichts wird neu gezeigt
+        from app.ui.buttons import BT6
+        shown = play(stop_at=1.0, script={0.1: BT6, 0.2: BT6})
+        times = [t for t, _ in shown]
+        self.assertEqual(len(times), len(set(times)))
+        self.assertEqual(len(shown), math.floor(1.0 / self.HALF - 1e-9) + 1)
+
+    def test_runs_past_the_end_of_the_show(self):
+        stop = SHOW_LEN * self.HALF + 1.0
+        shown = play(stop_at=stop)
+        on_beat = [cells for t, cells in shown if abs(t / self.HALF - round(t / self.HALF)) < 1e-4]
+        self.assertGreater(len(on_beat), SHOW_LEN)
+        self.assertEqual(on_beat[SHOW_LEN], show_frame(0))
+        self.assertEqual(on_beat[SHOW_LEN + 3], show_frame(3))
+
+    def test_frames_between_half_beats_only_where_the_picture_moves(self):
+        start, end = START["Karussell"], START["Abgang"]
+        shown = play(stop_at=end * self.HALF + 1.0)
+        between = [(t, cells) for t, cells in shown
+                   if abs(t / self.HALF - round(t / self.HALF)) > 1e-4]
+        self.assertGreater(len(between), 60)
+        for t, cells in between:
+            self.assertTrue(start * self.HALF < t < end * self.HALF)
+            h, q = divmod(math.floor(t / self.HALF * SUB + 1e-6), SUB)
+            self.assertEqual(cells, show_frame(h, q))
+        for (t0, a), (t1, b) in zip(shown, shown[1:]):
+            if abs(t1 / self.HALF - round(t1 / self.HALF)) > 1e-4:
+                self.assertNotEqual(a, b)
+
+
+class LevelsTest(unittest.TestCase):
+    HALF = 30 / 116
+
+    def test_karussell_dims_far_modules_and_stop_restores_full_brightness(self):
+        mid = (START["Karussell"] + 16) * self.HALF
+        shown, levels = play(stop_at=mid, display_cls=LevelDisplay)
+        self.assertTrue(any(min(lv) < 15 for _, lv in levels[:-1]))
+        self.assertEqual(levels[-1][1], FULL)
+
+    def test_no_brightness_writes_before_the_karussell(self):
+        shown, levels = play(stop_at=(START["Karussell"] - 1) * self.HALF, display_cls=LevelDisplay)
+        self.assertEqual(levels, [])
+
+    def test_restart_inside_karussell_returns_to_full_brightness(self):
+        # ein Halbtakt, an dem Module gedimmt sind (hinten verdeckt vorne manchmal ganz)
+        h = next(h for h in range(START["Karussell"] + 8, START["Bravo"]) if show_levels(h) != FULL)
+        at = h * self.HALF + 0.01
+        shown, levels = play(stop_at=at + 0.5, script={at: BT5}, display_cls=LevelDisplay)
+        after = [lv for t, lv in levels if t >= at - 1e-6]
+        self.assertEqual(after, [FULL])
+
+
+class RestartTest(unittest.TestCase):
+    def test_bt5_restarts_at_half_beat_zero(self):
+        shown = play(stop_at=4.0, script={2.0: BT5})
+        restart = [i for i, (t, _) in enumerate(shown) if abs(t - 2.0) < 1e-6]
+        self.assertEqual(len(restart), 1)
+        i = restart[0]
+        self.assertEqual(shown[i][1], show_frame(0))
+        # danach zaehlt die Show ab 2.0 s: naechstes Bild einen Halbtakt spaeter, Halbtakt 1
+        self.assertAlmostEqual(shown[i + 1][0], 2.0 + 30 / 116, places=5)
+        self.assertEqual(shown[i + 1][1], show_frame(1))
+
+    def test_bt5_after_time_jumps_back_to_first_scene(self):
+        at = 20 * 30 / 116 + 0.05  # mitten im Solo
+        shown = play(stop_at=at + 1.0, script={at: BT5})
+        i = [k for k, (t, _) in enumerate(shown) if abs(t - at) < 1e-6][0]
+        self.assertEqual(shown[i][1], show_frame(0))
+        self.assertEqual(shown[i - 1][1], show_frame(20))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -12,6 +12,7 @@ class FakeBus:
         self.block_writes = []
         self.byte_writes = []
         self.fail_next_block = 0
+        self.fail_next_byte = 0
 
     def write_i2c_block_data(self, addr, reg, data):
         if self.fail_next_block:
@@ -20,6 +21,9 @@ class FakeBus:
         self.block_writes.append(SimpleNamespace(addr=addr, reg=reg, data=list(data)))
 
     def write_byte(self, addr, value):
+        if self.fail_next_byte:
+            self.fail_next_byte -= 1
+            raise OSError("bus")
         self.byte_writes.append((addr, value))
 
     def clear(self):
@@ -128,6 +132,45 @@ class WallDisplayTest(unittest.TestCase):
         m[0] = 1
         d.show_cells(m)
         self.assertEqual(events, ["in", "out"])
+
+    def test_levels_after_start_are_full_and_need_no_write(self):
+        self.d.start()
+        self.bus.clear()
+        self.d.set_levels([15] * 12)
+        self.assertEqual(self.bus.byte_writes, [])
+
+    def test_set_levels_writes_only_changed_modules(self):
+        self.d.start()
+        self.bus.clear()
+        levels = [15] * 12
+        levels[4] = 3
+        self.d.set_levels(levels)
+        self.assertEqual(self.bus.byte_writes, [(0x74, 0xE3)])
+        self.bus.clear()
+        self.d.set_levels(levels)
+        self.assertEqual(self.bus.byte_writes, [])
+        self.d.set_levels([15] * 12)
+        self.assertEqual(self.bus.byte_writes, [(0x74, 0xEF)])
+
+    def test_levels_are_clamped(self):
+        self.d.start()
+        self.bus.clear()
+        levels = [15] * 12
+        levels[0], levels[11] = -4, 99
+        levels[1] = 0
+        self.d.set_levels(levels)
+        self.assertEqual(self.bus.byte_writes, [(0x70, 0xE0), (0x71, 0xE0)])
+
+    def test_failed_level_is_written_again_next_time(self):
+        self.d.start()
+        self.bus.clear()
+        levels = [15] * 12
+        levels[2] = 7
+        self.bus.fail_next_byte = 2
+        with self.assertLogs("app.driver.display.wall_display", level="WARNING"):
+            self.d.set_levels(levels)
+        self.d.set_levels(levels)
+        self.assertEqual(self.bus.byte_writes, [(0x72, 0xE7)])
 
     def test_set_segments_refresh(self):
         self.d.set_segments(2, 3, 0x1111)

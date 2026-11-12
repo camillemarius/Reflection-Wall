@@ -346,7 +346,8 @@ class BuildAppsTest(unittest.TestCase):
     def test_names_in_order(self):
         apps, settings = app_main.build_apps("cfg")
         self.assertEqual([a.name for a in apps],
-                         ["CHAT", "QUIZ", "REFLECTION", "RADAR", "STRICHMAENNCHEN"])
+                         ["CHAT", "QUIZ", "REFLECTION", "RADAR", "STRICHMAENNCHEN", "TANZ 3D",
+                          "ANIMATIONEN", "SPIEL"])
         self.assertEqual([a.name for a in settings], ["THEMA AENDERN", "RADAR EINRICHTEN"])
 
     def test_radar_app_is_taken_from_argument(self):

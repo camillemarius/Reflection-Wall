@@ -7,10 +7,13 @@ import time
 
 from dotenv import load_dotenv
 
+from app.applications.animations_app import AnimationsApp
 from app.applications.chat_app import ChatApp
+from app.applications.dance_app import DanceApp
 from app.applications.quiz_app import QuizApp
 from app.applications.radar_app import RadarApp
 from app.applications.reflection_app import ReflectionApp
+from app.applications.runner_app import RunnerApp
 from app.applications.settings_apps import RadarSetupPlaceholder, ThemaApp, default_server_factory
 from app.applications.stickman_app import StickmanApp
 from app.driver.bus_rule import BusGuard
@@ -63,6 +66,9 @@ def build_apps(config_dir, radar_app=None):
         ReflectionApp(config_dir=config_dir),
         radar_app if radar_app is not None else RadarPcPlaceholder(),
         StickmanApp(),
+        DanceApp(),
+        AnimationsApp(),
+        RunnerApp(),
     ]
     settings = [ThemaApp(server_factory=default_server_factory(config_dir)),
                 RadarSetupPlaceholder()]
