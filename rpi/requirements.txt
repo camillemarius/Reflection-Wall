@@ -1,12 +1,12 @@
-# Versionen nach Teil 0 mit pip freeze festhalten
-smbus2
-lgpio; sys_platform == "linux"
-pyserial
-groq
-python-dotenv
-mysql-connector-python
-faster-whisper
-sounddevice
-numpy
-pyphen
-piper-tts; sys_platform == "linux"
+# Versionen aus pip freeze auf dem Pi (Teil 0, 2026-11-01); festgehalten sind nur die direkten Pakete
+smbus2==0.6.1
+lgpio==0.2.2.0; sys_platform == "linux"
+pyserial==3.5
+groq==1.7.0
+python-dotenv==1.2.4
+mysql-connector-python==26.10.0
+faster-whisper==1.2.1
+sounddevice==0.5.6
+numpy==2.5.4
+pyphen==0.18.1
+piper-tts==1.8.0; sys_platform == "linux"
