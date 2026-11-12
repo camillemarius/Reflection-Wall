@@ -237,6 +237,7 @@ class WallRun:
         self.patch("CONFIG_DIR", self.config_dir)  # .thema_zuletzt nie in app/config
         self.patch("load_dotenv")
         self.patch("idle_minutes_from_env", return_value=0)
+        self.net = self.patch("wait_for_host", return_value=True)  # nie echtes Netz
         self.patch("open_esp_port", side_effect=self._open_port)
         if real_link:
             self.link = None
@@ -669,6 +670,7 @@ class MainTest(unittest.TestCase):
         wall.put("SESSION", "NACHT")
         wall.put("GET", "QUOTE|")
         self.assertTrue(wait_for(lambda: wall.replies("GET") == ["QUOTE"]))
+        wall.net.assert_called_once_with("api.groq.com", 443, app_main.NET_WAIT_S)
         wall.ai.assert_called_once()
         # make_night_quote mit dem Ordner aus CONFIG_DIR: das Thema des gelungenen Zitats
         self.assertEqual(topics.read_last_daily(wall.config_dir), topics.DEFAULT_TOPIC)
@@ -680,6 +682,23 @@ class MainTest(unittest.TestCase):
         self.assertEqual(wall.display_writes(), [])
         self.assertEqual(wall.shown(), [])
         self.assertEqual(wall.requests(), ["READY"])
+
+    def test_night_get_without_network_answers_error_without_asking(self):
+        # 4A (2026-11-02): nach dem Start ist das Netz oft noch nicht da. Erreicht der Pi
+        # Groq nicht innert NET_WAIT_S, antwortet er ERROR|KI, ohne die KI zu fragen.
+        wall = WallRun(self)
+        wall.net.return_value = False
+        self.assertTrue(wall.start())
+        wall.put("SESSION", "NACHT")
+        wall.put("GET", "QUOTE|")
+        self.assertTrue(wait_for(lambda: wall.replies("GET") == ["ERROR"]))
+        wall.net.assert_called_once_with("api.groq.com", 443, app_main.NET_WAIT_S)
+        wall.ai.assert_not_called()
+
+    def test_network_wait_leaves_the_ai_time_within_the_get_deadline(self):
+        # GET hat beim ESP 120 s (LinkCodec.h); nach dem Warten bleibt der KI mehr als die Haelfte
+        self.assertEqual(app_main.NET_WAIT_S, 45)
+        self.assertLess(app_main.NET_WAIT_S, 120 / 2)
 
     def _night_until_hand(self, wall, asked):
         """NACHT, dann GET; der Arbeits-Thread rechnet. BT2 setzt den ESP zurueck, das GET

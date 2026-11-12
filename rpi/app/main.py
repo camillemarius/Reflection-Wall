@@ -24,6 +24,7 @@ from app.link.radar_switch import RadarSwitch
 from app.link.ready import announce_ready
 from app.link.serial_port import open_esp_port
 from app.night_quote import make_night_quote
+from app.system.net import wait_for_host
 from app.system.power import can_power_off, power_off
 from app.ui.activity import Activity, idle_minutes_from_env
 from app.ui.app_host import DEFAULT_CONFIG_DIR, StopSignal
@@ -45,6 +46,8 @@ DONE_WAIT_S = 120.0       # nach DONE: so lange darf das SHUTDOWN des ESP brauch
 RELEASE_WAIT_S = 45.0
 SERVE_POLL_S = 1.0        # Takt des Wartens auf das Prozessende (Ctrl+C bricht es ab)
 CONFIG_DIR = DEFAULT_CONFIG_DIR  # Themen und .thema_zuletzt fuer das Zitat der Nacht
+GROQ_HOST = "api.groq.com"       # dorthin fragt write_to_ai
+NET_WAIT_S = 45                  # 4A: so lange wartet das Zitat der Nacht aufs Netz (GET: 120 s)
 
 
 class RadarPcPlaceholder:
@@ -182,8 +185,13 @@ def _night_session(dispatcher, stop, start_menu, released) -> str:
 
 
 def _night_quote(yesterday):
-    """quote_maker des Dispatchers; laeuft in dessen Arbeits-Thread. write_to_ai erst hier
-    importieren, wie in chat_app: ein Fehler beim Import wird so zu ERROR|KI."""
+    """quote_maker des Dispatchers; laeuft in dessen Arbeits-Thread. Gleich nach dem Start des
+    Pi ist das Netz oft noch nicht da: erst warten, bis Groq erreichbar ist, hoechstens
+    NET_WAIT_S, sonst ERROR|KI ohne Frage (4A). write_to_ai erst hier importieren, wie in
+    chat_app: ein Fehler beim Import wird so zu ERROR|KI."""
+    if not wait_for_host(GROQ_HOST, 443, NET_WAIT_S):
+        log.warning("%s nach %d s nicht erreichbar: ERROR|KI", GROQ_HOST, NET_WAIT_S)
+        return ("ERROR", "KI")
     from app.driver.chatbot.groqAPI import write_to_ai
 
     return make_night_quote(yesterday, write_to_ai, CONFIG_DIR)

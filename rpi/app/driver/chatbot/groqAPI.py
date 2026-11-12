@@ -66,7 +66,7 @@ def write_to_ai(messages, retries: int = 4) -> str:
             rate_limit()
 
             completion = _client().chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="openai/gpt-oss-120b",
                 messages=messages,
                 temperature=0.7,
                 max_completion_tokens=512,
@@ -106,7 +106,8 @@ def fallback_non_stream(messages) -> str:
         rate_limit()
 
         completion = _client().chat.completions.create(
-            model="llama-3.1-8b-instant",
+            # anderer Hersteller als oben: schaltet Groq ein Modell ab, antwortet das andere
+            model="qwen/qwen3.8-27b",
             messages=messages,
             max_completion_tokens=512,
             stream=False
