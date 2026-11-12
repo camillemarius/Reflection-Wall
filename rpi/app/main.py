@@ -12,6 +12,7 @@ from app.applications.chat_app import ChatApp
 from app.applications.dance_app import DanceApp
 from app.applications.quiz_app import QuizApp
 from app.applications.radar_app import RadarApp
+from app.applications.radar_setup_app import RadarSetupApp
 from app.applications.reflection_app import ReflectionApp
 from app.applications.runner_app import RunnerApp
 from app.applications.settings_apps import RadarSetupPlaceholder, ThemaApp, default_server_factory
@@ -61,7 +62,7 @@ class RadarPcPlaceholder:
             ctx.wait_button()
 
 
-def build_apps(config_dir, radar_app=None):
+def build_apps(config_dir, radar_app=None, radar_setup_app=None):
     """Hauptmenue und Einstellungen in der Reihenfolge der Spezifikation."""
     apps = [
         ChatApp(),
@@ -74,7 +75,7 @@ def build_apps(config_dir, radar_app=None):
         RunnerApp(),
     ]
     settings = [ThemaApp(server_factory=default_server_factory(config_dir)),
-                RadarSetupPlaceholder()]
+                radar_setup_app if radar_setup_app is not None else RadarSetupPlaceholder()]
     return apps, settings
 
 
@@ -83,7 +84,7 @@ def _log_shutdown() -> None:
 
 
 def run_wall(display, buttons, activity, stop_event, link=None, radar_factory=None,
-             config_dir=DEFAULT_CONFIG_DIR, on_shutdown=_log_shutdown,
+             radar_setup_factory=None, config_dir=DEFAULT_CONFIG_DIR, on_shutdown=_log_shutdown,
              dispatcher=None, display_released=None) -> str:
     """Startet die Bildschirmfolge und gibt deren Stoppgrund zurueck.
 
@@ -93,7 +94,8 @@ def run_wall(display, buttons, activity, stop_event, link=None, radar_factory=No
     Mit dispatcher (Wand-Modus): main() hat ihn gestartet und stoppt ihn auch, display_released
     ist sein Event. DONE sendet dann nur main(), genau einmal.
     """
-    apps, settings = build_apps(config_dir, radar_factory() if radar_factory else None)
+    apps, settings = build_apps(config_dir, radar_factory() if radar_factory else None,
+                                radar_setup_factory() if radar_setup_factory else None)
     shell = Shell(display, buttons, apps, settings, activity, stop_event,
                   display_released=display_released)
     own = None  # eigener Dispatcher, nur ohne den von main()
@@ -258,17 +260,24 @@ def _serve_wall(stop, activity_minutes) -> None:
                                     quote_maker=_night_quote)
         dispatcher.start()
 
+        def radar_buttons():
+            return ExpanderButtons(bus=_SmbusReader(bus), bus_guard=guard)
+
         def radar_factory():
-            return RadarApp(
-                switch_factory=lambda: RadarSwitch(link, port),
-                buttons_factory=lambda: ExpanderButtons(bus=_SmbusReader(bus), bus_guard=guard))
+            return RadarApp(switch_factory=lambda: RadarSwitch(link, port),
+                            buttons_factory=radar_buttons)
+
+        def radar_setup_factory():
+            return RadarSetupApp(switch_factory=lambda: RadarSwitch(link, port),
+                                 buttons_factory=radar_buttons)
 
         def start_menu() -> str:
             display = WallDisplay(bus=bus, bus_guard=guard)
             display.start()  # schreibt schon: darum erst nach SESSION|HAND
             activity.touch()  # das automatische Aus zaehlt ab dem Menue, nicht ab READY
             return run_wall(display, buttons, activity, stop, link=link,
-                            radar_factory=radar_factory, dispatcher=dispatcher,
+                            radar_factory=radar_factory,
+                            radar_setup_factory=radar_setup_factory, dispatcher=dispatcher,
                             display_released=released)
 
         # announce_ready gibt False, wenn stop vor dem OK auf READY kam: ein SHUTDOWN, das der

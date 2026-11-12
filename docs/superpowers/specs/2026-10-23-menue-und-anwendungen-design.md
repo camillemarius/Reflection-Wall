@@ -97,8 +97,8 @@ Menü. Eine Tastatur oder SSH braucht es nicht mehr.
 |---|---|
 | D1 | BT2 schaltet den Pi ein. Er bleibt an, bis jemand BT2 noch einmal drückt. Die Obergrenze von 3 h entfällt. |
 | D2 | Das automatische Ausschalten nach 15 min ohne Tastendruck wird gebaut, ist aber ausgeschaltet. Ein Schalter auf dem Pi schaltet es ein. |
-| D3 | Das Menü ist eine Liste mit einem Zeiger `>`. Die Anzeige zeigt vier Punkte, die Liste rollt mit. |
-| D4 | BT6 schiebt den Zeiger nach unten; nach dem letzten Punkt kommt wieder der erste. BT5 wählt aus und heisst in einer Anwendung „weiter“. BT4 geht zurück. |
+| D3 | Das Menü ist eine Liste mit einem Zeiger `>`. Die Anzeige zeigt vier Punkte. Der Zeiger steht immer in der zweiten Zeile, die Liste rollt unter ihm durch (Owner, 2026-11-05: „der Pfeil im Menü immer in der zweiten Zeile“). Zwischen dem letzten und dem ersten Punkt bleibt eine Zeile leer (Owner, 2026-11-05). |
+| D4 | BT6 schiebt die Liste um einen Punkt nach oben; nach dem letzten Punkt kommt wieder der erste. BT5 wählt aus und heisst in einer Anwendung „weiter“. BT4 geht zurück. |
 | D5 | BT2 bleibt die Ein/Aus-Taste. BT1 schaltet ohne Sitzung die Zitate weiter. In einer Sitzung haben BT1 und BT3 keine Aufgabe. |
 | D6 | Das Menü hat diese Punkte, in dieser Reihenfolge: `CHAT`, `QUIZ`, `REFLECTION`, `RADAR`, `STRICHMAENNCHEN`, `EINSTELLUNGEN`. Die Einstellungen stehen immer am Ende. |
 | D7 | Radar und Strichmännchen werden repariert und stehen im Menü. |
@@ -210,7 +210,7 @@ Was die Zeichnung nicht zeigt:
 
 | Taste | Pi aus | Menü | Anwendung | Einstellungen |
 |---|---|---|---|---|
-| BT6 | – | Zeiger nach unten | je nach Anwendung, meist nichts | Zeiger nach unten |
+| BT6 | – | nächster Punkt | je nach Anwendung, meist nichts | nächster Punkt |
 | BT5 | – | auswählen | weiter | auswählen |
 | BT4 | – | nichts | zurück ins Menü | zurück ins Menü |
 | BT3 | Verbindungstest (Teil 1) | nichts | nichts | nichts |
@@ -234,16 +234,21 @@ Tasten selbst (Abschnitt 7); sonst kommen sie als `BUTTON|n` vom ESP.
 ### 5.3 Das Menü auf der Anzeige
 
 ```
+
 > CHAT
   QUIZ
   REFLECTION
-  RADAR
 ```
 
 - Spalte 1 zeigt den Zeiger `>`, ab Spalte 3 steht der Name.
-- Rutscht der Zeiger unter die vierte Zeile, rollt die Liste um eine Zeile.
-- Nach dem letzten Punkt springt der Zeiger auf den ersten, und die Liste steht
-  wieder oben.
+- Der Zeiger steht immer in der zweiten Zeile. Darüber steht der vorige Punkt,
+  darunter die zwei nächsten.
+- BT6 schiebt die Liste um einen Punkt nach oben. Nach dem letzten Punkt folgt
+  wieder der erste. Dazwischen steht eine leere Zeile, damit die Liste nicht
+  endlos wirkt (Owner, 2026-11-05). Der Zeiger springt über diese Lücke hinweg.
+- Ein Menü mit weniger als vier Punkten zeigt jeden Punkt nur einmal, freie
+  Zeilen bleiben leer. Beispiel mit zwei Punkten: leer, `> THEMA AENDERN`,
+  `  RADAR EINRICHTEN`, leer.
 - `>` bekommt das Muster `0x0840`: die Schräge von oben links zur Mitte und die
   Schräge von unten links zur Mitte. Es kommt in die Schrift von ESP und Pi und in
   die gemeinsamen Testfälle.
@@ -394,7 +399,7 @@ entfällt.
 | Kein Mikrofon | `KEIN MIKROFON`; BT4 geht zurück |
 | Anwendung wirft einen Fehler | `FEHLER IN <NAME>`, Grund im Log; BT4 geht zurück |
 | Radar antwortet nicht | `RADAR ANTWORTET NICHT`; der Pi schaltet zurück auf den ESP (Abschnitt 7, Schritt 5); BT4 geht zurück |
-| Tasten-Expander über I²C nicht lesbar (Radar-Modus) | einmal neu lesen; dann zurück auf den ESP und ins Menü, Grund im Log |
+| Tasten-Expander über I²C nicht lesbar (Radar-Modus) | bis zu fünfmal lesen, 40 ms auseinander; dann zurück auf den ESP und ins Menü, Grund im Log. Bis 2026-11-03 nur einmal neu: am Gerät scheiterte nach einem Druck auch der zweite Versuch, weil der ESP nach seinem Neustart den Bus noch hatte (Entscheid des Entwicklers, offener Punkt M-14) |
 | Webseite startet nicht (zum Beispiel Port belegt) | `WEBSEITE GEHT NICHT`; BT4 geht zurück |
 | Taste kommt während `DENKE NACH` | BT4 und BT2 wirken sofort; BT5 und BT6 zählen nicht |
 | `SESSION` bleibt ohne Antwort | der ESP wiederholt wie bei jeder Nachricht; nach der Frist fährt er den Pi herunter wie nach BT2 |
@@ -404,8 +409,9 @@ entfällt.
 ## 11. Prüfen
 
 **Auf dem PC, ohne Gerät:**
-- **Menü:** Zeiger nach unten, Rollen der Liste, Sprung vom letzten zum ersten
-  Punkt, Zeiger nach der Rückkehr aus einer Anwendung (V3).
+- **Menü:** Zeiger fest in der zweiten Zeile, Rollen der Liste, leere Zeile
+  zwischen dem letzten und dem ersten Punkt, kurze Menüs ohne doppelte Punkte,
+  Zeiger nach der Rückkehr aus einer Anwendung (V3).
 - **Tasten je Bildschirm:** jede Zeile der Tabelle 5.1 als Testfall.
 - **Tasten am ESP je Zustand:** jede Zelle der Tabelle 5.2 als Testfall, als reine
   Logik auf dem ESP.

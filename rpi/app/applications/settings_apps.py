@@ -1,5 +1,5 @@
 # settings_apps.py
-# Einstellungen: THEMA AENDERN (Webseite auf dem Pi) und RADAR EINRICHTEN (vorerst Platzhalter).
+# Einstellungen: THEMA AENDERN (Webseite auf dem Pi); RADAR EINRICHTEN hier nur als Platzhalter am PC.
 import logging
 import time
 from typing import Callable, Tuple
@@ -60,6 +60,6 @@ class RadarSetupPlaceholder:
     name = "RADAR EINRICHTEN"
 
     def run(self, ctx: AppContext) -> None:
-        ctx.display.show_lines(["RADAR EINRICHTEN", "KOMMT SPAETER", "BT4 ZURUECK"])
+        ctx.display.show_lines(["RADAR EINRICHTEN", "NUR AN DER WAND", "BT4 ZURUECK"])
         while True:
             ctx.wait_button()

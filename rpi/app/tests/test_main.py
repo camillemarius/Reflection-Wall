@@ -12,6 +12,7 @@ from unittest import mock
 from app import main as app_main
 from app import topics
 from app.applications import settings_apps
+from app.applications.radar_setup_app import RadarSetupApp
 from app.driver.display.wall_display import WallDisplay
 from app.link.codec import Message, decode, encode, role_of
 from app.link.pi_link import LinkBusy
@@ -356,6 +357,11 @@ class BuildAppsTest(unittest.TestCase):
         apps, _ = app_main.build_apps("cfg", radar_app=radar)
         self.assertIs(apps[3], radar)
 
+    def test_radar_setup_app_is_taken_from_argument(self):
+        setup = FakeApp("RADAR EINRICHTEN")
+        _, settings = app_main.build_apps("cfg", radar_setup_app=setup)
+        self.assertIs(settings[1], setup)
+
     def test_pc_radar_placeholder_waits_for_bt4(self):
         placeholder = app_main.RadarPcPlaceholder()
         self.assertEqual(placeholder.name, "RADAR")
@@ -454,7 +460,7 @@ class RunWallTest(unittest.TestCase):
             thread, result = start_wall(display, buttons, Activity(), stop, link=link,
                                         on_shutdown=lambda: events.append(("on_shutdown",)))
             self.assertTrue(wait_for(lambda: display.shown))
-            self.assertEqual(display.shown[-1][:2], ["> A", "  B"])
+            self.assertEqual(display.shown[-1][1:3], ["> A", "  B"])
             link.incoming.put(Message(1, "BUTTON", "6"))
             self.assertTrue(wait_for(lambda: display.shown[-1][:2] == ["  A", "> B"]))
             link.incoming.put(Message(2, "BUTTON", "5"))
@@ -603,6 +609,12 @@ class MainTest(unittest.TestCase):
         kwargs["radar_factory"]()._buttons_factory()
         self.assertIsInstance(expander.call_args.kwargs["bus"], _SmbusReader)
         self.assertIs(expander.call_args.kwargs["bus_guard"], wall.guard)
+        setup = kwargs["radar_setup_factory"]()
+        self.assertIsInstance(setup, RadarSetupApp)
+        expander.reset_mock()
+        setup._buttons_factory()
+        self.assertIsInstance(expander.call_args.kwargs["bus"], _SmbusReader)
+        self.assertIs(expander.call_args.kwargs["bus_guard"], wall.guard)
         for event in (("link", "stop"), ("port", "close"), ("guard", "stop")):
             self.assertIn(event, wall.events)
 
@@ -622,7 +634,7 @@ class MainTest(unittest.TestCase):
         wall.put("SESSION", "HAND")
         self.assertTrue(wait_for(lambda: wall.shown()))
         self.assertIn(("reply", "SESSION", "OK"), wall.events)
-        self.assertEqual(wall.shown()[0][:2], ["> A", "  B"])
+        self.assertEqual(wall.shown()[0][1:3], ["> A", "  B"])
         wall.put("BUTTON", "6")
         self.assertTrue(wait_for(lambda: wall.shown()[-1][:2] == ["  A", "> B"]))
         wall.put("SHUTDOWN")
@@ -712,7 +724,7 @@ class MainTest(unittest.TestCase):
         hand = wall.put("SESSION", "HAND")
         self.assertTrue(wait_for(lambda: wall.shown()))
         self.assertIn((hand, "OK"), wall.answers())
-        self.assertEqual(wall.shown()[0][:2], ["> A", "  B"])
+        self.assertEqual(wall.shown()[0][1:3], ["> A", "  B"])
         self.assertGreater(min(wall.display_writes()), wall.position(("put", "SESSION", "HAND")))
         return first_get
 

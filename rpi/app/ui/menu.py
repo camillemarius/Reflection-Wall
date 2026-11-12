@@ -1,8 +1,12 @@
 # ui/menu.py
-# Menue mit vier sichtbaren Zeilen und Zeiger '>' (rollt mit, springt am Ende nach oben).
+# Menue mit vier sichtbaren Zeilen. Der Zeiger '>' steht immer in der zweiten Zeile:
+# BT6 schiebt die Liste um einen Punkt nach oben, nach dem letzten Punkt folgt der erste.
+# Zwischen dem letzten und dem ersten Punkt steht eine leere Zeile, damit die Liste nicht
+# endlos wirkt; der Zeiger springt ueber sie hinweg.
 from typing import Sequence
 
 VISIBLE = 4
+POINTER_LINE = 1
 
 
 class Menu:
@@ -23,11 +27,14 @@ class Menu:
         self._selected = (self._selected + 1) % len(self._items)
 
     def lines(self) -> list[str]:
-        top = max(0, self._selected - (VISIBLE - 1))
-        lines = []
-        for index in range(top, top + VISIBLE):
-            if index >= len(self._items):
-                lines.append("")
-            else:
-                lines.append(("> " if index == self._selected else "  ") + self._items[index])
+        count = len(self._items)
+        ring = count + 1  # der letzte Platz im Ring ist die leere Zeile
+        lines = [""] * VISIBLE
+        shown = set()
+        for line in range(VISIBLE):
+            index = (self._selected + line - POINTER_LINE) % ring
+            if index == count or index in shown:
+                continue  # Luecke, oder ein kurzes Menue wuerde den Punkt doppelt zeigen
+            shown.add(index)
+            lines[line] = ("> " if line == POINTER_LINE else "  ") + self._items[index]
         return lines

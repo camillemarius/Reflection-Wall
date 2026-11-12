@@ -180,7 +180,7 @@ class RadarSetupPlaceholderTest(unittest.TestCase):
         self.assertEqual(app.name, "RADAR EINRICHTEN")
         with self.assertRaises(StopApp):
             app.run(ctx)
-        self.assertEqual(display.lines[0][:3], ["RADAR EINRICHTEN", "KOMMT SPAETER", "BT4 ZURUECK"])
+        self.assertEqual(display.lines[0][:3], ["RADAR EINRICHTEN", "NUR AN DER WAND", "BT4 ZURUECK"])
 
 
 if __name__ == "__main__":
